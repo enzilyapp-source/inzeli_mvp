@@ -1,0 +1,28 @@
+# Flutter/Dart
+.dart_tool/
+.packages
+.pub-cache/
+.pub/
+build/
+coverage/
+flutter_*.png
+
+# Android
+**/local.properties
+**/app/*.keystore
+**/android/app/release/
+**/android/.gradle/
+**/android/build/
+
+# iOS
+**/ios/Pods/
+**/ios/.symlinks/
+**/ios/Flutter/Flutter.framework
+**/ios/Flutter/Flutter.podspec
+**/ios/build/
+
+# Misc
+*.iml
+.idea/
+.vscode/
+.DS_Store

@@ -1,0 +1,26 @@
+name: inzeli
+description: Inzeli MVP
+publish_to: "none"
+
+environment:
+  sdk: ">=3.0.0 <4.0.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+  shared_preferences: ^2.2.2
+  qr_flutter: ^4.1.0
+  app_links: ^6.1.2
+  http: ^1.2.2
+  audioplayers: ^6.5.1
+
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^4.0.0
+
+flutter:
+  uses-material-design: true
+supabase_flutter:
+  path: <your-path-to-the-local-supabase-flutter-repo>/packages/supabase_flutter
