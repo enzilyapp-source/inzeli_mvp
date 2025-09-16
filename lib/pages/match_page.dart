@@ -1,12 +1,13 @@
+// lib/pages/match_page.dart
 import 'package:flutter/material.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 import '../state.dart';
 import '../api_room.dart';
-import '../config.dart';
+import '../config.dart';  // <-- مهم
 
 class MatchPage extends StatefulWidget {
   final AppState app;
-  final Map<String, dynamic>? room; // {id, code, gameId, ...} from backend
+  final Map<String, dynamic>? room; // { code, gameId, ... } from backend
 
   const MatchPage({super.key, required this.app, this.room});
 
@@ -22,11 +23,8 @@ class _MatchPageState extends State<MatchPage> {
   Widget build(BuildContext context) {
     final code   = (widget.room?['code'] ?? widget.app.roomCode ?? '').toString();
     final game   = (widget.room?['gameId'] ?? widget.app.selectedGame ?? 'لعبة').toString();
-    final roomId = (widget.room?['id'] ?? '').toString();
 
-    // prod-style QR (HTTP path). For local dev you can point to API directly.
     final httpsLink = 'https://inzeli.app/join/$code';
-    // final devLink  = 'http://10.0.2.2:3000/join/$code?userId=$guestUserId';
 
     return Scaffold(
       appBar: AppBar(title: Text('مباراة $game — كود: ${code.isEmpty ? "—" : code}')),
@@ -51,22 +49,16 @@ class _MatchPageState extends State<MatchPage> {
                 onPressed: () async {
                   final inputCode = _codeCtrl.text.trim();
                   if (inputCode.isEmpty) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('اكتب الكود')),
-                    );
+                    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('اكتب الكود')));
                     return;
                   }
                   try {
                     await joinByCode(code: inputCode, userId: guestUserId);
                     if (!mounted) return;
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('Joined ✅')),
-                    );
+                    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Joined ✅')));
                   } catch (e) {
                     if (!mounted) return;
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(content: Text('خطأ: $e')),
-                    );
+                    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('خطأ: $e')));
                   }
                 },
                 child: const Text('انضم'),
@@ -75,27 +67,31 @@ class _MatchPageState extends State<MatchPage> {
           ),
 
           const SizedBox(height: 16),
-          if (roomId.isNotEmpty) ...[
+          if (code.isNotEmpty) ...[
             const Text('اللاعبون:'),
             const SizedBox(height: 6),
             FutureBuilder<List<Map<String, dynamic>>>(
-              future: getPlayers(roomId),
+              future: getPlayers(code),   // <-- هنا صار الكود
               builder: (context, snap) {
-                if (!snap.hasData) return const Text('…');
-                final rows = snap.data!;
+                if (snap.connectionState == ConnectionState.waiting) {
+                  return const Center(child: CircularProgressIndicator());
+                }
+                if (snap.hasError) {
+                  return Text('خطأ: ${snap.error}');
+                }
+                final rows = snap.data ?? const <Map<String, dynamic>>[];
                 if (rows.isEmpty) return const Text('لاعب واحد (أنت)');
                 return Wrap(
                   spacing: 6,
                   children: rows.map((r) {
-                    final user = r['user'] as Map<String, dynamic>?;
-                    final name = user?['fullName'] ?? user?['email'] ?? r['userId'];
-                    return Chip(label: Text(name.toString()));
+                    final userId = r['userId']?.toString() ?? '—';
+                    return Chip(label: Text(userId));
                   }).toList(),
                 );
               },
             ),
           ] else
-            const Text('لا يوجد roomId — تأكد أنك مرّرت room من API عند فتح الصفحة.'),
+            const Text('لا يوجد كود — تأكد أنك مرّرت room من API عند فتح الصفحة.'),
         ],
       ),
     );

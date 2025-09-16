@@ -1,7 +1,8 @@
+// lib/pages/games_page.dart
 import 'package:flutter/material.dart';
 import '../state.dart';
 import '../api_room.dart';
-import '../config.dart';
+import '../config.dart';            // <-- تأكدي من هذا
 import 'match_page.dart';
 
 class GamesPage extends StatefulWidget {
@@ -17,7 +18,6 @@ class _GamesPageState extends State<GamesPage> {
   Widget build(BuildContext context) {
     final app = widget.app;
 
-    // guard defaults using your state fields
     final cats = app.categories;
     final selCat = app.selectedCategory ?? cats.first;
     final list = app.games[selCat]!;
@@ -45,7 +45,6 @@ class _GamesPageState extends State<GamesPage> {
             ),
           ),
         ),
-
         const SizedBox(height: 8),
 
         // games
@@ -68,7 +67,6 @@ class _GamesPageState extends State<GamesPage> {
             ),
           ),
         ),
-
         const SizedBox(height: 16),
 
         // انزلي → create room (backend)
@@ -77,6 +75,7 @@ class _GamesPageState extends State<GamesPage> {
           onPressed: () async {
             try {
               final gameId = app.selectedGame ?? 'بلياردو';
+              // hostUserId قادم من config.dart
               final room = await createRoom(gameId: gameId, hostUserId: hostUserId);
               final code = (room['code'] ?? '').toString();
               app.roomCode = code;
@@ -92,7 +91,6 @@ class _GamesPageState extends State<GamesPage> {
               );
             } catch (e) {
               if (!mounted) return;
-              // ⛳️ أعرض نص الخطأ الكامل
               ScaffoldMessenger.of(context).showSnackBar(
                 SnackBar(content: Text('Create error: $e')),
               );
