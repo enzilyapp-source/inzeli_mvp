@@ -1,4 +1,3 @@
-// lib/state.dart
 import 'dart:convert';
 import 'dart:math';
 import 'package:flutter/foundation.dart';
@@ -18,6 +17,7 @@ class LBRow {
     'w': w,
     'l': l,
   };
+
   static LBRow fromJson(Map<String, dynamic> m) =>
       LBRow(m['name'] as String, m['pts'] as int, m['w'] as int, m['l'] as int);
 }
@@ -27,8 +27,9 @@ class TimelineItem {
   final DateTime ts;
   final String game;
   final String roomCode;
-  final String winner;       // for quick display (first winner)
-  final List<String> losers; // all losers
+  final String winner;
+  final List<String> losers;
+
   TimelineItem({
     required this.ts,
     required this.game,
@@ -44,6 +45,7 @@ class TimelineItem {
     'winner': winner,
     'losers': losers,
   };
+
   static TimelineItem fromJson(Map<String, dynamic> m) => TimelineItem(
     ts: DateTime.parse(m['ts'] as String),
     game: m['game'] as String,
@@ -60,27 +62,24 @@ class UserProfile {
   String? bio50;
   String? activeSponsorCode;
 
-  /// Per-game stats
   final Map<String, int> pointsByGame;
   final Map<String, int> winsByGame;
   final Map<String, int> lossesByGame;
-
-  /// Archive per month: monthKey -> { game -> {pts,w,l} }
   final Map<String, Map<String, Map<String, int>>> archives;
 
   UserProfile({
     required this.name,
     this.phone,
     this.bio50,
+    this.activeSponsorCode,
     Map<String, int>? pointsByGame,
     Map<String, int>? winsByGame,
     Map<String, int>? lossesByGame,
     Map<String, Map<String, Map<String, int>>>? archives,
-    this.activeSponsorCode,
-  })  : pointsByGame = pointsByGame ?? <String, int>{},
-        winsByGame = winsByGame ?? <String, int>{},
-        lossesByGame = lossesByGame ?? <String, int>{},
-        archives = archives ?? <String, Map<String, Map<String, int>>>{};
+  })  : pointsByGame = pointsByGame ?? {},
+        winsByGame = winsByGame ?? {},
+        lossesByGame = lossesByGame ?? {},
+        archives = archives ?? {};
 
   Map<String, dynamic> toJson() => {
     'name': name,
@@ -108,7 +107,7 @@ class UserProfile {
     if (o is Map) {
       return o.map((k, v) => MapEntry(k.toString(), (v as num).toInt()));
     }
-    return <String, int>{};
+    return {};
   }
 
   static Map<String, Map<String, Map<String, int>>> _mapArchive(Object? o) {
@@ -121,8 +120,8 @@ class UserProfile {
           for (final g in inner.keys) {
             final stats = inner[g];
             if (stats is Map) {
-              perGame[g.toString()] = stats.map((k, v) =>
-                  MapEntry(k.toString(), (v as num).toInt()));
+              perGame[g.toString()] =
+                  stats.map((k, v) => MapEntry(k.toString(), (v as num).toInt()));
             }
           }
           out[mk.toString()] = perGame;
@@ -133,17 +132,27 @@ class UserProfile {
   }
 }
 
-/// Global app state (local-only prototype)
+/// Global app state
 class AppState extends ChangeNotifier {
   AppState();
 
-  // ——— user basics ———
+  // --- User basics ---
   String? name;
   String? phone;
   String? bio50;
   String? activeSponsorCode;
 
-  // ——— UI selections ———
+  // --- Auth (backend) ---
+  String? token;
+  String? userId;
+  String? displayName;
+  String? email;
+  int? creditPoints;
+  int? permanentScore;
+
+  bool get isSignedIn => token != null && userId != null;
+
+  // --- UI selections ---
   String? selectedCategory;
   String? selectedGame;
   String? roomCode;
@@ -159,16 +168,45 @@ class AppState extends ChangeNotifier {
     ],
   };
 
-  // local storage of users & timeline
-  final Map<String, UserProfile> _users = <String, UserProfile>{};
+  final Map<String, UserProfile> _users = {};
   final List<TimelineItem> timeline = [];
 
-  // monthly LB reset key
   String _currentLBMonthKey = _monthKey(DateTime.now());
   static String _monthKey(DateTime d) =>
       '${d.year}-${d.month.toString().padLeft(2, '0')}';
 
-  // ============ User helper ============
+  // ===== Auth Helpers =====
+  Future<void> setAuthFromBackend({
+    required String token,
+    required Map<String, dynamic> user,
+  }) async {
+    this.token = token;
+    userId = user['id'] as String?;
+    displayName = user['displayName'] as String?;
+    email = user['email'] as String?;
+    creditPoints = (user['creditPoints'] as num?)?.toInt();
+    permanentScore = (user['permanentScore'] as num?)?.toInt();
+
+    final sp = await SharedPreferences.getInstance();
+    await sp.setString('auth.token', token);
+    await sp.setString('auth.user', jsonEncode(user));
+    notifyListeners();
+  }
+
+  Future<void> clearAuth() async {
+    token = null;
+    userId = null;
+    displayName = null;
+    email = null;
+    creditPoints = null;
+    permanentScore = null;
+    final sp = await SharedPreferences.getInstance();
+    await sp.remove('auth.token');
+    await sp.remove('auth.user');
+    notifyListeners();
+  }
+
+  // ===== User helpers =====
   UserProfile _ensureUser(String userName) {
     return _users.putIfAbsent(userName, () => UserProfile(name: userName));
   }
@@ -182,7 +220,7 @@ class AppState extends ChangeNotifier {
     return u;
   }
 
-  // ============ UI actions ============
+  // ===== UI actions =====
   void pickCategory(String cat) {
     if (!categories.contains(cat)) return;
     selectedCategory = cat;
@@ -199,7 +237,8 @@ class AppState extends ChangeNotifier {
   }
 
   void setSponsorCode(String? code) {
-    activeSponsorCode = (code?.trim().isEmpty ?? true) ? null : code!.trim();
+    activeSponsorCode =
+    (code?.trim().isEmpty ?? true) ? null : code!.trim();
     me.activeSponsorCode = activeSponsorCode;
     save();
     notifyListeners();
@@ -229,12 +268,7 @@ class AppState extends ChangeNotifier {
     return List.generate(6, (_) => chars[r.nextInt(chars.length)]).join();
   }
 
-  // ============ Core: record match (+1/-1 per player) ============
-
-  /// Record a match with **team-awareness**:
-  /// - Every name in [winners] gets +1 (points & wins)
-  /// - Every name in [losers]  gets −1 (points) and +1 losses
-  /// - Adds to local timeline (first winner shown)
+  // ===== Record match (local) =====
   void recordMatch({
     required String game,
     required List<String> winners,
@@ -242,20 +276,17 @@ class AppState extends ChangeNotifier {
     String? room,
     DateTime? when,
   }) {
-    // update all winners
     for (final wName in winners) {
       final wUser = _ensureUser(wName);
       wUser.pointsByGame[game] = (wUser.pointsByGame[game] ?? 0) + 1;
-      wUser.winsByGame[game]   = (wUser.winsByGame[game]   ?? 0) + 1;
+      wUser.winsByGame[game] = (wUser.winsByGame[game] ?? 0) + 1;
     }
-    // update all losers
     for (final lName in losers) {
       final u = _ensureUser(lName);
       u.pointsByGame[game] = (u.pointsByGame[game] ?? 0) - 1;
       u.lossesByGame[game] = (u.lossesByGame[game] ?? 0) + 1;
     }
 
-    // timeline (save one winner for quick display)
     final mainWinner = winners.isNotEmpty ? winners.first : '';
     timeline.add(TimelineItem(
       ts: when ?? DateTime.now(),
@@ -270,11 +301,10 @@ class AppState extends ChangeNotifier {
     notifyListeners();
   }
 
-  // ============ Leaderboard per game (monthly) ============
+  // ===== Leaderboard =====
   Future<List<LBRow>> getLeaderboard(String? game) async {
-    if (game == null || game.isEmpty) return <LBRow>[];
+    if (game == null || game.isEmpty) return [];
     final rows = <LBRow>[];
-
     for (final u in _users.values) {
       final pts = u.pointsByGame[game] ?? 0;
       final w = u.winsByGame[game] ?? 0;
@@ -283,8 +313,6 @@ class AppState extends ChangeNotifier {
         rows.add(LBRow(u.name, pts, w, l));
       }
     }
-
-    // Sort: points desc, wins desc, name asc for stability
     rows.sort((a, b) {
       final byPts = b.pts.compareTo(a.pts);
       if (byPts != 0) return byPts;
@@ -292,13 +320,10 @@ class AppState extends ChangeNotifier {
       if (byW != 0) return byW;
       return a.name.compareTo(b.name);
     });
-
     return rows;
   }
 
-  // ============ Level per game (win-based with loss penalty) ============
-  /// Each 15 *effective* wins = rank up.
-  /// Effective = wins - floor(losses / 3).
+  // ===== Level calculation (missing before) =====
   LevelInfo levelForGame(String userName, String game) {
     final u = _ensureUser(userName);
     final w = u.winsByGame[game] ?? 0;
@@ -308,29 +333,23 @@ class AppState extends ChangeNotifier {
   }
 
   static LevelInfo _levelFromProgress(int progress) {
-    const step = 15; // each 15 wins = next tier
-    final tier = progress ~/ step;          // 0..1..2..
-    final inTier = (progress % step) / step; // 0..1 for the ring fill
-
+    const step = 15;
+    final tier = progress ~/ step;
+    final inTier = (progress % step) / step;
     String name;
     if (tier >= 4) name = 'فلتة';
     else if (tier == 3) name = 'فنان';
     else if (tier == 2) name = 'زين';
     else if (tier == 1) name = 'يمشي حاله';
     else name = 'عليمي';
-
     return LevelInfo(name: name, fill01: inTier);
   }
 
-  // ============ Monthly reset & archive ============
-
+  // ===== Monthly reset =====
   void _monthlyResetIfNeeded() {
     final nowKey = _monthKey(DateTime.now());
     if (nowKey == _currentLBMonthKey) return;
-
     final prevKey = _currentLBMonthKey;
-
-    // snapshot & clear per-user per-game stats
     for (final u in _users.values) {
       final snapshot = <String, Map<String, int>>{};
       final allGames = <String>{
@@ -352,32 +371,27 @@ class AppState extends ChangeNotifier {
       u.winsByGame.clear();
       u.lossesByGame.clear();
     }
-
     _currentLBMonthKey = nowKey;
     save();
     notifyListeners();
   }
-  // جلب بروفايل لاعب بالاسم (لو موجود)
-  UserProfile? profile(String playerName) => _users[playerName];
 
-  // نقاط/فوز/خسارة اللاعب في لعبة معينة
+  UserProfile? profile(String playerName) => _users[playerName];
   int pointsOf(String playerName, String game) =>
       _users[playerName]?.pointsByGame[game] ?? 0;
-
   int winsOf(String playerName, String game) =>
       _users[playerName]?.winsByGame[game] ?? 0;
-
   int lossesOf(String playerName, String game) =>
       _users[playerName]?.lossesByGame[game] ?? 0;
 
-  // جميع مباريات لاعب من التايملاين
   List<TimelineItem> userMatches(String playerName) {
-    return timeline.where((t) =>
-    t.winner == playerName || t.losers.contains(playerName)).toList();
+    return timeline
+        .where((t) =>
+    t.winner == playerName || t.losers.contains(playerName))
+        .toList();
   }
 
-  // ============ Persistence ============
-
+  // ===== Persistence =====
   Future<void> load() async {
     final sp = await SharedPreferences.getInstance();
     try {
@@ -402,8 +416,23 @@ class AppState extends ChangeNotifier {
           ..clear()
           ..addAll(list.map(TimelineItem.fromJson));
       }
+
+      final savedToken = sp.getString('auth.token');
+      final savedUser = sp.getString('auth.user');
+      if (savedToken != null &&
+          savedToken.isNotEmpty &&
+          savedUser != null &&
+          savedUser.isNotEmpty) {
+        token = savedToken;
+        final u = jsonDecode(savedUser) as Map<String, dynamic>;
+        userId = u['id'] as String?;
+        displayName = u['displayName'] as String?;
+        email = u['email'] as String?;
+        creditPoints = (u['creditPoints'] as num?)?.toInt();
+        permanentScore = (u['permanentScore'] as num?)?.toInt();
+      }
     } catch (_) {
-      // ignore malformed stored data
+      // ignore
     }
     notifyListeners();
   }
@@ -416,17 +445,19 @@ class AppState extends ChangeNotifier {
     await sp.setString('me.sponsor', activeSponsorCode ?? '');
     await sp.setString('lb.month', _currentLBMonthKey);
 
-    final usersJson = jsonEncode(_users.map((k, v) => MapEntry(k, v.toJson())));
+    final usersJson =
+    jsonEncode(_users.map((k, v) => MapEntry(k, v.toJson())));
     await sp.setString('users.json', usersJson);
 
     final tlJson = jsonEncode(timeline.map((t) => t.toJson()).toList());
     await sp.setString('timeline.json', tlJson);
   }
 
-  static String? _nz(String? s) => (s == null || s.isEmpty) ? null : s;
+  static String? _nz(String? s) =>
+      (s == null || s.isEmpty) ? null : s;
 }
 
-/// For the profile ring (name + 0..1 fill)
+/// For profile ring (level info)
 class LevelInfo {
   final String name;
   final double fill01;

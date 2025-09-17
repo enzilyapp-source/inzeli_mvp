@@ -1,14 +1,11 @@
-// lib/pages/match_page.dart
 import 'package:flutter/material.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 import '../state.dart';
 import '../api_room.dart';
-import '../config.dart';  // <-- مهم
 
 class MatchPage extends StatefulWidget {
   final AppState app;
-  final Map<String, dynamic>? room; // { code, gameId, ... } from backend
-
+  final Map<String, dynamic>? room; // { code, gameId, ... }
   const MatchPage({super.key, required this.app, this.room});
 
   @override
@@ -19,11 +16,12 @@ class _MatchPageState extends State<MatchPage> {
   final _codeCtrl = TextEditingController();
   @override void dispose() { _codeCtrl.dispose(); super.dispose(); }
 
+  void _msg(String m) => ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(m)));
+
   @override
   Widget build(BuildContext context) {
-    final code   = (widget.room?['code'] ?? widget.app.roomCode ?? '').toString();
-    final game   = (widget.room?['gameId'] ?? widget.app.selectedGame ?? 'لعبة').toString();
-
+    final code = (widget.room?['code'] ?? widget.app.roomCode ?? '').toString();
+    final game = (widget.room?['gameId'] ?? widget.app.selectedGame ?? 'لعبة').toString();
     final httpsLink = 'https://inzeli.app/join/$code';
 
     return Scaffold(
@@ -48,18 +46,12 @@ class _MatchPageState extends State<MatchPage> {
               FilledButton(
                 onPressed: () async {
                   final inputCode = _codeCtrl.text.trim();
-                  if (inputCode.isEmpty) {
-                    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('اكتب الكود')));
-                    return;
-                  }
+                  if (inputCode.isEmpty) { _msg('اكتب الكود'); return; }
+                  if (!widget.app.isSignedIn) { _msg('سجّل دخول أول'); return; }
                   try {
-                    await joinByCode(code: inputCode, userId: guestUserId);
-                    if (!mounted) return;
-                    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Joined ✅')));
-                  } catch (e) {
-                    if (!mounted) return;
-                    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('خطأ: $e')));
-                  }
+                    await joinByCode(code: inputCode, userId: widget.app.userId!, token: widget.app.token);
+                    _msg('Joined ✅');
+                  } catch (e) { _msg('خطأ: $e'); }
                 },
                 child: const Text('انضم'),
               ),
@@ -71,21 +63,19 @@ class _MatchPageState extends State<MatchPage> {
             const Text('اللاعبون:'),
             const SizedBox(height: 6),
             FutureBuilder<List<Map<String, dynamic>>>(
-              future: getPlayers(code),   // <-- هنا صار الكود
+              future: getPlayers(code, token: widget.app.token),
               builder: (context, snap) {
                 if (snap.connectionState == ConnectionState.waiting) {
                   return const Center(child: CircularProgressIndicator());
                 }
-                if (snap.hasError) {
-                  return Text('خطأ: ${snap.error}');
-                }
+                if (snap.hasError) return Text('خطأ: ${snap.error}');
                 final rows = snap.data ?? const <Map<String, dynamic>>[];
                 if (rows.isEmpty) return const Text('لاعب واحد (أنت)');
                 return Wrap(
                   spacing: 6,
                   children: rows.map((r) {
-                    final userId = r['userId']?.toString() ?? '—';
-                    return Chip(label: Text(userId));
+                    final uid = r['userId']?.toString() ?? '—';
+                    return Chip(label: Text(uid));
                   }).toList(),
                 );
               },

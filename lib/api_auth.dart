@@ -3,10 +3,7 @@ import 'package:http/http.dart' as http;
 import 'api_base.dart';
 
 class ApiResponse<T> {
-  final bool ok;
-  final String message;
-  final T? data;
-  final String? code;
+  final bool ok; final String message; final T? data; final String? code;
   ApiResponse({required this.ok, required this.message, this.data, this.code});
   static ApiResponse<Map<String, dynamic>> fromHttp(http.Response res) {
     try {
@@ -14,7 +11,7 @@ class ApiResponse<T> {
       return ApiResponse(
         ok: m['ok'] == true,
         message: (m['message'] ?? 'No message') as String,
-        data: m['data'] is Map<String, dynamic> ? (m['data'] as Map<String, dynamic>) : null,
+        data: m['data'] as Map<String, dynamic>?,
         code: m['code'] as String?,
       );
     } catch (_) {

@@ -23,7 +23,7 @@ Future<Map<String, dynamic>> createRoom({
     headers: {'Content-Type': 'application/json', if (token != null) 'Authorization': 'Bearer $token'},
     body: jsonEncode({'gameId': gameId, 'hostId': hostUserId}),
   );
-  if (res.statusCode >= 400) throw 'Create failed: ${res.statusCode} ${res.body}';
+  if (res.statusCode >= 400) { throw 'Create failed: ${res.statusCode} ${res.body}'; }
   return _parseData<Map<String, dynamic>>(res);
 }
 
@@ -35,16 +35,16 @@ Future<Map<String, dynamic>> joinByCode({
     headers: {'Content-Type': 'application/json', if (token != null) 'Authorization': 'Bearer $token'},
     body: jsonEncode({'code': code, 'userId': userId}),
   );
-  if (res.statusCode >= 400) throw 'Join failed: ${res.statusCode} ${res.body}';
+  if (res.statusCode >= 400) { throw 'Join failed: ${res.statusCode} ${res.body}'; }
   return _parseData<Map<String, dynamic>>(res);
 }
 
 Future<Map<String, dynamic>> getRoomByCode(String code, {String? token}) async {
   final res = await http.get(
     Uri.parse('$apiBase/rooms/$code'),
-    headers: {if (token != null) 'Authorization': 'Bearer $token'},
+    headers: { if (token != null) 'Authorization': 'Bearer $token' },
   );
-  if (res.statusCode >= 400) throw 'Fetch failed: ${res.statusCode} ${res.body}';
+  if (res.statusCode >= 400) { throw 'Fetch failed: ${res.statusCode} ${res.body}'; }
   return _parseData<Map<String, dynamic>>(res);
 }
 
