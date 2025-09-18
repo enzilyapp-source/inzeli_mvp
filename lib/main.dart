@@ -1,11 +1,10 @@
 import 'package:flutter/material.dart';
-import 'package:shared_preferences/shared_preferences.dart';
-import 'api_auth.dart';
 import 'state.dart';
 import 'pages/games_page.dart';
 import 'pages/leaderboard_page.dart';
 import 'pages/timeline_page.dart';
 import 'pages/profile_page.dart';
+import 'pages/signin_page.dart'; // صفحة التسجيل/الدخول اللي عطيتك
 
 void main() => runApp(const InzeliApp());
 
@@ -15,76 +14,48 @@ class InzeliApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       title: 'Inzeli',
-      theme: ThemeData(useMaterial3: true, colorSchemeSeed: Colors.blue),
+      themeMode: ThemeMode.system,
+      theme: ThemeData(
+        useMaterial3: true,
+        brightness: Brightness.light,
+        colorSchemeSeed: const Color(0xFF3D5AFE), // لون أساسي
+        textTheme: const TextTheme(), // خط النظام (بدون باكدجات)
+      ),
+      darkTheme: ThemeData(
+        useMaterial3: true,
+        brightness: Brightness.dark,
+        colorSchemeSeed: const Color(0xFF3D5AFE),
+        textTheme: const TextTheme(),
+      ),
       home: const AuthGate(),
     );
   }
 }
 
+/// يشيك لو عندك توكن محفوظ → يدخل الهوم، وإلا يفتح سيجن إن
 class AuthGate extends StatefulWidget {
   const AuthGate({super.key});
   @override
   State<AuthGate> createState() => _AuthGateState();
 }
-
 class _AuthGateState extends State<AuthGate> {
   final app = AppState();
   bool loading = true;
-
   @override
   void initState() {
     super.initState();
     _boot();
   }
-
   Future<void> _boot() async {
-    await app.load(); // يحمل بياناتك + الأوث الجديدة
+    await app.load(); // يحمل SharedPreferences + الأوث (من state.dart  )
     setState(() => loading = false);
   }
-
   @override
   Widget build(BuildContext context) {
-    if (loading) return const Scaffold(body: Center(child: CircularProgressIndicator()));
+    if (loading) {
+      return const Scaffold(body: Center(child: CircularProgressIndicator()));
+    }
     return app.isSignedIn ? HomePage(app: app) : SignInPage(app: app);
-  }
-}
-
-class SignInPage extends StatelessWidget {
-  final AppState app;
-  const SignInPage({super.key, required this.app});
-
-  @override
-  Widget build(BuildContext context) {
-    void msg(String m) => ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(m)));
-
-    return Scaffold(
-      body: Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            const Icon(Icons.sports_esports, size: 80, color: Colors.blue),
-            const SizedBox(height: 20),
-            FilledButton.icon(
-              icon: const Icon(Icons.login),
-              label: const Text('تسجيل دخول سريع'),
-              onPressed: () async {
-                final r = await login(email: 'birdy@example.com', password: '12345678');
-                if (!r.ok) { msg(r.message); return; }
-                final token = r.data!['token'] as String;
-                final user  = r.data!['user']  as Map<String, dynamic>;
-                await app.setAuthFromBackend(token: token, user: user);
-                if (!context.mounted) return;
-                Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => HomePage(app: app)));
-              },
-            ),
-            TextButton(
-              onPressed: () { /* TODO: افتحي صفحة تسجيل */ },
-              child: const Text('إنشاء حساب جديد'),
-            ),
-          ],
-        ),
-      ),
-    );
   }
 }
 
@@ -94,7 +65,6 @@ class HomePage extends StatefulWidget {
   @override
   State<HomePage> createState() => _HomePageState();
 }
-
 class _HomePageState extends State<HomePage> {
   int index = 0;
   late final pages = <Widget>[
@@ -106,14 +76,17 @@ class _HomePageState extends State<HomePage> {
 
   @override
   Widget build(BuildContext context) {
+    final app = widget.app;
+    final onSurface = Theme.of(context).colorScheme.onSurface;
     return Scaffold(
       appBar: AppBar(
-        title: Text('أهلاً ${widget.app.displayName ?? ""}'),
+        title: Text('أهلًا ${app.displayName ?? app.name ?? ""}'),
         actions: [
           IconButton(
+            tooltip: 'خروج',
             icon: const Icon(Icons.logout),
             onPressed: () async {
-              await widget.app.clearAuth();
+              await app.clearAuth();
               if (!mounted) return;
               Navigator.pushAndRemoveUntil(
                 context,
@@ -124,7 +97,38 @@ class _HomePageState extends State<HomePage> {
           )
         ],
       ),
-      body: pages[index],
+      body: ListView(
+        padding: const EdgeInsets.all(16),
+        children: [
+          // بطاقة الحساب — ألوان تعتمد على الثيم (تباين واضح)
+          Card(
+            child: ListTile(
+              leading: const Icon(Icons.person, size: 28),
+              title: Text(
+                app.displayName ?? app.name ?? '—',
+                style: const TextStyle(fontWeight: FontWeight.w900),
+              ),
+              subtitle: Text(app.email ?? app.phone ?? '—',
+                  style: TextStyle(color: onSurface.withOpacity(0.7))),
+              trailing: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  Text('الرصيد: ${app.creditPoints ?? 0}'),
+                  Text('النقاط: ${app.permanentScore ?? 0}'),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 12),
+
+          // الصفحة الحالية (Games/Leaderboard/Timeline/Profile)
+          SizedBox(
+            height: MediaQuery.of(context).size.height * 0.75,
+            child: pages[index],
+          ),
+        ],
+      ),
       bottomNavigationBar: NavigationBar(
         selectedIndex: index,
         onDestinationSelected: (i) => setState(() => index = i),

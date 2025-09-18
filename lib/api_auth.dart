@@ -26,6 +26,9 @@ Future<ApiResponse<Map<String, dynamic>>> _post(String path, Map<String, dynamic
     headers: {'Content-Type': 'application/json'},
     body: jsonEncode(body),
   );
+  // debug print
+  // ignore: avoid_print
+  print('AUTH $path → ${res.statusCode} ${res.body}');
   return ApiResponse.fromHttp(res);
 }
 
