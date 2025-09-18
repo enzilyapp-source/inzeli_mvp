@@ -1,8 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:shared_preferences/shared_preferences.dart';
-
 import 'state.dart';
-import 'api_auth.dart';
 import 'pages/games_page.dart';
 import 'pages/leaderboard_page.dart';
 import 'pages/timeline_page.dart';
@@ -17,42 +14,48 @@ class InzeliApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       title: 'Inzeli',
-      theme: ThemeData(useMaterial3: true, colorSchemeSeed: Colors.blue),
+      themeMode: ThemeMode.system,
+      theme: ThemeData(
+        useMaterial3: true,
+        brightness: Brightness.light,
+        colorSchemeSeed: const Color(0xFF3D5AFE), // لون أساسي
+        textTheme: const TextTheme(), // خط النظام (بدون باكدجات)
+      ),
+      darkTheme: ThemeData(
+        useMaterial3: true,
+        brightness: Brightness.dark,
+        colorSchemeSeed: const Color(0xFF3D5AFE),
+        textTheme: const TextTheme(),
+      ),
       home: const AuthGate(),
     );
   }
 }
 
-/// يشيك إذا فيه توكن محفوظ -> يدخل على الصفحة الرئيسية، وإلا يفتح شاشة الدخول
+/// يشيك لو عندك توكن محفوظ → يدخل الهوم، وإلا يفتح سيجن إن
 class AuthGate extends StatefulWidget {
   const AuthGate({super.key});
   @override
   State<AuthGate> createState() => _AuthGateState();
 }
-
 class _AuthGateState extends State<AuthGate> {
   final app = AppState();
   bool loading = true;
-
   @override
   void initState() {
     super.initState();
     _boot();
   }
-
   Future<void> _boot() async {
-    await app.load(); // يحمل بياناتك + الأوث من SharedPreferences
+    await app.load(); // يحمل SharedPreferences + الأوث (من state.dart  )
     setState(() => loading = false);
   }
-
   @override
   Widget build(BuildContext context) {
     if (loading) {
       return const Scaffold(body: Center(child: CircularProgressIndicator()));
     }
-    return app.isSignedIn
-        ? HomePage(app: app)
-        : SignInPage(app: app); // ← شاشة الدخول الكاملة اللي عطيتك
+    return app.isSignedIn ? HomePage(app: app) : SignInPage(app: app);
   }
 }
 
@@ -62,7 +65,6 @@ class HomePage extends StatefulWidget {
   @override
   State<HomePage> createState() => _HomePageState();
 }
-
 class _HomePageState extends State<HomePage> {
   int index = 0;
   late final pages = <Widget>[
@@ -72,31 +74,16 @@ class _HomePageState extends State<HomePage> {
     ProfilePage(app: widget.app),
   ];
 
-  void _msg(String m) =>
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(m)));
-
   @override
   Widget build(BuildContext context) {
     final app = widget.app;
+    final onSurface = Theme.of(context).colorScheme.onSurface;
     return Scaffold(
       appBar: AppBar(
         title: Text('أهلًا ${app.displayName ?? app.name ?? ""}'),
         actions: [
           IconButton(
-            tooltip: 'تحديث الحساب',
-            icon: const Icon(Icons.refresh),
-            onPressed: () async {
-              // لو حابة تتحققين من التوكن وتجيبين /auth/me
-              if (!app.isSignedIn) { _msg('سجّلي دخول أول'); return; }
-              try {
-                // مثال بسيط: نخزن نفس القيم الحالية (أو تستدعين /auth/me من api_auth وتحدّثين)
-                _msg('تم التحديث');
-                setState(() {});
-              } catch (e) { _msg(e.toString()); }
-            },
-          ),
-          IconButton(
-            tooltip: 'تسجيل خروج',
+            tooltip: 'خروج',
             icon: const Icon(Icons.logout),
             onPressed: () async {
               await app.clearAuth();
@@ -107,19 +94,22 @@ class _HomePageState extends State<HomePage> {
                     (_) => false,
               );
             },
-          ),
+          )
         ],
       ),
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
-          // بطاقة الحساب في الصفحة الرئيسية
+          // بطاقة الحساب — ألوان تعتمد على الثيم (تباين واضح)
           Card(
             child: ListTile(
               leading: const Icon(Icons.person, size: 28),
-              title: Text(app.displayName ?? app.name ?? '—',
-                  style: const TextStyle(fontWeight: FontWeight.w900)),
-              subtitle: Text(app.email ?? app.phone ?? '—'),
+              title: Text(
+                app.displayName ?? app.name ?? '—',
+                style: const TextStyle(fontWeight: FontWeight.w900),
+              ),
+              subtitle: Text(app.email ?? app.phone ?? '—',
+                  style: TextStyle(color: onSurface.withOpacity(0.7))),
               trailing: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 crossAxisAlignment: CrossAxisAlignment.end,
@@ -131,7 +121,8 @@ class _HomePageState extends State<HomePage> {
             ),
           ),
           const SizedBox(height: 12),
-          // الصفحة الحالية من شريط التنقل
+
+          // الصفحة الحالية (Games/Leaderboard/Timeline/Profile)
           SizedBox(
             height: MediaQuery.of(context).size.height * 0.75,
             child: pages[index],

@@ -30,11 +30,10 @@ class _ProfilePageState extends State<ProfilePage> {
     final app = widget.app;
     final me  = app.me;
 
-    // نفس تجميع الألعاب اللي عندك
+    // تجميع كل الألعاب من خريطتك
     final allGames = <String>{};
     for (final list in app.games.values) { allGames.addAll(list); }
 
-    // نعرض بيانات الباكند إن وجدت، وإلا نرجع للمحلي
     final headlineName = (app.displayName?.trim().isNotEmpty ?? false)
         ? app.displayName!
         : me.name;
@@ -45,19 +44,24 @@ class _ProfilePageState extends State<ProfilePage> {
     final credit = app.creditPoints ?? 0;
     final perm   = app.permanentScore ?? 0;
 
+    final onSurface = Theme.of(context).colorScheme.onSurface;
+
     return ListView(
       padding: const EdgeInsets.all(12),
       children: [
+        // بطاقة الحساب
         Card(
           child: Padding(
             padding: const EdgeInsets.all(14),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(headlineName,
-                    style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 20)),
+                Text(
+                  headlineName,
+                  style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 20),
+                ),
                 if (subLine.isNotEmpty)
-                  Text(subLine, style: const TextStyle(color: Colors.white60)),
+                  Text(subLine, style: TextStyle(color: onSurface.withOpacity(0.65))),
                 const SizedBox(height: 10),
                 Row(
                   children: [
@@ -82,6 +86,7 @@ class _ProfilePageState extends State<ProfilePage> {
         const Text('تقدّمك في الألعاب', style: TextStyle(fontWeight: FontWeight.w900)),
         const SizedBox(height: 8),
 
+        // شبكة الألعاب
         Wrap(
           spacing: 10,
           runSpacing: 10,
@@ -101,9 +106,9 @@ class _ProfilePageState extends State<ProfilePage> {
                   GameRing(size: 70, fill01: info.fill01),
                   const SizedBox(height: 8),
                   Text(g, style: const TextStyle(fontWeight: FontWeight.w900)),
-                  Text(info.name, style: const TextStyle(color: Colors.white70)),
+                  Text(info.name, style: TextStyle(color: onSurface.withOpacity(0.7))),
                   const SizedBox(height: 6),
-                  Text('النقاط: $pts', style: const TextStyle(color: Colors.white60)),
+                  Text('النقاط: $pts', style: TextStyle(color: onSurface.withOpacity(0.6))),
                 ],
               ),
             );
@@ -122,19 +127,20 @@ class _StatChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final onSurface = Theme.of(context).colorScheme.onSurface;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
       decoration: BoxDecoration(
-        color: Colors.white10,
+        color: onSurface.withOpacity(0.06),
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: const Color(0xFFEADFCC)),
+        border: Border.all(color: onSurface.withOpacity(0.12)),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
           Icon(icon, size: 18),
           const SizedBox(width: 6),
-          Text('$label: ', style: const TextStyle(color: Colors.white70)),
+          Text('$label: ', style: TextStyle(color: onSurface.withOpacity(0.7))),
           Text(value, style: const TextStyle(fontWeight: FontWeight.w900)),
         ],
       ),
