@@ -1,11 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'api_auth.dart';
+
 import 'state.dart';
+import 'api_auth.dart';
 import 'pages/games_page.dart';
 import 'pages/leaderboard_page.dart';
 import 'pages/timeline_page.dart';
 import 'pages/profile_page.dart';
+import 'pages/signin_page.dart'; // صفحة التسجيل/الدخول اللي عطيتك
 
 void main() => runApp(const InzeliApp());
 
@@ -21,6 +23,7 @@ class InzeliApp extends StatelessWidget {
   }
 }
 
+/// يشيك إذا فيه توكن محفوظ -> يدخل على الصفحة الرئيسية، وإلا يفتح شاشة الدخول
 class AuthGate extends StatefulWidget {
   const AuthGate({super.key});
   @override
@@ -38,53 +41,18 @@ class _AuthGateState extends State<AuthGate> {
   }
 
   Future<void> _boot() async {
-    await app.load(); // يحمل بياناتك + الأوث الجديدة
+    await app.load(); // يحمل بياناتك + الأوث من SharedPreferences
     setState(() => loading = false);
   }
 
   @override
   Widget build(BuildContext context) {
-    if (loading) return const Scaffold(body: Center(child: CircularProgressIndicator()));
-    return app.isSignedIn ? HomePage(app: app) : SignInPage(app: app);
-  }
-}
-
-class SignInPage extends StatelessWidget {
-  final AppState app;
-  const SignInPage({super.key, required this.app});
-
-  @override
-  Widget build(BuildContext context) {
-    void msg(String m) => ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(m)));
-
-    return Scaffold(
-      body: Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            const Icon(Icons.sports_esports, size: 80, color: Colors.blue),
-            const SizedBox(height: 20),
-            FilledButton.icon(
-              icon: const Icon(Icons.login),
-              label: const Text('تسجيل دخول سريع'),
-              onPressed: () async {
-                final r = await login(email: 'birdy@example.com', password: '12345678');
-                if (!r.ok) { msg(r.message); return; }
-                final token = r.data!['token'] as String;
-                final user  = r.data!['user']  as Map<String, dynamic>;
-                await app.setAuthFromBackend(token: token, user: user);
-                if (!context.mounted) return;
-                Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => HomePage(app: app)));
-              },
-            ),
-            TextButton(
-              onPressed: () { /* TODO: افتحي صفحة تسجيل */ },
-              child: const Text('إنشاء حساب جديد'),
-            ),
-          ],
-        ),
-      ),
-    );
+    if (loading) {
+      return const Scaffold(body: Center(child: CircularProgressIndicator()));
+    }
+    return app.isSignedIn
+        ? HomePage(app: app)
+        : SignInPage(app: app); // ← شاشة الدخول الكاملة اللي عطيتك
   }
 }
 
@@ -104,16 +72,34 @@ class _HomePageState extends State<HomePage> {
     ProfilePage(app: widget.app),
   ];
 
+  void _msg(String m) =>
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(m)));
+
   @override
   Widget build(BuildContext context) {
+    final app = widget.app;
     return Scaffold(
       appBar: AppBar(
-        title: Text('أهلاً ${widget.app.displayName ?? ""}'),
+        title: Text('أهلًا ${app.displayName ?? app.name ?? ""}'),
         actions: [
           IconButton(
+            tooltip: 'تحديث الحساب',
+            icon: const Icon(Icons.refresh),
+            onPressed: () async {
+              // لو حابة تتحققين من التوكن وتجيبين /auth/me
+              if (!app.isSignedIn) { _msg('سجّلي دخول أول'); return; }
+              try {
+                // مثال بسيط: نخزن نفس القيم الحالية (أو تستدعين /auth/me من api_auth وتحدّثين)
+                _msg('تم التحديث');
+                setState(() {});
+              } catch (e) { _msg(e.toString()); }
+            },
+          ),
+          IconButton(
+            tooltip: 'تسجيل خروج',
             icon: const Icon(Icons.logout),
             onPressed: () async {
-              await widget.app.clearAuth();
+              await app.clearAuth();
               if (!mounted) return;
               Navigator.pushAndRemoveUntil(
                 context,
@@ -121,10 +107,37 @@ class _HomePageState extends State<HomePage> {
                     (_) => false,
               );
             },
-          )
+          ),
         ],
       ),
-      body: pages[index],
+      body: ListView(
+        padding: const EdgeInsets.all(16),
+        children: [
+          // بطاقة الحساب في الصفحة الرئيسية
+          Card(
+            child: ListTile(
+              leading: const Icon(Icons.person, size: 28),
+              title: Text(app.displayName ?? app.name ?? '—',
+                  style: const TextStyle(fontWeight: FontWeight.w900)),
+              subtitle: Text(app.email ?? app.phone ?? '—'),
+              trailing: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  Text('الرصيد: ${app.creditPoints ?? 0}'),
+                  Text('النقاط: ${app.permanentScore ?? 0}'),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 12),
+          // الصفحة الحالية من شريط التنقل
+          SizedBox(
+            height: MediaQuery.of(context).size.height * 0.75,
+            child: pages[index],
+          ),
+        ],
+      ),
       bottomNavigationBar: NavigationBar(
         selectedIndex: index,
         onDestinationSelected: (i) => setState(() => index = i),

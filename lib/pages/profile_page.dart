@@ -1,4 +1,3 @@
-// lib/pages/profile_page.dart
 import 'package:flutter/material.dart';
 import '../state.dart';
 import '../widgets/game_ring.dart';
@@ -29,62 +28,44 @@ class _ProfilePageState extends State<ProfilePage> {
   @override
   Widget build(BuildContext context) {
     final app = widget.app;
-    final me = app.me;
+    final me  = app.me;
 
-    // ألعابك نفسها
+    // نفس تجميع الألعاب اللي عندك
     final allGames = <String>{};
-    for (final list in app.games.values) {
-      allGames.addAll(list);
-    }
+    for (final list in app.games.values) { allGames.addAll(list); }
 
-    // لو مسجّل دخول نعرض بيانات الباكند،
-    // غير كذا نرجع للملف المحلي القديم (me)
-    final headlineName = app.displayName?.trim().isNotEmpty == true
+    // نعرض بيانات الباكند إن وجدت، وإلا نرجع للمحلي
+    final headlineName = (app.displayName?.trim().isNotEmpty ?? false)
         ? app.displayName!
         : me.name;
-
-    final subLine = app.email?.trim().isNotEmpty == true
+    final subLine = (app.email?.trim().isNotEmpty ?? false)
         ? app.email!
         : (me.phone ?? '');
 
-    final credit = app.creditPoints ?? 0;       // الرصيد المؤقت
-    final perm   = app.permanentScore ?? 0;     // النقاط الدائمة
+    final credit = app.creditPoints ?? 0;
+    final perm   = app.permanentScore ?? 0;
 
     return ListView(
       padding: const EdgeInsets.all(12),
       children: [
-        // ===== بطاقة الحساب (حافظنا على أسلوبك) =====
         Card(
           child: Padding(
             padding: const EdgeInsets.all(14),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  headlineName,
-                  style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 20),
-                ),
+                Text(headlineName,
+                    style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 20)),
                 if (subLine.isNotEmpty)
                   Text(subLine, style: const TextStyle(color: Colors.white60)),
                 const SizedBox(height: 10),
-
-                // صف رصيد/نقاط بشكل بسيط ما يغيّر ستايلك
                 Row(
                   children: [
-                    _StatChip(
-                      icon: Icons.account_balance_wallet_rounded,
-                      label: 'الرصيد',
-                      value: '$credit',
-                    ),
+                    _StatChip(icon: Icons.account_balance_wallet_rounded, label: 'الرصيد', value: '$credit'),
                     const SizedBox(width: 8),
-                    _StatChip(
-                      icon: Icons.stars_rounded,
-                      label: 'النقاط',
-                      value: '$perm',
-                    ),
+                    _StatChip(icon: Icons.stars_rounded, label: 'النقاط', value: '$perm'),
                   ],
                 ),
-
                 const SizedBox(height: 12),
                 TextField(
                   controller: _bio,
@@ -99,16 +80,14 @@ class _ProfilePageState extends State<ProfilePage> {
 
         const SizedBox(height: 10),
         const Text('تقدّمك في الألعاب', style: TextStyle(fontWeight: FontWeight.w900)),
-
         const SizedBox(height: 8),
 
-        // ===== شبكـة التقدّم (كما هي عندك) =====
         Wrap(
           spacing: 10,
           runSpacing: 10,
           children: allGames.map((g) {
             final info = app.levelForGame(me.name, g);
-            final pts = me.pointsByGame[g] ?? 0;
+            final pts  = me.pointsByGame[g] ?? 0;
             return Container(
               width: 150,
               padding: const EdgeInsets.all(12),
@@ -143,7 +122,6 @@ class _StatChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final fg = Theme.of(context).textTheme.bodyMedium;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
       decoration: BoxDecoration(
@@ -156,7 +134,7 @@ class _StatChip extends StatelessWidget {
         children: [
           Icon(icon, size: 18),
           const SizedBox(width: 6),
-          Text('$label: ', style: fg?.copyWith(color: Colors.white70)),
+          Text('$label: ', style: const TextStyle(color: Colors.white70)),
           Text(value, style: const TextStyle(fontWeight: FontWeight.w900)),
         ],
       ),
