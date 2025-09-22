@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../state.dart';
 import '../widgets/game_ring.dart';
+import '../api_user.dart';
 
 class ProfilePage extends StatefulWidget {
   final AppState app;
@@ -12,11 +13,28 @@ class ProfilePage extends StatefulWidget {
 
 class _ProfilePageState extends State<ProfilePage> {
   final _bio = TextEditingController();
+  Map<String, dynamic>? _stats;
+  bool _loadingStats = false;
 
   @override
   void initState() {
     super.initState();
     _bio.text = widget.app.bio50 ?? '';
+    _fetchStats();
+  }
+
+  Future<void> _fetchStats() async {
+    if (widget.app.userId == null) return;
+    setState(() => _loadingStats = true);
+    final s = await getUserStats(
+      widget.app.userId!,
+      token: widget.app.token,
+      // gameId: widget.app.selectedGame, // اختياري: احصائية لعبة محددة
+    );
+    setState(() {
+      _stats = s;
+      _loadingStats = false;
+    });
   }
 
   @override
@@ -30,7 +48,6 @@ class _ProfilePageState extends State<ProfilePage> {
     final app = widget.app;
     final me  = app.me;
 
-    // تجميع كل الألعاب من خريطتك
     final allGames = <String>{};
     for (final list in app.games.values) { allGames.addAll(list); }
 
@@ -56,20 +73,28 @@ class _ProfilePageState extends State<ProfilePage> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  headlineName,
-                  style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 20),
-                ),
+                Text(headlineName, style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 20)),
                 if (subLine.isNotEmpty)
                   Text(subLine, style: TextStyle(color: onSurface.withOpacity(0.65))),
                 const SizedBox(height: 10),
-                Row(
+
+                // الرصيد/النقاط + فوز/خسارة
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  crossAxisAlignment: WrapCrossAlignment.center,
                   children: [
                     _StatChip(icon: Icons.account_balance_wallet_rounded, label: 'الرصيد', value: '$credit'),
-                    const SizedBox(width: 8),
                     _StatChip(icon: Icons.stars_rounded, label: 'النقاط', value: '$perm'),
+                    if (_loadingStats)
+                      const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
+                    else if (_stats != null) ...[
+                      _StatChip(icon: Icons.emoji_events_outlined, label: 'فوز', value: '${_stats!['wins'] ?? 0}'),
+                      _StatChip(icon: Icons.close_rounded, label: 'خسارة', value: '${_stats!['losses'] ?? 0}'),
+                    ],
                   ],
                 ),
+
                 const SizedBox(height: 12),
                 TextField(
                   controller: _bio,
@@ -86,7 +111,6 @@ class _ProfilePageState extends State<ProfilePage> {
         const Text('تقدّمك في الألعاب', style: TextStyle(fontWeight: FontWeight.w900)),
         const SizedBox(height: 8),
 
-        // شبكة الألعاب
         Wrap(
           spacing: 10,
           runSpacing: 10,
