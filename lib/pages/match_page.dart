@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 import '../state.dart';
@@ -17,8 +18,14 @@ class _MatchPageState extends State<MatchPage> {
   List<Map<String, dynamic>> players = [];
   bool loading = false;
 
-  int _target = 10;
-  int _myStake = 0;
+  int _target = 10;   // هدف النقاط
+  int _myStake = 0;   // رهان اللاعب
+
+  // المؤقّت
+  Timer? _ticker;
+  int _remaining = 0;
+  DateTime? _startedAt;
+  int? _timerSec;
 
   @override
   void initState() {
@@ -30,25 +37,57 @@ class _MatchPageState extends State<MatchPage> {
   }
 
   @override
-  void dispose() { _codeCtrl.dispose(); super.dispose(); }
+  void dispose() {
+    _ticker?.cancel();
+    _codeCtrl.dispose();
+    super.dispose();
+  }
 
   Future<void> _refresh(String code) async {
     setState(() => loading = true);
     try {
-      final fresh = await ApiRoom.getPlayers(code, token: widget.app.token);
-      setState(() => players = fresh);
+      final room = await ApiRoom.getRoomByCode(code, token: widget.app.token);
+      // players
+      final p = room['players'];
+      if (p is List) players = p.cast<Map<String, dynamic>>();
+      // timer
+      _timerSec  = (room['timerSec'] as num?)?.toInt();
+      final s    = room['startedAt'] as String?;
+      _startedAt = s != null ? DateTime.tryParse(s) : null;
+      _startTickerIfNeeded();
     } finally {
       setState(() => loading = false);
     }
   }
 
+  void _startTickerIfNeeded() {
+    _ticker?.cancel();
+    if (_startedAt == null || _timerSec == null) { setState(() => _remaining = 0); return; }
+
+    void _tick() {
+      final elapsed = DateTime.now().difference(_startedAt!).inSeconds;
+      final remain  = _timerSec! - elapsed;
+      setState(() => _remaining = remain.clamp(0, 1 << 30));
+      if (_remaining <= 0) _ticker?.cancel();
+    }
+
+    _tick();
+    _ticker = Timer.periodic(const Duration(seconds: 1), (_) => _tick());
+  }
+
   void _msg(String m) => ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(m)));
+
+  String _fmt(int s) {
+    final m = (s ~/ 60).toString().padLeft(2, '0');
+    final ss = (s % 60).toString().padLeft(2, '0');
+    return '$m:$ss';
+  }
 
   @override
   Widget build(BuildContext context) {
     final code = (widget.room?['code'] ?? widget.app.roomCode ?? '').toString();
     final game = (widget.room?['gameId'] ?? widget.app.selectedGame ?? 'لعبة').toString();
-    final hostId = widget.room?['hostUserId']?.toString();
+    final hostId = widget.room?['hostUserId']?.toString(); // ← مهم: hostUserId
     final isHost = widget.app.userId != null && hostId == widget.app.userId;
     final httpsLink = code.isEmpty ? '' : 'https://inzeli.app/join/$code';
     final onSurface = Theme.of(context).colorScheme.onSurface;
@@ -67,7 +106,20 @@ class _MatchPageState extends State<MatchPage> {
 
           const SizedBox(height: 16),
 
-          // إعدادات قبل البدء +
+          // المؤقّت
+          if (_timerSec != null && _startedAt != null) ...[
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                const Icon(Icons.timer_outlined),
+                const SizedBox(width: 6),
+                Text(_fmt(_remaining), style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 16)),
+              ],
+            ),
+            const SizedBox(height: 8),
+          ],
+
+          // إعدادات قبل البدء + الرهان
           if (code.isNotEmpty) Card(
             child: Padding(
               padding: const EdgeInsets.all(12),
@@ -82,8 +134,7 @@ class _MatchPageState extends State<MatchPage> {
                       const SizedBox(width: 8),
                       Expanded(
                         child: Slider(
-                          value: _target.toDouble(),
-                          min: 1, max: 50, divisions: 49,
+                          value: _target.toDouble(), min: 1, max: 50, divisions: 49,
                           label: '$_target',
                           onChanged: isHost ? (v) => setState(() => _target = v.toInt()) : null,
                         ),
@@ -93,7 +144,7 @@ class _MatchPageState extends State<MatchPage> {
                   ),
                   Row(
                     children: [
-                      const Text('نقاط اللعب:'),
+                      const Text('نقاطي:'),
                       const SizedBox(width: 8),
                       SizedBox(
                         width: 100,
@@ -109,22 +160,27 @@ class _MatchPageState extends State<MatchPage> {
                           if (code.isEmpty) return;
                           try {
                             await ApiRoom.setStake(code: code, amount: _myStake, token: widget.app.token);
-                            _msg('تم حجز النقاط ');
+                            _msg('تم حجز النقاط');
                             _refresh(code);
-                          } catch (e) { _msg('خطأ النقاط: $e'); }
+                          } catch (e) { _msg('خطأ نقاطي: $e'); }
                         },
-                        child: const Text('حجز'),
+                        child: const Text('حجز النقاط'),
                       ),
                       const Spacer(),
                       if (isHost) FilledButton(
                         onPressed: () async {
                           try {
-                            await ApiRoom.startRoom(
+                            final data = await ApiRoom.startRoom(
                               code: code,
                               token: widget.app.token,
                               targetWinPoints: _target,
                               allowZeroCredit: true,
+                              timerSec: 600, // ← 10 دقائق
                             );
+                            _timerSec  = (data['timerSec'] as num?)?.toInt();
+                            final s    = data['startedAt'] as String?;
+                            _startedAt = s != null ? DateTime.tryParse(s) : null;
+                            _startTickerIfNeeded();
                             _msg('انزلي — بدأنا!');
                             _refresh(code);
                           } catch (e) { _msg('خطأ البدء: $e'); }

@@ -55,6 +55,7 @@ class ApiRoom {
     String? token,
     int? targetWinPoints,
     bool? allowZeroCredit,
+    int? timerSec,
   }) async {
     final res = await http.post(
       Uri.parse('$apiBase/rooms/$code/start'),
@@ -62,6 +63,7 @@ class ApiRoom {
       body: jsonEncode({
         if (targetWinPoints != null) 'targetWinPoints': targetWinPoints,
         if (allowZeroCredit != null) 'allowZeroCredit': allowZeroCredit,
+        if (timerSec != null) 'timerSec': timerSec,
       }),
     );
     final m = jsonDecode(res.body) as Map<String, dynamic>;

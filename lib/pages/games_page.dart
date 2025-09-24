@@ -68,7 +68,7 @@ class _GamesPageState extends State<GamesPage> {
               final gameId = app.selectedGame ?? 'بلياردو';
               final room = await ApiRoom.createRoom(
                 gameId: gameId,
-                hostUserId: app.userId!,   // مهم: UUID من الأوث
+                hostUserId: app.userId!,   // UUID من الأوث
                 token: app.token,
               );
               final code = (room['code'] ?? '').toString();
