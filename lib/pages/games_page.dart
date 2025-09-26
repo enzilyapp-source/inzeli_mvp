@@ -12,7 +12,12 @@ class GamesPage extends StatefulWidget {
 }
 
 class _GamesPageState extends State<GamesPage> {
+  final _joinCode = TextEditingController();
+
   void _msg(String m) => ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(m)));
+
+  @override
+  void dispose() { _joinCode.dispose(); super.dispose(); }
 
   @override
   Widget build(BuildContext context) {
@@ -59,28 +64,56 @@ class _GamesPageState extends State<GamesPage> {
           ),
         ),
         const SizedBox(height: 16),
-        FilledButton.tonalIcon(
-          icon: const Icon(Icons.qr_code_2),
-          label: const Text('انزلي'),
-          onPressed: () async {
-            if (!app.isSignedIn) { _msg('سجّلي دخول أول'); return; }
-            try {
-              final gameId = app.selectedGame ?? 'بلياردو';
-              final room = await ApiRoom.createRoom(
-                gameId: gameId,
-                hostUserId: app.userId!,   // UUID من الأوث
-                token: app.token,
-              );
-              final code = (room['code'] ?? '').toString();
-              app.roomCode = code;
-              if (!mounted) return;
-              _msg('تم إنشاء الروم: $code');
-              Navigator.push(context, MaterialPageRoute(builder: (_) => MatchPage(app: app, room: room)));
-            } catch (e) {
-              if (!mounted) return;
-              _msg('Create error: $e');
-            }
-          },
+
+        Card(
+          child: Padding(
+            padding: const EdgeInsets.all(12),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Text('ابدئي اللعب', style: TextStyle(fontWeight: FontWeight.w900, color: onSurface)),
+                const SizedBox(height: 10),
+                FilledButton.icon(
+                  icon: const Icon(Icons.add_box_outlined),
+                  label: const Text('إنشاء روم جديد'),
+                  onPressed: () async {
+                    if (!app.isSignedIn) { _msg('سجّلي دخول أول'); return; }
+                    try {
+                      final gameId = app.selectedGame ?? 'بلياردو';
+                      final room = await ApiRoom.createRoom(gameId: gameId, hostUserId: app.userId!, token: app.token);
+                      app.roomCode = (room['code'] ?? '').toString();
+                      if (!mounted) return;
+                      _msg('تم إنشاء الروم: ${app.roomCode}');
+                      Navigator.push(context, MaterialPageRoute(builder: (_) => MatchPage(app: app, room: room)));
+                    } catch (e) { _msg('Create error: $e'); }
+                  },
+                ),
+                const SizedBox(height: 12),
+                Row(
+                  children: [
+                    Expanded(child: TextField(controller: _joinCode, decoration: const InputDecoration(labelText: 'ادخلي كود الروم', hintText: 'مثال: AB12CD'))),
+                    const SizedBox(width: 8),
+                    FilledButton.icon(
+                      icon: const Icon(Icons.login),
+                      label: const Text('انضمام'),
+                      onPressed: () async {
+                        if (!app.isSignedIn) { _msg('سجّلي دخول أول'); return; }
+                        final code = _joinCode.text.trim();
+                        if (code.isEmpty) { _msg('اكتبي الكود'); return; }
+                        try {
+                          final room = await ApiRoom.joinByCode(code: code, userId: app.userId!, token: app.token);
+                          app.roomCode = code;
+                          if (!mounted) return;
+                          _msg('تم الانضمام ✅');
+                          Navigator.push(context, MaterialPageRoute(builder: (_) => MatchPage(app: app, room: room)));
+                        } catch (e) { _msg('Join error: $e'); }
+                      },
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
         ),
       ],
     );

@@ -82,7 +82,7 @@ class ApiRoom {
       body: jsonEncode({'amount': amount}),
     );
     final m = jsonDecode(res.body) as Map<String, dynamic>;
-    if (res.statusCode >= 400 || m['ok'] != true) throw 'Stake failed: ${res.statusCode} ${res.body}';
+    if (res.statusCode >= 400 || m['ok'] != true) throw 'Set points failed: ${res.statusCode} ${res.body}';
     return m['data'] as Map<String, dynamic>;
   }
 }
