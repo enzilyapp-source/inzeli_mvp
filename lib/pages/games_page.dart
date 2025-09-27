@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../state.dart';
+import '../widgets/room_timer_banner.dart';
 import '../api_room.dart';
 import 'match_page.dart';
 
@@ -71,13 +72,13 @@ class _GamesPageState extends State<GamesPage> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                Text('ابدئي اللعب', style: TextStyle(fontWeight: FontWeight.w900, color: onSurface)),
+                Text('ابدأ اللعب', style: TextStyle(fontWeight: FontWeight.w900, color: onSurface)),
                 const SizedBox(height: 10),
                 FilledButton.icon(
                   icon: const Icon(Icons.add_box_outlined),
                   label: const Text('إنشاء روم جديد'),
                   onPressed: () async {
-                    if (!app.isSignedIn) { _msg('سجّلي دخول أول'); return; }
+                    if (!app.isSignedIn) { _msg('سجّل دخول أول'); return; }
                     try {
                       final gameId = app.selectedGame ?? 'بلياردو';
                       final room = await ApiRoom.createRoom(gameId: gameId, hostUserId: app.userId!, token: app.token);
@@ -91,13 +92,13 @@ class _GamesPageState extends State<GamesPage> {
                 const SizedBox(height: 12),
                 Row(
                   children: [
-                    Expanded(child: TextField(controller: _joinCode, decoration: const InputDecoration(labelText: 'ادخلي كود الروم', hintText: 'مثال: AB12CD'))),
+                    Expanded(child: TextField(controller: _joinCode, decoration: const InputDecoration(labelText: 'ادخل كود الروم', hintText: 'مثال: AB12CD'))),
                     const SizedBox(width: 8),
                     FilledButton.icon(
                       icon: const Icon(Icons.login),
                       label: const Text('انضمام'),
                       onPressed: () async {
-                        if (!app.isSignedIn) { _msg('سجّلي دخول أول'); return; }
+                        if (!app.isSignedIn) { _msg('سجّل دخول أول'); return; }
                         final code = _joinCode.text.trim();
                         if (code.isEmpty) { _msg('اكتبي الكود'); return; }
                         try {

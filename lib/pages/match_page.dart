@@ -7,7 +7,7 @@ import '../api_matches.dart';
 
 class MatchPage extends StatefulWidget {
   final AppState app;
-  final Map<String, dynamic>? room; // { code, gameId, players [{user:{id,displayName,email}, userId,..}], hostUserId, ... }
+  final Map<String, dynamic>? room;
   const MatchPage({super.key, required this.app, this.room});
 
   @override
@@ -17,20 +17,15 @@ class MatchPage extends StatefulWidget {
 class _MatchPageState extends State<MatchPage> {
   final _codeCtrl = TextEditingController();
   List<Map<String, dynamic>> players = [];
-  bool loading = false;
-
-  // إعدادات قبل البدء
-  int _target = 10;
-  int _myPoints = 0;
-
-  // اختيار فائز
   String? _winnerUserId;
 
-  // مؤقّت
   Timer? _ticker;
   int _remaining = 0;
   DateTime? _startedAt;
   int? _timerSec;
+
+  int _target = 10;
+  int _myPoints = 0;
 
   @override
   void initState() {
@@ -49,18 +44,14 @@ class _MatchPageState extends State<MatchPage> {
   }
 
   Future<void> _refresh(String code) async {
-    setState(() => loading = true);
-    try {
-      final room = await ApiRoom.getRoomByCode(code, token: widget.app.token);
-      final p = room['players'];
-      if (p is List) players = p.cast<Map<String, dynamic>>();
-      _timerSec  = (room['timerSec'] as num?)?.toInt();
-      final s    = room['startedAt'] as String?;
-      _startedAt = s != null ? DateTime.tryParse(s) : null;
-      _startTickerIfNeeded();
-    } finally {
-      setState(() => loading = false);
-    }
+    final room = await ApiRoom.getRoomByCode(code, token: widget.app.token);
+    final p = room['players'];
+    if (p is List) players = p.cast<Map<String, dynamic>>();
+    _timerSec  = (room['timerSec'] as num?)?.toInt();
+    final s    = room['startedAt'] as String?;
+    _startedAt = s != null ? DateTime.tryParse(s) : null;
+    _startTickerIfNeeded();
+    setState(() {});
   }
 
   void _startTickerIfNeeded() {
@@ -85,7 +76,6 @@ class _MatchPageState extends State<MatchPage> {
     final game = (widget.room?['gameId'] ?? widget.app.selectedGame ?? 'لعبة').toString();
     final hostId = widget.room?['hostUserId']?.toString();
     final isHost = widget.app.userId != null && hostId == widget.app.userId;
-    final httpsLink = code.isEmpty ? '' : 'https://inzeli.app/join/$code';
     final onSurface = Theme.of(context).colorScheme.onSurface;
 
     return Scaffold(
@@ -94,7 +84,7 @@ class _MatchPageState extends State<MatchPage> {
         padding: const EdgeInsets.all(16),
         children: [
           if (code.isNotEmpty) ...[
-            Center(child: QrImageView(data: httpsLink, size: 220, backgroundColor: Colors.white)),
+            Center(child: QrImageView(data: 'https://inzeli.app/join/$code', size: 220, backgroundColor: Colors.white)),
             const SizedBox(height: 8),
             SelectableText('كود الروم: $code', textAlign: TextAlign.center),
           ],
@@ -108,8 +98,7 @@ class _MatchPageState extends State<MatchPage> {
             const SizedBox(height: 8),
           ],
 
-          // إعدادات قبل البدء + نقاط للعب
-          if (code.isNotEmpty) Card(
+          Card(
             child: Padding(
               padding: const EdgeInsets.all(12),
               child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
@@ -162,13 +151,9 @@ class _MatchPageState extends State<MatchPage> {
 
           const SizedBox(height: 16),
 
-          // اللاعبون (بالأسماء) + اختيار فائز
           Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
             const Text('اللاعبون', style: TextStyle(fontWeight: FontWeight.w900)),
-            Row(children: [
-              if (loading) const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2)),
-              const SizedBox(width: 8), Chip(label: Text('${players.length} لاعب')),
-            ]),
+            Chip(label: Text('${players.length} لاعب')),
           ]),
           const SizedBox(height: 6),
 
@@ -195,7 +180,7 @@ class _MatchPageState extends State<MatchPage> {
             icon: const Icon(Icons.flag),
             label: const Text('حسم النتيجة'),
             onPressed: () async {
-              if (_winnerUserId == null) { _msg('اختاري الفائز أولًا'); return; }
+              if (_winnerUserId == null) { _msg('اختار الفائز أولًا'); return; }
               final losers = players.map((p) => p['userId']?.toString() ?? '')
                   .where((uid) => uid.isNotEmpty && uid != _winnerUserId).toList();
               try {
