@@ -24,6 +24,8 @@ class _MatchPageState extends State<MatchPage> {
   DateTime? _startedAt;
   int? _timerSec;
 
+  bool _locked = false;
+
   int _target = 10;
   int _myPoints = 0;
 
@@ -50,8 +52,31 @@ class _MatchPageState extends State<MatchPage> {
     _timerSec  = (room['timerSec'] as num?)?.toInt();
     final s    = room['startedAt'] as String?;
     _startedAt = s != null ? DateTime.tryParse(s) : null;
-    _startTickerIfNeeded();
+
+    _locked = room['locked'] == true;
+    final rem = (room['remainingSec'] as num?)?.toInt();
+    if (rem != null) {
+      _ticker?.cancel();
+      _startServerCountdown(rem, code);
+    } else {
+      _startTickerIfNeeded();
+    }
     setState(() {});
+  }
+
+  void _startServerCountdown(int initial, String code) {
+    _remaining = initial;
+    _ticker = Timer.periodic(const Duration(seconds: 1), (t) async {
+      if (_remaining <= 1) {
+        t.cancel();
+        _remaining = 0;
+        _locked = false;
+        setState(() {});
+        await _refresh(code);
+      } else {
+        setState(() => _remaining--);
+      }
+    });
   }
 
   void _startTickerIfNeeded() {
@@ -60,7 +85,10 @@ class _MatchPageState extends State<MatchPage> {
     void _tick() {
       final elapsed = DateTime.now().difference(_startedAt!).inSeconds;
       final remain  = _timerSec! - elapsed;
-      setState(() => _remaining = remain.clamp(0, 1 << 30));
+      setState(() {
+        _remaining = remain.clamp(0, 1 << 30);
+        _locked = _remaining > 0;
+      });
       if (_remaining <= 0) _ticker?.cancel();
     }
     _tick();
@@ -90,14 +118,19 @@ class _MatchPageState extends State<MatchPage> {
           ],
 
           const SizedBox(height: 16),
-          if (_timerSec != null && _startedAt != null) ...[
+          if (_timerSec != null && (_startedAt != null || _remaining > 0)) ...[
             Row(mainAxisAlignment: MainAxisAlignment.center, children: [
-              const Icon(Icons.timer_outlined), const SizedBox(width: 6),
+              Icon(_locked ? Icons.lock_clock : Icons.timer_outlined), const SizedBox(width: 6),
               Text(_fmt(_remaining), style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 16)),
             ]),
+            if (_locked) ...[
+              const SizedBox(height: 6),
+              const Center(child: Text('النتائج مقفّلة حتى انتهاء العداد')),
+            ],
             const SizedBox(height: 8),
           ],
 
+          // إعدادات قبل البدء
           Card(
             child: Padding(
               padding: const EdgeInsets.all(12),
@@ -107,28 +140,31 @@ class _MatchPageState extends State<MatchPage> {
                 Row(children: [
                   const Text('الهدف:'), const SizedBox(width: 8),
                   Expanded(child: Slider(value: _target.toDouble(), min: 1, max: 50, divisions: 49, label: '$_target',
-                      onChanged: isHost ? (v) => setState(() => _target = v.toInt()) : null)),
+                      onChanged: (isHost && _startedAt == null) ? (v) => setState(() => _target = v.toInt()) : null)),
                   Text('$_target'),
                 ]),
                 Row(children: [
                   const Text('نقاطي للعب:'), const SizedBox(width: 8),
-                  SizedBox(width: 100, child: TextField(decoration: const InputDecoration(hintText: '0'),
-                      keyboardType: TextInputType.number, onChanged: (v) => _myPoints = int.tryParse(v) ?? 0)),
+                  SizedBox(width: 100, child: TextField(
+                      decoration: const InputDecoration(hintText: '0'),
+                      enabled: _startedAt == null,
+                      keyboardType: TextInputType.number,
+                      onChanged: (v) => _myPoints = int.tryParse(v) ?? 0)),
                   const SizedBox(width: 8),
                   FilledButton(
-                    onPressed: () async {
+                    onPressed: (_startedAt == null) ? () async {
                       if (code.isEmpty) return;
                       try {
                         await ApiRoom.setStake(code: code, amount: _myPoints, token: widget.app.token);
                         _msg('تم تأكيد النقاط');
                         _refresh(code);
                       } catch (e) { _msg('خطأ: $e'); }
-                    },
+                    } : null,
                     child: const Text('تأكيد النقاط'),
                   ),
                   const Spacer(),
                   if (isHost) FilledButton(
-                    onPressed: () async {
+                    onPressed: (_startedAt == null) ? () async {
                       try {
                         final data = await ApiRoom.startRoom(
                           code: code, token: widget.app.token,
@@ -137,17 +173,117 @@ class _MatchPageState extends State<MatchPage> {
                         _timerSec  = (data['timerSec'] as num?)?.toInt();
                         final s    = data['startedAt'] as String?;
                         _startedAt = s != null ? DateTime.tryParse(s) : null;
-                        _startTickerIfNeeded();
+                        _locked    = data['locked'] == true;
+                        final rem  = (data['remainingSec'] as num?)?.toInt();
+                        if (rem != null) {
+                          _ticker?.cancel();
+                          _startServerCountdown(rem, code);
+                        } else {
+                          _startTickerIfNeeded();
+                        }
                         _msg('انزلي — بدأنا!');
                         _refresh(code);
                       } catch (e) { _msg('خطأ البدء: $e'); }
-                    },
+                    } : null,
                     child: const Text('انزلي'),
                   ),
                 ]),
               ]),
             ),
           ),
+
+          const SizedBox(height: 12),
+
+          // الفرق والقادة (للمضيف قبل البدء فقط)
+          if (isHost && _startedAt == null)
+            Card(
+              child: Padding(
+                padding: const EdgeInsets.all(12),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    const Text('الفرق والقادة', style: TextStyle(fontWeight: FontWeight.w900)),
+                    const SizedBox(height: 8),
+
+                    ...players.map((p) {
+                      final uid  = (p['userId'] ?? '').toString();
+                      final user = p['user'] as Map<String, dynamic>?;
+                      final name = user?['displayName'] ?? user?['email'] ?? uid;
+                      final team = (p['team'] ?? 'A').toString();
+                      final leader = (p['isLeader'] ?? false) as bool;
+
+                      return Row(children: [
+                        Expanded(child: Text(name.toString())),
+                        DropdownButton<String>(
+                          value: team,
+                          items: const [
+                            DropdownMenuItem(value: 'A', child: Text('Team A')),
+                            DropdownMenuItem(value: 'B', child: Text('Team B')),
+                          ],
+                          onChanged: (v) async {
+                            if (v == null) return;
+                            await ApiRoom.setPlayerTeam(code: code, playerUserId: uid, team: v, token: widget.app.token);
+                            _msg('تم نقل $name إلى $v');
+                            _refresh(code);
+                          },
+                        ),
+                        if (leader) const Padding(
+                          padding: EdgeInsets.only(left: 8.0),
+                          child: Icon(Icons.star, size: 18),
+                        ),
+                      ]);
+                    }),
+
+                    const Divider(height: 24),
+
+                    const Text('قائد Team A'),
+                    ...players.where((p) => (p['team'] ?? 'A') == 'A').map((p) {
+                      final uid  = (p['userId'] ?? '').toString();
+                      final user = p['user'] as Map<String, dynamic>?;
+                      final name = user?['displayName'] ?? user?['email'] ?? uid;
+                      final grp  = players.firstWhere(
+                            (x) => (x['team'] ?? 'A') == 'A' && (x['isLeader'] ?? false) == true,
+                        orElse: () => <String, dynamic>{},
+                      )['userId'];
+                      return RadioListTile<String>(
+                        title: Text(name.toString()),
+                        value: uid,
+                        groupValue: grp?.toString(),
+                        onChanged: (v) async {
+                          if (v == null) return;
+                          await ApiRoom.setTeamLeader(code: code, team: 'A', leaderUserId: v, token: widget.app.token);
+                          _msg('تم تعيين $name قائد Team A');
+                          _refresh(code);
+                        },
+                      );
+                    }),
+
+                    const SizedBox(height: 12),
+                    const Text('قائد Team B'),
+                    ...players.where((p) => (p['team'] ?? 'A') == 'B').map((p) {
+                      final uid  = (p['userId'] ?? '').toString();
+                      final user = p['user'] as Map<String, dynamic>?;
+                      final name = user?['displayName'] ?? user?['email'] ?? uid;
+                      final grp  = players.firstWhere(
+                            (x) => (x['team'] ?? 'A') == 'B' && (x['isLeader'] ?? false) == true,
+                        orElse: () => <String, dynamic>{},
+                      )['userId'];
+                      return RadioListTile<String>(
+                        title: Text(name.toString()),
+                        value: uid,
+                        groupValue: grp?.toString(),
+                        onChanged: (v) async {
+                          if (v == null) return;
+                          await ApiRoom.setTeamLeader(code: code, team: 'B', leaderUserId: v, token: widget.app.token);
+                          _msg('تم تعيين $name قائد Team B');
+                          _refresh(code);
+                        },
+                      );
+                    }),
+                  ],
+                ),
+              ),
+            ),
 
           const SizedBox(height: 16),
 
@@ -171,7 +307,7 @@ class _MatchPageState extends State<MatchPage> {
               return ChoiceChip(
                 selected: selected,
                 label: Text(name),
-                onSelected: (_) => setState(() => _winnerUserId = uid),
+                onSelected: _locked ? null : (_) => setState(() => _winnerUserId = uid),
               );
             }).toList()),
 
@@ -179,7 +315,7 @@ class _MatchPageState extends State<MatchPage> {
           FilledButton.icon(
             icon: const Icon(Icons.flag),
             label: const Text('حسم النتيجة'),
-            onPressed: () async {
+            onPressed: _locked ? null : () async {
               if (_winnerUserId == null) { _msg('اختار الفائز أولًا'); return; }
               final losers = players.map((p) => p['userId']?.toString() ?? '')
                   .where((uid) => uid.isNotEmpty && uid != _winnerUserId).toList();
@@ -222,3 +358,4 @@ class _MatchPageState extends State<MatchPage> {
     );
   }
 }
+//lib/pages/match_page.dart

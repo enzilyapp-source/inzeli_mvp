@@ -170,4 +170,4 @@ class _StatChip extends StatelessWidget {
       ),
     );
   }
-}
+}//lib/pages/profile_page

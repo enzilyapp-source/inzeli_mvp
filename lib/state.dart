@@ -463,3 +463,4 @@ class LevelInfo {
   final double fill01;
   LevelInfo({required this.name, required this.fill01});
 }
+//state.dart

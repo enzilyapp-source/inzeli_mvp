@@ -55,3 +55,4 @@ Future<ApiResponse<Map<String, dynamic>>> getJson(
   );
   return ApiResponse.fromHttp(res);
 }
+//lib/api_core.dart

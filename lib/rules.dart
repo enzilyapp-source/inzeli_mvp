@@ -199,3 +199,5 @@ const Map<String, GameRule> kGameRules = {
     pointsPerPlayer: true,   // الفايز +1، الخاسر -1
   ),
 };
+
+//lib/rules.dart

@@ -80,3 +80,4 @@ class _RingPainter extends CustomPainter {
   bool shouldRepaint(covariant _RingPainter old) =>
       old.fill01 != fill01 || old.stroke != stroke;
 }
+//widegets/games_rings

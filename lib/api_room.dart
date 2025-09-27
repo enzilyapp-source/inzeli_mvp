@@ -5,7 +5,7 @@ import 'api_base.dart';
 class ApiRoom {
   static Future<Map<String, dynamic>> createRoom({
     required String gameId,
-    required String hostUserId,
+    required String hostUserId, // server uses JWT; param kept for compatibility
     String? token,
   }) async {
     final res = await http.post(
@@ -40,7 +40,7 @@ class ApiRoom {
     );
     final m = jsonDecode(res.body) as Map<String, dynamic>;
     if (res.statusCode >= 400 || m['ok'] != true) throw 'Fetch failed: ${res.statusCode} ${res.body}';
-    return m['data'] as Map<String, dynamic>;
+    return m['data'] as Map<String, dynamic>; // contains locked, remainingSec, players with team/isLeader
   }
 
   static Future<List<Map<String, dynamic>>> getPlayers(String code, {String? token}) async {
@@ -68,7 +68,7 @@ class ApiRoom {
     );
     final m = jsonDecode(res.body) as Map<String, dynamic>;
     if (res.statusCode >= 400 || m['ok'] != true) throw 'Start failed: ${res.statusCode} ${res.body}';
-    return m['data'] as Map<String, dynamic>;
+    return m['data'] as Map<String, dynamic>; // contains locked, remainingSec
   }
 
   static Future<Map<String, dynamic>> setStake({
@@ -85,4 +85,39 @@ class ApiRoom {
     if (res.statusCode >= 400 || m['ok'] != true) throw 'Set points failed: ${res.statusCode} ${res.body}';
     return m['data'] as Map<String, dynamic>;
   }
+
+  // NEW — assign team
+  static Future<Map<String, dynamic>> setPlayerTeam({
+    required String code,
+    required String playerUserId,
+    required String team, // 'A' or 'B'
+    String? token,
+  }) async {
+    final res = await http.post(
+      Uri.parse('$apiBase/rooms/$code/team'),
+      headers: {'Content-Type': 'application/json', if (token != null) 'Authorization': 'Bearer $token'},
+      body: jsonEncode({'playerUserId': playerUserId, 'team': team}),
+    );
+    final m = jsonDecode(res.body) as Map<String, dynamic>;
+    if (res.statusCode >= 400 || m['ok'] != true) throw 'Team set failed: ${res.statusCode} ${res.body}';
+    return m['data'] as Map<String, dynamic>;
+  }
+
+  // NEW — set team leader
+  static Future<Map<String, dynamic>> setTeamLeader({
+    required String code,
+    required String team, // 'A' or 'B'
+    required String leaderUserId,
+    String? token,
+  }) async {
+    final res = await http.post(
+      Uri.parse('$apiBase/rooms/$code/team-leader'),
+      headers: {'Content-Type': 'application/json', if (token != null) 'Authorization': 'Bearer $token'},
+      body: jsonEncode({'team': team, 'leaderUserId': leaderUserId}),
+    );
+    final m = jsonDecode(res.body) as Map<String, dynamic>;
+    if (res.statusCode >= 400 || m['ok'] != true) throw 'Leader set failed: ${res.statusCode} ${res.body}';
+    return m['data'] as Map<String, dynamic>;
+  }
 }
+//lib/api_room.dart
