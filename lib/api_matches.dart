@@ -7,20 +7,23 @@ class ApiMatches {
   /// Create a match result.
   ///
   /// - [roomCode] optional (for rooms with timers / locking)
-  /// - [gameId] the game key (e.g. "بلياردو", "TREX")
+  /// - [gameId] required game key (e.g. "CHESS", "TREX")
   /// - [winners] list of winner userIds
-  /// - [losers]  list of loser userIds
-  /// - [stakeUnits] must be 1, 2 or 3 (will be clamped to 1..3)
-  /// - [token] JWT from sign in (Authorization: Bearer <token>)
+  /// - [losers] list of loser userIds
+  /// - [stakeUnits] 1, 2, or 3 (clamped automatically)
+  /// - [sponsorCode] optional sponsor for sponsor-only matches
+  /// - [token] required JWT
+  ///
+  /// Returns created match as Map<String, dynamic>.
   static Future<Map<String, dynamic>> createMatch({
     String? roomCode,
     required String gameId,
     required List<String> winners,
     required List<String> losers,
     int stakeUnits = 1,
+    String? sponsorCode,
     String? token,
   }) async {
-    // clamp stakeUnits to 1..3 just to be safe client-side
     final int units = stakeUnits.clamp(1, 3);
 
     final uri = Uri.parse('$apiBase/matches');
@@ -30,6 +33,8 @@ class ApiMatches {
       'losers': losers,
       'stakeUnits': units,
       if (roomCode != null && roomCode.isNotEmpty) 'roomCode': roomCode,
+      if (sponsorCode != null && sponsorCode.trim().isNotEmpty)
+        'sponsorCode': sponsorCode.trim(),
     };
 
     final res = await http.post(
@@ -49,7 +54,6 @@ class ApiMatches {
     }
 
     if (res.statusCode >= 400 || m['ok'] != true) {
-      // surface backend error message/code if present
       final msg = (m['message'] ?? 'Match failed').toString();
       final code = (m['code'] ?? '').toString();
       throw code.isNotEmpty ? '$msg ($code)' : msg;
@@ -62,13 +66,18 @@ class ApiMatches {
     return data;
   }
 
-  /// Convenience for 1v1 (duel): you pass winner, loser and units.
+  /// Shortcut for a simple 1v1 duel match.
+  ///
+  /// - winnerId: ID of the winner
+  /// - loserId: ID of the loser
+  /// - sponsorCode: optional; pass for sponsor match
   static Future<Map<String, dynamic>> createDuel({
     String? roomCode,
     required String gameId,
     required String winnerId,
     required String loserId,
     int stakeUnits = 1,
+    String? sponsorCode,
     String? token,
   }) {
     return createMatch(
@@ -77,8 +86,44 @@ class ApiMatches {
       winners: [winnerId],
       losers: [loserId],
       stakeUnits: stakeUnits,
+      sponsorCode: sponsorCode,
       token: token,
     );
   }
+
+  /// Fetch all matches of a given user (optional: by sponsor).
+  static Future<List<Map<String, dynamic>>> listUserMatches({
+    required String userId,
+    String? sponsorCode,
+    String? token,
+  }) async {
+    final params = <String, String>{
+      'userId': userId,
+      if (sponsorCode != null && sponsorCode.isNotEmpty)
+        'sponsorCode': sponsorCode,
+    };
+
+    final uri = Uri.parse('$apiBase/matches/user').replace(queryParameters: params);
+
+    final res = await http.get(
+      uri,
+      headers: {
+        if (token != null && token.isNotEmpty) 'Authorization': 'Bearer $token',
+      },
+    );
+
+    if (res.statusCode >= 400) {
+      throw 'Failed to fetch matches (${res.statusCode})';
+    }
+
+    final m = jsonDecode(res.body);
+    if (m is! Map || m['ok'] != true) {
+      throw 'Failed to fetch matches';
+    }
+
+    final data = m['data'];
+    if (data is! List) return [];
+    return data.cast<Map<String, dynamic>>();
+  }
 }
-//api_matches.dart
+//lib/api_matches.dart

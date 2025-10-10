@@ -132,6 +132,20 @@ class UserProfile {
   }
 }
 
+/// For profile ring (level info)
+class LevelInfo {
+  final String name;
+  final double fill01;
+  LevelInfo({required this.name, required this.fill01});
+}
+
+/// Internal tier helper for wins milestones
+class _Tier {
+  final String name;
+  final int needWins;
+  const _Tier({required this.name, required this.needWins});
+}
+
 /// Global app state
 class AppState extends ChangeNotifier {
   AppState();
@@ -163,8 +177,15 @@ class AppState extends ChangeNotifier {
     'جنجفة': ['كوت', 'بلوت', 'تريكس', 'سبيتة', 'هند'],
     'ألعاب شعبية': ['شطرنج', 'دامه', 'كيرم', 'دومنه', 'طاوله'],
     'رياضة': [
-      'قدم', 'سله', 'طائره', 'بادل', 'بولنج', 'بيبيفوت',
-      'تنس طاولة', 'تنس ارضي', 'بلياردو',
+      'قدم',
+      'سله',
+      'طائره',
+      'بادل',
+      'بولنج',
+      'بيبيفوت',
+      'تنس طاولة',
+      'تنس ارضي',
+      'بلياردو',
     ],
   };
 
@@ -237,8 +258,7 @@ class AppState extends ChangeNotifier {
   }
 
   void setSponsorCode(String? code) {
-    activeSponsorCode =
-    (code?.trim().isEmpty ?? true) ? null : code!.trim();
+    activeSponsorCode = (code?.trim().isEmpty ?? true) ? null : code!.trim();
     me.activeSponsorCode = activeSponsorCode;
     save();
     notifyListeners();
@@ -323,26 +343,52 @@ class AppState extends ChangeNotifier {
     return rows;
   }
 
-  // ===== Level calculation (missing before) =====
+  // ===== Level calculation (wins-based tiers) =====
+  // المراتب حسب مجموع الفوز لكل لعبة:
+  //  <5  : مبتدئ (progress حتى توصل 5)
+  //  >=5 : عليمي
+  //  >=15: يمشي حاله
+  //  >=30: زين بعد
+  //  >=50: فنان
+  //  >=80: فلته
+  static const List<_Tier> _tiers = <_Tier>[
+    _Tier(name: 'عليمي', needWins: 5),
+    _Tier(name: 'يمشي حاله', needWins: 15),
+    _Tier(name: 'زين بعد', needWins: 30),
+    _Tier(name: 'فنان', needWins: 50),
+    _Tier(name: 'فلته', needWins: 80),
+  ];
+
+  /// يرجّع اسم المستوى + نسبة التعبئة داخل المستوى الحالي (0..1)
+  /// يعتمد على عدد الفوز فقط (بدون خسائر).
   LevelInfo levelForGame(String userName, String game) {
     final u = _ensureUser(userName);
-    final w = u.winsByGame[game] ?? 0;
-    final l = u.lossesByGame[game] ?? 0;
-    final effective = (w - (l ~/ 3)).clamp(0, 9999);
-    return _levelFromProgress(effective);
-  }
+    final wins = u.winsByGame[game] ?? 0;
 
-  static LevelInfo _levelFromProgress(int progress) {
-    const step = 15;
-    final tier = progress ~/ step;
-    final inTier = (progress % step) / step;
-    String name;
-    if (tier >= 4) name = 'فلتة';
-    else if (tier == 3) name = 'فنان';
-    else if (tier == 2) name = 'زين';
-    else if (tier == 1) name = 'يمشي حاله';
-    else name = 'عليمي';
-    return LevelInfo(name: name, fill01: inTier);
+    if (wins < _tiers.first.needWins) {
+      final need = _tiers.first.needWins; // 5
+      final fill = (wins / need).clamp(0.0, 1.0);
+      return LevelInfo(name: 'مبتدئ', fill01: fill);
+    }
+
+    for (int i = 0; i < _tiers.length; i++) {
+      final cur = _tiers[i];
+      final next = (i + 1 < _tiers.length) ? _tiers[i + 1] : null;
+
+      if (next == null) {
+        return LevelInfo(name: cur.name, fill01: 1.0); // أعلى مرتبة
+      }
+
+      if (wins < next.needWins) {
+        final prevNeed = cur.needWins;
+        final nextNeed = next.needWins;
+        final fill =
+        ((wins - prevNeed) / (nextNeed - prevNeed)).clamp(0.0, 1.0);
+        return LevelInfo(name: cur.name, fill01: fill);
+      }
+    }
+
+    return LevelInfo(name: _tiers.last.name, fill01: 1.0);
   }
 
   // ===== Monthly reset =====
@@ -386,8 +432,7 @@ class AppState extends ChangeNotifier {
 
   List<TimelineItem> userMatches(String playerName) {
     return timeline
-        .where((t) =>
-    t.winner == playerName || t.losers.contains(playerName))
+        .where((t) => t.winner == playerName || t.losers.contains(playerName))
         .toList();
   }
 
@@ -399,7 +444,8 @@ class AppState extends ChangeNotifier {
       phone = _nz(sp.getString('me.phone'));
       bio50 = _nz(sp.getString('me.bio50'));
       activeSponsorCode = _nz(sp.getString('me.sponsor'));
-      _currentLBMonthKey = sp.getString('lb.month') ?? _monthKey(DateTime.now());
+      _currentLBMonthKey =
+          sp.getString('lb.month') ?? _monthKey(DateTime.now());
 
       final rawUsers = sp.getString('users.json');
       if (rawUsers != null && rawUsers.isNotEmpty) {
@@ -453,14 +499,6 @@ class AppState extends ChangeNotifier {
     await sp.setString('timeline.json', tlJson);
   }
 
-  static String? _nz(String? s) =>
-      (s == null || s.isEmpty) ? null : s;
-}
-
-/// For profile ring (level info)
-class LevelInfo {
-  final String name;
-  final double fill01;
-  LevelInfo({required this.name, required this.fill01});
+  static String? _nz(String? s) => (s == null || s.isEmpty) ? null : s;
 }
 //state.dart

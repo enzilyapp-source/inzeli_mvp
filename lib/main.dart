@@ -4,7 +4,7 @@ import 'pages/games_page.dart';
 import 'pages/leaderboard_page.dart';
 import 'pages/timeline_page.dart';
 import 'pages/profile_page.dart';
-import 'pages/signin_page.dart'; // صفحة التسجيل/الدخول اللي عطيتك
+import 'pages/signin_page.dart'; // صفحة التسجيل/الدخول
 
 void main() => runApp(const InzeliApp());
 
@@ -18,8 +18,8 @@ class InzeliApp extends StatelessWidget {
       theme: ThemeData(
         useMaterial3: true,
         brightness: Brightness.light,
-        colorSchemeSeed: const Color(0xFF3D5AFE), // لون أساسي
-        textTheme: const TextTheme(), // خط النظام (بدون باكدجات)
+        colorSchemeSeed: const Color(0xFF3D5AFE),
+        textTheme: const TextTheme(),
       ),
       darkTheme: ThemeData(
         useMaterial3: true,
@@ -32,24 +32,28 @@ class InzeliApp extends StatelessWidget {
   }
 }
 
-/// يشيك لو عندك توكن محفوظ → يدخل الهوم، وإلا يفتح سيجن إن
+/// يشيّك لو عندك توكن محفوظ → يدخل الهوم، وإلا يفتح سيجن إن
 class AuthGate extends StatefulWidget {
   const AuthGate({super.key});
   @override
   State<AuthGate> createState() => _AuthGateState();
 }
+
 class _AuthGateState extends State<AuthGate> {
   final app = AppState();
   bool loading = true;
+
   @override
   void initState() {
     super.initState();
     _boot();
   }
+
   Future<void> _boot() async {
-    await app.load(); // يحمل SharedPreferences + الأوث (من state.dart  )
+    await app.load(); // يحمل SharedPreferences + الأوث (من state.dart)
     setState(() => loading = false);
   }
+
   @override
   Widget build(BuildContext context) {
     if (loading) {
@@ -65,6 +69,7 @@ class HomePage extends StatefulWidget {
   @override
   State<HomePage> createState() => _HomePageState();
 }
+
 class _HomePageState extends State<HomePage> {
   int index = 0;
   late final pages = <Widget>[
@@ -78,6 +83,7 @@ class _HomePageState extends State<HomePage> {
   Widget build(BuildContext context) {
     final app = widget.app;
     final onSurface = Theme.of(context).colorScheme.onSurface;
+
     return Scaffold(
       appBar: AppBar(
         title: Text('أهلًا ${app.displayName ?? app.name ?? ""}'),
@@ -94,13 +100,13 @@ class _HomePageState extends State<HomePage> {
                     (_) => false,
               );
             },
-          )
+          ),
         ],
       ),
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
-          // بطاقة الحساب — ألوان تعتمد على الثيم (تباين واضح)
+          // بطاقة الحساب
           Card(
             child: ListTile(
               leading: const Icon(Icons.person, size: 28),
@@ -108,8 +114,10 @@ class _HomePageState extends State<HomePage> {
                 app.displayName ?? app.name ?? '—',
                 style: const TextStyle(fontWeight: FontWeight.w900),
               ),
-              subtitle: Text(app.email ?? app.phone ?? '—',
-                  style: TextStyle(color: onSurface.withOpacity(0.7))),
+              subtitle: Text(
+                app.email ?? app.phone ?? '—',
+                style: TextStyle(color: onSurface.withOpacity(0.7)),
+              ),
               trailing: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 crossAxisAlignment: CrossAxisAlignment.end,
@@ -122,7 +130,7 @@ class _HomePageState extends State<HomePage> {
           ),
           const SizedBox(height: 12),
 
-          // الصفحة الحالية (Games/Leaderboard/Timeline/Profile)
+          // الصفحة الحالية (Games / Leaderboard / Timeline / Profile)
           SizedBox(
             height: MediaQuery.of(context).size.height * 0.75,
             child: pages[index],
@@ -133,13 +141,25 @@ class _HomePageState extends State<HomePage> {
         selectedIndex: index,
         onDestinationSelected: (i) => setState(() => index = i),
         destinations: const [
-          NavigationDestination(icon: Icon(Icons.videogame_asset), label: 'الألعاب'),
-          NavigationDestination(icon: Icon(Icons.emoji_events), label: 'المراتب'),
-          NavigationDestination(icon: Icon(Icons.timeline), label: 'التايملاين'),
-          NavigationDestination(icon: Icon(Icons.person), label: 'ملفي'),
+          NavigationDestination(
+            icon: Icon(Icons.videogame_asset),
+            label: 'الألعاب',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.emoji_events),
+            label: 'المراتب',
+          ),
+          // ✅ تغيّر الاسم إلى "شسالفة؟"
+          NavigationDestination(
+            icon: Icon(Icons.timeline),
+            label: 'شسالفة؟',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.person),
+            label: 'ملفي',
+          ),
         ],
       ),
     );
   }
 }
-//lib/main.dart
