@@ -1,15 +1,20 @@
+// lib/main.dart
 import 'package:flutter/material.dart';
 import 'state.dart';
+
+// pages
 import 'pages/games_page.dart';
 import 'pages/leaderboard_page.dart';
 import 'pages/timeline_page.dart';
 import 'pages/profile_page.dart';
-import 'pages/signin_page.dart'; // صفحة التسجيل/الدخول
+import 'pages/signin_page.dart';
+import 'pages/sponsor_page.dart'; // ✅ sponsor tab
 
 void main() => runApp(const InzeliApp());
 
 class InzeliApp extends StatelessWidget {
   const InzeliApp({super.key});
+
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
@@ -50,8 +55,8 @@ class _AuthGateState extends State<AuthGate> {
   }
 
   Future<void> _boot() async {
-    await app.load(); // يحمل SharedPreferences + الأوث (من state.dart)
-    setState(() => loading = false);
+    await app.load(); // يحمل SharedPreferences + الأوث
+    if (mounted) setState(() => loading = false);
   }
 
   @override
@@ -59,6 +64,7 @@ class _AuthGateState extends State<AuthGate> {
     if (loading) {
       return const Scaffold(body: Center(child: CircularProgressIndicator()));
     }
+    // لا نمرر onAuthChange لأن SignInPage لا يعرّفه عندك
     return app.isSignedIn ? HomePage(app: app) : SignInPage(app: app);
   }
 }
@@ -66,23 +72,26 @@ class _AuthGateState extends State<AuthGate> {
 class HomePage extends StatefulWidget {
   final AppState app;
   const HomePage({super.key, required this.app});
+
   @override
   State<HomePage> createState() => _HomePageState();
 }
 
 class _HomePageState extends State<HomePage> {
   int index = 0;
-  late final pages = <Widget>[
-    GamesPage(app: widget.app),
-    LeaderboardPage(app: widget.app),
-    TimelinePage(app: widget.app),
-    ProfilePage(app: widget.app),
-  ];
 
   @override
   Widget build(BuildContext context) {
     final app = widget.app;
     final onSurface = Theme.of(context).colorScheme.onSurface;
+
+    final pages = <Widget>[
+      GamesPage(app: app),
+      LeaderboardPage(app: app),
+      TimelinePage(app: app),
+      ProfilePage(app: app),
+      SponsorPage(app: app), // ✅ NEW tab content
+    ];
 
     return Scaffold(
       appBar: AppBar(
@@ -94,6 +103,7 @@ class _HomePageState extends State<HomePage> {
             onPressed: () async {
               await app.clearAuth();
               if (!mounted) return;
+              // بعد تسجيل الخروج نرجّع لـ AuthGate
               Navigator.pushAndRemoveUntil(
                 context,
                 MaterialPageRoute(builder: (_) => const AuthGate()),
@@ -106,7 +116,6 @@ class _HomePageState extends State<HomePage> {
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
-          // بطاقة الحساب
           Card(
             child: ListTile(
               leading: const Icon(Icons.person, size: 28),
@@ -129,8 +138,6 @@ class _HomePageState extends State<HomePage> {
             ),
           ),
           const SizedBox(height: 12),
-
-          // الصفحة الحالية (Games / Leaderboard / Timeline / Profile)
           SizedBox(
             height: MediaQuery.of(context).size.height * 0.75,
             child: pages[index],
@@ -141,23 +148,11 @@ class _HomePageState extends State<HomePage> {
         selectedIndex: index,
         onDestinationSelected: (i) => setState(() => index = i),
         destinations: const [
-          NavigationDestination(
-            icon: Icon(Icons.videogame_asset),
-            label: 'الألعاب',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.emoji_events),
-            label: 'المراتب',
-          ),
-          // ✅ تغيّر الاسم إلى "شسالفة؟"
-          NavigationDestination(
-            icon: Icon(Icons.timeline),
-            label: 'شسالفة؟',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.person),
-            label: 'ملفي',
-          ),
+          NavigationDestination(icon: Icon(Icons.videogame_asset), label: 'الألعاب'),
+          NavigationDestination(icon: Icon(Icons.emoji_events), label: 'المراتب'),
+          NavigationDestination(icon: Icon(Icons.timeline), label: 'شسالفة؟'),
+          NavigationDestination(icon: Icon(Icons.person), label: 'ملفي'),
+          NavigationDestination(icon: Icon(Icons.card_membership), label: 'سبونسر'), // ✅ NEW
         ],
       ),
     );

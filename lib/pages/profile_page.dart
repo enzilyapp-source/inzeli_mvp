@@ -1,9 +1,10 @@
+// lib/pages/profile_page.dart
+import 'dart:math' as math;
 import 'package:flutter/material.dart';
+
 import '../state.dart';
-import '../widgets/game_ring.dart';
-import '../api_user.dart';
-import '../widgets/pearl_chip.dart';
-import '../widgets/fire_badge.dart';
+import '../widgets/pearl_chip.dart';   // uses: PearlChip(count: ..., selected: ...)
+import '../widgets/streak_flame.dart'; // uses: StreakFlame(streak: ...)
 
 class ProfilePage extends StatefulWidget {
   final AppState app;
@@ -14,329 +15,375 @@ class ProfilePage extends StatefulWidget {
 }
 
 class _ProfilePageState extends State<ProfilePage> {
-  Map<String, dynamic>? _stats;
-  bool _loadingStats = false;
+  // thresholds and labels for “الأنواط”
+  static const List<int> _milestones = [5, 10, 15, 20, 30];
+  static const List<String> _labels = [
+    'عليمي', 'يمشي حاله', 'زين', 'فنان', 'فلتة'
+  ];
 
-  @override
-  void initState() {
-    super.initState();
-    _fetchStats();
-  }
-
-  Future<void> _fetchStats() async {
-    if (widget.app.userId == null) return;
-    setState(() => _loadingStats = true);
-    final s = await getUserStats(widget.app.userId!, token: widget.app.token);
-    setState(() {
-      _stats = s;
-      _loadingStats = false;
-    });
-  }
-
-  // سلسلة انتصارات متتالية (محليًا باستخدام timeline)
-  int _currentWinStreak(AppState app) {
-    final me = app.me.name;
-    int streak = 0;
-    // timeline الأحدث بالأخير عندك؟ نضمن الفرز من الأحدث للأقدم:
-    final items = List.of(app.timeline)..sort((a, b) => b.ts.compareTo(a.ts));
-    for (final t in items) {
-      final iWon = t.winner == me;
-      final iPlayed = iWon || t.losers.contains(me);
-      if (!iPlayed) continue;
-      if (iWon) {
-        streak += 1;
-      } else {
-        break; // انكسرت السلسلة
-      }
-    }
-    return streak;
-    // ملاحظة: لو تبغى تعتمد على الـ backend لاحقًا، نستدعي endpoint لسجل اللاعب.
-  }
+  // local edit buffer for bio
+  String _bioDraft = '';
 
   @override
   Widget build(BuildContext context) {
     final app = widget.app;
-    final me  = app.me;
-    final on  = Theme.of(context).colorScheme.onSurface;
+    final onSurface = Theme.of(context).colorScheme.onSurface;
+    final game = app.selectedGame ?? '—';
+    final meName = app.displayName ?? app.name ?? 'لاعب';
+    final pearls = app.permanentScore ?? 0;
 
-    final headlineName = (app.displayName?.trim().isNotEmpty ?? false)
-        ? app.displayName!
-        : me.name;
+    // level ring uses wins/losses for the currently selected game
+    final lvl = app.levelForGame(meName, game);
 
-    final subLine = (app.email?.trim().isNotEmpty ?? false)
-        ? app.email!
-        : (me.phone ?? '');
-
-    final wins = (_stats?['wins'] as num?)?.toInt() ?? 0;
-    final losses = (_stats?['losses'] as num?)?.toInt() ?? 0;
-    final permScore = app.permanentScore ?? 0;
-    final credits   = app.creditPoints ?? 0;
-    final streak    = _currentWinStreak(app);
-
-    // نسبة تعبئة الحلقة من 0..1 بناءً على permScore (شكل توضيحي)
-    final fill01 = ((permScore % 100) / 100.0).clamp(0.0, 1.0);
-
-    return Directionality(
-      textDirection: TextDirection.rtl,
-      child: ListView(
-        padding: const EdgeInsets.all(16),
-        children: [
-          // بطاقة البروفايل الرئيسية
-          Container(
-            decoration: BoxDecoration(
-              color: Theme.of(context).cardColor,
-              borderRadius: BorderRadius.circular(24),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withOpacity(0.06),
-                  blurRadius: 22,
-                  offset: const Offset(0, 8),
-                ),
-              ],
-              border: Border.all(color: on.withOpacity(0.06)),
-            ),
-            padding: const EdgeInsets.all(18),
-            child: Column(
+    return ListView(
+      padding: const EdgeInsets.all(16),
+      children: [
+        // Header card
+        Card(
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Row(
               children: [
-                // الصورة + حلقة صغيرة أعلى الصورة (إحساس pro)
+                // avatar with partial ring
                 Stack(
                   alignment: Alignment.center,
                   children: [
                     SizedBox(
-                      width: 108, height: 108,
-                      child: TweenAnimationBuilder<double>(
-                        tween: Tween(begin: 0, end: 1),
-                        duration: const Duration(milliseconds: 800),
-                        curve: Curves.easeOutBack,
-                        builder: (_, v, __) {
-                          return Transform.scale(
-                            scale: v,
-                            child: CircleAvatar(
-                              radius: 54,
-                              backgroundColor: on.withOpacity(0.08),
-                              child: const Icon(Icons.person, size: 56),
-                            ),
-                          );
-                        },
+                      width: 84,
+                      height: 84,
+                      child: CustomPaint(
+                        painter: _RingPainter(fill01: lvl.fill01),
                       ),
                     ),
-                    Positioned(
-                      top: 4, left: 4, right: 4,
-                      child: SizedBox(
-                        height: 108,
-                        child: IgnorePointer(
-                          ignoring: true,
-                          child: CustomPaint(
-                            painter: _SmallArcPainter(color: const Color(0xFF4CB6FF)),
-                          ),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 12),
-
-                // الاسم + لؤلؤة بجانبه
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Flexible(
+                    CircleAvatar(
+                      radius: 34,
                       child: Text(
-                        headlineName,
-                        textAlign: TextAlign.center,
-                        style: const TextStyle(
-                            fontWeight: FontWeight.w900, fontSize: 22, height: 1.2),
+                        meName.isNotEmpty ? meName.characters.first : '؟',
+                        style: const TextStyle(fontSize: 22),
                       ),
                     ),
-                    const SizedBox(width: 10),
-                    PearlChip(pearls: permScore),
                   ],
                 ),
-
-                if (subLine.isNotEmpty)
-                  Padding(
-                    padding: const EdgeInsets.only(top: 4),
-                    child: Text(
-                      subLine,
-                      style: TextStyle(color: on.withOpacity(0.6)),
-                    ),
-                  ),
-
-                const SizedBox(height: 12),
-                // شارة النار لو في سلسلة
-                FireBadge(streak: streak),
-
-                const SizedBox(height: 16),
-
-                // كروت أرقام سريعة
-                _QuickStatsGrid(
-                  loading: _loadingStats,
-                  items: [
-                    QuickStat(icon: Icons.emoji_events_rounded, label: 'فوز', value: wins.toString()),
-                    QuickStat(icon: Icons.close_rounded, label: 'خسارة', value: losses.toString()),
-                    QuickStat(icon: Icons.stars_rounded, label: 'النقاط', value: permScore.toString()),
-                    QuickStat(icon: Icons.account_balance_wallet_rounded, label: 'الرصيد', value: credits.toString()),
-                  ],
-                ),
-
-                const SizedBox(height: 14),
-                // حلقة تقدّم كبيرة (تقدر تربطها بمستوى اللاعب)
-                Container(
-                  padding: const EdgeInsets.symmetric(vertical: 10),
+                const SizedBox(width: 12),
+                Expanded(
                   child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      SizedBox(
-                        width: 150,
-                        child: GameRing(size: 150, fill01: fill01),
-                      ),
+                      Text(meName,
+                          style: const TextStyle(
+                              fontWeight: FontWeight.w900, fontSize: 18)),
+                      const SizedBox(height: 4),
+                      Text(app.email ?? app.phone ?? '—',
+                          style: TextStyle(color: onSurface.withOpacity(.7))),
                       const SizedBox(height: 8),
-                      Text('مستوى التقدّم', style: TextStyle(color: on.withOpacity(0.7))),
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 8,
+                        children: [
+                          _StatPill(
+                            icon: Icons.emoji_events_outlined,
+                            label: 'Wins',
+                            value: '${app.winsOf(meName, game)}',
+                          ),
+                          _StatPill(
+                            icon: Icons.cancel_outlined,
+                            label: 'Losses',
+                            value: '${app.lossesOf(meName, game)}',
+                          ),
+                          _StatPill(
+                            icon: Icons.hexagon_outlined,
+                            label: 'Pearls',
+                            value: '$pearls',
+                          ),
+                        ],
+                      ),
                     ],
                   ),
                 ),
               ],
             ),
           ),
+        ),
 
-          const SizedBox(height: 16),
+        const SizedBox(height: 12),
 
-          // إنجازات (واجهة صوريّة الآن)
-          Text('الإنجازات', style: TextStyle(
-              fontWeight: FontWeight.w900, color: on, fontSize: 16)),
-          const SizedBox(height: 10),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: const [
-              _AchievementIcon(icon: Icons.gps_fixed_rounded, label: 'دقّة'),
-              _AchievementIcon(icon: Icons.star_rate_rounded, label: 'تميّز'),
-              _AchievementIcon(icon: Icons.flag_rounded, label: 'سبّاق'),
-              _AchievementIcon(icon: Icons.local_fire_department_rounded, label: 'سلسلة'),
-            ],
+        // Milestones (الأنواط) row using PearlChip
+        Card(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(12, 12, 12, 4),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text('الأنواط',
+                    style:
+                    TextStyle(fontWeight: FontWeight.w900, fontSize: 16)),
+                const SizedBox(height: 8),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: _milestones.map((m) {
+                    final got = app.winsOf(meName, game);
+                    return Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        PearlChip(count: m, selected: got >= m),
+                        const SizedBox(height: 4),
+                        Text(
+                          _labelFor(m),
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: Theme.of(context)
+                                .colorScheme
+                                .onSurface
+                                .withOpacity(.65),
+                          ),
+                        ),
+                      ],
+                    );
+                  }).toList(),
+                ),
+                const SizedBox(height: 8),
+              ],
+            ),
           ),
+        ),
 
-          const SizedBox(height: 18),
-          // نبذة
-          Text('نبذة', style: TextStyle(
-              fontWeight: FontWeight.w900, color: on, fontSize: 16)),
-          const SizedBox(height: 8),
-          Text(
-            app.bio50?.isNotEmpty == true ? app.bio50! : 'أضف نبذة قصيرة (حتى 50 حرفًا) من ملفك.',
-            style: TextStyle(color: on.withOpacity(0.7)),
+        const SizedBox(height: 12),
+
+        // Current game “level” ring + streak
+        Card(
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Row(
+              children: [
+                SizedBox(
+                  width: 110,
+                  height: 110,
+                  child: Stack(
+                    alignment: Alignment.center,
+                    children: [
+                      CustomPaint(painter: _RingPainter(fill01: lvl.fill01)),
+                      Text(
+                        lvl.name,
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(
+                          fontWeight: FontWeight.w900,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('اللعبة الحالية: $game',
+                          style: const TextStyle(fontWeight: FontWeight.w700)),
+                      const SizedBox(height: 6),
+                      Row(
+                        children: [
+                          StreakFlame(streak: _winStreak(meName, game)),
+                          const SizedBox(width: 8),
+                          Text('سلسلة الانتصارات',
+                              style: TextStyle(
+                                  color:
+                                  onSurface.withOpacity(.75))),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+
+        const SizedBox(height: 12),
+
+        // Bio
+        Card(
+          child: ListTile(
+            leading: const Icon(Icons.badge_outlined),
+            title: Text(app.bio50?.isNotEmpty == true ? app.bio50! : '—'),
+            subtitle: const Text('نبذة قصيرة'),
+            trailing: OutlinedButton.icon(
+              icon: const Icon(Icons.edit),
+              label: const Text('تعديل'),
+              onPressed: () => _editBio(context),
+            ),
+          ),
+        ),
+
+        const SizedBox(height: 12),
+
+        // Sponsor code quick set (optional)
+        Card(
+          child: ListTile(
+            leading: const Icon(Icons.card_membership_outlined),
+            title: Text(
+              app.activeSponsorCode == null
+                  ? 'لا يوجد كود راعي'
+                  : 'الكود: ${app.activeSponsorCode}',
+            ),
+            subtitle: const Text('Sponsor'),
+            trailing: OutlinedButton(
+              onPressed: () => _editSponsor(context),
+              child: const Text('اختيار/إزالة'),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  // ---------- helpers ----------
+
+  String _labelFor(int milestone) {
+    final idx = _milestones.indexOf(milestone);
+    return (idx >= 0 && idx < _labels.length) ? _labels[idx] : '';
+    // 5: عليمي, 10: يمشي حاله, 15: زين, 20: فنان, 30: فلتة
+  }
+
+  int _winStreak(String user, String game) {
+    // simple local streak using timeline (latest-first)
+    final list = widget.app
+        .userMatches(user)
+        .where((t) => t.game == game)
+        .toList()
+      ..sort((a, b) => b.ts.compareTo(a.ts));
+
+    int streak = 0;
+    for (final t in list) {
+      if (t.winner == user) {
+        streak += 1;
+      } else {
+        break;
+      }
+    }
+    return streak;
+  }
+
+  Future<void> _editBio(BuildContext context) async {
+    final app = widget.app;
+    _bioDraft = app.bio50 ?? '';
+    await showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('تعديل النبذة'),
+        content: TextField(
+          autofocus: true,
+          maxLength: 50,
+          controller: TextEditingController(text: _bioDraft),
+          onChanged: (v) => _bioDraft = v,
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('إلغاء')),
+          FilledButton(
+            onPressed: () {
+              app.setBio(_bioDraft);
+              Navigator.pop(ctx);
+            },
+            child: const Text('حفظ'),
           ),
         ],
       ),
     );
+    setState(() {});
+  }
+
+  Future<void> _editSponsor(BuildContext context) async {
+    final app = widget.app;
+    String draft = app.activeSponsorCode ?? '';
+    await showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('كود الراعي (اختياري)'),
+        content: TextField(
+          autofocus: true,
+          controller: TextEditingController(text: draft),
+          onChanged: (v) => draft = v,
+          decoration: const InputDecoration(hintText: 'مثال: SP-TEST'),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () {
+              app.setSponsorCode(null);
+              Navigator.pop(ctx);
+            },
+            child: const Text('إزالة'),
+          ),
+          FilledButton(
+            onPressed: () {
+              app.setSponsorCode(draft.trim().isEmpty ? null : draft.trim());
+              Navigator.pop(ctx);
+            },
+            child: const Text('حفظ'),
+          ),
+        ],
+      ),
+    );
+    setState(() {});
   }
 }
 
-class _SmallArcPainter extends CustomPainter {
-  final Color color;
-  _SmallArcPainter({required this.color});
+/* ---------------- painters / small widgets ---------------- */
+
+class _RingPainter extends CustomPainter {
+  final double fill01; // 0..1
+  _RingPainter({required this.fill01});
 
   @override
   void paint(Canvas canvas, Size size) {
-    final p = Paint()
+    final c = Offset(size.width / 2, size.height / 2);
+    final r = math.min(size.width, size.height) / 2 - 3;
+
+    final bg = Paint()
       ..style = PaintingStyle.stroke
       ..strokeWidth = 6
+      ..color = const Color(0xFF90CAF9).withOpacity(.25);
+
+    final fg = Paint()
+      ..style = PaintingStyle.stroke
       ..strokeCap = StrokeCap.round
-      ..color = color;
-    final r = Rect.fromCircle(center: Offset(size.width/2, size.height/2), radius: size.width/2 - 4);
-    // قوس صغير فقط
-    canvas.drawArc(r, -0.5, 1.2, false, p);
+      ..strokeWidth = 8
+      ..color = const Color(0xFF29B6F6);
+
+    canvas.drawCircle(c, r, bg);
+    final sweep = (fill01.clamp(0, 1) as double) * 2 * math.pi;
+    canvas.drawArc(Rect.fromCircle(center: c, radius: r), -math.pi / 2, sweep, false, fg);
   }
 
   @override
-  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
+  bool shouldRepaint(covariant _RingPainter oldDelegate) =>
+      oldDelegate.fill01 != fill01;
 }
 
-class _AchievementIcon extends StatelessWidget {
-  final IconData icon;
-  final String label;
-  const _AchievementIcon({required this.icon, required this.label});
-
-  @override
-  Widget build(BuildContext context) {
-    final on = Theme.of(context).colorScheme.onSurface;
-    return Column(
-      children: [
-        Container(
-          width: 56, height: 56,
-          decoration: BoxDecoration(
-            color: on.withOpacity(0.06),
-            shape: BoxShape.circle,
-          ),
-          child: Icon(icon),
-        ),
-        const SizedBox(height: 6),
-        Text(label, style: TextStyle(color: on.withOpacity(0.7))),
-      ],
-    );
-  }
-}
-
-class QuickStat {
+class _StatPill extends StatelessWidget {
   final IconData icon;
   final String label;
   final String value;
-  QuickStat({required this.icon, required this.label, required this.value});
-}
-
-class _QuickStatsGrid extends StatelessWidget {
-  final List<QuickStat> items;
-  final bool loading;
-  const _QuickStatsGrid({required this.items, required this.loading});
+  const _StatPill({required this.icon, required this.label, required this.value});
 
   @override
   Widget build(BuildContext context) {
-    final on = Theme.of(context).colorScheme.onSurface;
-    return GridView.builder(
-      shrinkWrap: true,
-      physics: const NeverScrollableScrollPhysics(),
-      itemCount: items.length,
-      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-        crossAxisCount: 2,
-        mainAxisExtent: 76,
-        crossAxisSpacing: 10,
-        mainAxisSpacing: 10,
+    final cs = Theme.of(context).colorScheme;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+      decoration: BoxDecoration(
+        color: cs.surfaceVariant.withOpacity(.35),
+        borderRadius: BorderRadius.circular(12),
       ),
-      itemBuilder: (_, i) {
-        final it = items[i];
-        return Container(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-          decoration: BoxDecoration(
-            color: on.withOpacity(0.045),
-            borderRadius: BorderRadius.circular(18),
-            border: Border.all(color: on.withOpacity(0.08)),
-          ),
-          child: loading
-              ? const Center(child: SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2)))
-              : Row(
-            children: [
-              Container(
-                width: 42, height: 42,
-                decoration: BoxDecoration(
-                  color: on.withOpacity(0.08),
-                  shape: BoxShape.circle,
-                ),
-                child: Icon(it.icon),
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Text(it.value, style: const TextStyle(
-                        fontWeight: FontWeight.w900, fontSize: 18, height: 1.0)),
-                    const SizedBox(height: 2),
-                    Text(it.label, style: TextStyle(color: on.withOpacity(0.7))),
-                  ],
-                ),
-              ),
-            ],
-          ),
-        );
-      },
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 18),
+          const SizedBox(width: 6),
+          Text(value, style: const TextStyle(fontWeight: FontWeight.w900)),
+          const SizedBox(width: 6),
+          Text(label, style: TextStyle(color: cs.onSurface.withOpacity(.7))),
+        ],
+      ),
     );
   }
 }
