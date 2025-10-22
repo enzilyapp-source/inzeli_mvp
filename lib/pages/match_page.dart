@@ -1,3 +1,4 @@
+// lib/pages/match_page.dart
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:qr_flutter/qr_flutter.dart';
@@ -8,7 +9,17 @@ import '../api_matches.dart';
 class MatchPage extends StatefulWidget {
   final AppState app;
   final Map<String, dynamic>? room;
-  const MatchPage({super.key, required this.app, this.room});
+
+  /// OPTIONAL: when set, match results will transfer pearls
+  /// inside the SponsorGameWallet for this sponsor+game.
+  final String? sponsorCode;
+
+  const MatchPage({
+    super.key,
+    required this.app,
+    this.room,
+    this.sponsorCode,
+  });
 
   @override
   State<MatchPage> createState() => _MatchPageState();
@@ -19,10 +30,10 @@ class _MatchPageState extends State<MatchPage> {
 
   // Room snapshot
   List<Map<String, dynamic>> players = [];
-  Map<String, int> _pearlsByUser = {};        // uid -> permanentScore (pearls)
-  Map<String, String?> _teamOf = {};          // uid -> 'A' | 'B' | null
-  Map<String, bool> _isLeader = {};           // uid -> true/false
-  Map<String, dynamic>? _teamQuorum;          // {A:{required,available,quorumMet}, B:{...}}
+  Map<String, int> _pearlsByUser = {}; // uid -> permanentScore (pearls)
+  Map<String, String?> _teamOf = {}; // uid -> 'A' | 'B' | null
+  Map<String, bool> _isLeader = {}; // uid -> true/false
+  Map<String, dynamic>? _teamQuorum; // {A:{required,available,quorumMet}, B:{...}}
 
   // Winner selection
   String? _winnerUserId;
@@ -32,9 +43,6 @@ class _MatchPageState extends State<MatchPage> {
   int _remaining = 0;
   DateTime? _startedAt;
   int? _timerSec;
-
-  // Per-round stake units 1/2/3
-  int _units = 1;
 
   @override
   void initState() {
@@ -76,6 +84,7 @@ class _MatchPageState extends State<MatchPage> {
       setState(() => _remaining = remain.clamp(0, 1 << 30));
       if (_remaining <= 0) _ticker?.cancel();
     }
+
     _tick();
     _ticker = Timer.periodic(const Duration(seconds: 1), (_) => _tick());
   }
@@ -127,14 +136,27 @@ class _MatchPageState extends State<MatchPage> {
     final game =
     (widget.room?['gameId'] ?? widget.app.selectedGame ?? 'لعبة')
         .toString();
+    final sponsorCode = widget.sponsorCode;
     final hostId = widget.room?['hostUserId']?.toString();
     final isHost =
         widget.app.userId != null && hostId == widget.app.userId;
     final onSurface = Theme.of(context).colorScheme.onSurface;
 
     return Scaffold(
-      appBar:
-      AppBar(title: Text('مباراة $game — كود: ${code.isEmpty ? "—" : code}')),
+      appBar: AppBar(
+        title: Text('مباراة $game — كود: ${code.isEmpty ? "—" : code}'),
+        actions: [
+          if (sponsorCode != null && sponsorCode.isNotEmpty)
+            Padding(
+              padding: const EdgeInsetsDirectional.only(end: 8),
+              child: Center(
+                child: Chip(
+                  label: Text('Sponsor: $sponsorCode'),
+                ),
+              ),
+            ),
+        ],
+      ),
       body: RefreshIndicator(
         onRefresh: () async {
           if (code.isNotEmpty) await _refresh(code);
@@ -175,82 +197,42 @@ class _MatchPageState extends State<MatchPage> {
               ]),
               const SizedBox(height: 8),
             ],
-
-            // Round stake units
-            Card(
-              child: Padding(
-                padding: const EdgeInsets.all(12),
-                child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      Text('اختَر قيمة الجولة',
-                          style: TextStyle(
-                              fontWeight: FontWeight.w900, color: onSurface)),
-                      const SizedBox(height: 8),
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [1, 2, 3].map((n) {
-                          final sel = _units == n;
-                          return Padding(
-                            padding: const EdgeInsets.symmetric(horizontal: 6),
-                            child: ChoiceChip(
-                              selected: sel,
-                              label: Text('$n',
-                                  style: const TextStyle(
-                                      fontWeight: FontWeight.bold)),
-                              onSelected: (_) =>
-                                  setState(() => _units = n),
-                            ),
-                          );
-                        }).toList(),
-                      ),
-                      const SizedBox(height: 8),
-                      Text('الجولة الحالية = $_units نقطة',
-                          textAlign: TextAlign.center),
-                      if (_locked) ...[
-                        const SizedBox(height: 6),
-                        const Text('مقفلة حتى ينتهي العداد',
-                            textAlign: TextAlign.center,
-                            style: TextStyle(color: Colors.red)),
-                      ],
-                      if (isHost) ...[
-                        const SizedBox(height: 10),
-                        FilledButton(
-                          onPressed: () async {
-                            if (code.isEmpty) return;
-                            try {
-                              final data = await ApiRoom.startRoom(
-                                code: code,
-                                token: widget.app.token,
-                                targetWinPoints: null,
-                                allowZeroCredit: true,
-                                timerSec: 600,
-                              );
-                              _timerSec = (data['timerSec'] as num?)?.toInt();
-                              final s = data['startedAt'] as String?;
-                              _startedAt =
-                              s != null ? DateTime.tryParse(s) : null;
-                              _startTickerIfNeeded();
-                              _msg('بدأت الجولة ⏱️');
-                              _refresh(code);
-                            } catch (e) {
-                              _msg('خطأ البدء: $e');
-                            }
-                          },
-                          child: const Text('بدء عدّاد'),
-                        ),
-                      ],
-                    ]),
+            if (isHost) ...[
+              Align(
+                alignment: Alignment.center,
+                child: FilledButton.icon(
+                  icon: const Icon(Icons.play_circle_outline),
+                  label: const Text('بدء عدّاد (10 دقائق)'),
+                  onPressed: () async {
+                    if (code.isEmpty) return;
+                    try {
+                      final data = await ApiRoom.startRoom(
+                        code: code,
+                        token: widget.app.token,
+                        targetWinPoints: null,
+                        allowZeroCredit: true,
+                        timerSec: 600,
+                      );
+                      _timerSec = (data['timerSec'] as num?)?.toInt();
+                      final s = data['startedAt'] as String?;
+                      _startedAt = s != null ? DateTime.tryParse(s) : null;
+                      _startTickerIfNeeded();
+                      _msg('بدأت الجولة ⏱️');
+                      _refresh(code);
+                    } catch (e) {
+                      _msg('خطأ البدء: $e');
+                    }
+                  },
+                ),
               ),
-            ),
-
-            // Team quorum snapshot
-            if (_teamQuorum != null) ...[
-              const SizedBox(height: 10),
-              _TeamQuorumCard(teamQuorum: _teamQuorum!),
+              const SizedBox(height: 12),
             ],
 
-            const SizedBox(height: 16),
+            // Team quorum snapshot (if backend sends it)
+            if (_teamQuorum != null) ...[
+              _TeamQuorumCard(teamQuorum: _teamQuorum!),
+              const SizedBox(height: 16),
+            ],
 
             // Host-only: assign teams
             if (isHost) ...[
@@ -264,7 +246,6 @@ class _MatchPageState extends State<MatchPage> {
                 onChanged: () => _refresh(code),
               ),
               const SizedBox(height: 12),
-
               _SetLeaderCard(
                 app: widget.app,
                 code: code,
@@ -278,12 +259,13 @@ class _MatchPageState extends State<MatchPage> {
 
             // Players list & winner selection
             Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  const Text('اللاعبون',
-                      style: TextStyle(fontWeight: FontWeight.w900)),
-                  Chip(label: Text('${players.length} لاعب')),
-                ]),
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                const Text('اللاعبون',
+                    style: TextStyle(fontWeight: FontWeight.w900)),
+                Chip(label: Text('${players.length} لاعب')),
+              ],
+            ),
             const SizedBox(height: 6),
 
             if (players.isEmpty)
@@ -316,8 +298,7 @@ class _MatchPageState extends State<MatchPage> {
                   return ChoiceChip(
                     selected: selected,
                     label: Text(labelText),
-                    onSelected: (_) =>
-                        setState(() => _winnerUserId = uid),
+                    onSelected: (_) => setState(() => _winnerUserId = uid),
                   );
                 }).toList(),
               ),
@@ -325,9 +306,7 @@ class _MatchPageState extends State<MatchPage> {
             const SizedBox(height: 12),
             FilledButton.icon(
               icon: const Icon(Icons.flag),
-              label: Text(_locked
-                  ? 'مقفلة حتى ينتهي العداد'
-                  : 'حسم النتيجة (+$_units/-$_units)'),
+              label: const Text('حسم النتيجة (نقل لؤلؤة واحدة)'),
               onPressed: _locked
                   ? null
                   : () async {
@@ -347,12 +326,18 @@ class _MatchPageState extends State<MatchPage> {
                     gameId: game,
                     winners: [_winnerUserId!],
                     losers: losers,
-                    stakeUnits: _units,
+                    stakeUnits: 1, // backend ignores and forces 1
                     token: widget.app.token,
+                    // Record into SponsorGameWallet when sponsor is active
+                    sponsorCode: sponsorCode,
                   );
-                  _msg('تم تسجيل الجولة ✅ (+$_units للفائز / -$_units للخاسر)');
+                  _msg('تم النقل: كل خاسر -1 لؤلؤة، توزيعها على الفائز');
                   setState(() => _winnerUserId = null);
                   if (codeSafe.isNotEmpty) _refresh(codeSafe);
+
+                  // Optional: return to previous screen (e.g., sponsor page) so wallet refreshes
+                  await Future.delayed(const Duration(milliseconds: 400));
+                  if (mounted) Navigator.pop(context);
                 } catch (e) {
                   _msg(e.toString());
                 }
@@ -364,11 +349,12 @@ class _MatchPageState extends State<MatchPage> {
             const SizedBox(height: 6),
             Row(children: [
               Expanded(
-                  child: TextField(
-                    controller: _codeCtrl,
-                    decoration:
-                    const InputDecoration(labelText: 'اكتب كود الروم'),
-                  )),
+                child: TextField(
+                  controller: _codeCtrl,
+                  decoration:
+                  const InputDecoration(labelText: 'اكتب كود الروم'),
+                ),
+              ),
               const SizedBox(width: 8),
               FilledButton(
                 onPressed: () async {
@@ -384,10 +370,11 @@ class _MatchPageState extends State<MatchPage> {
                     return;
                   }
                   try {
+                    // ✅ no userId param anymore
                     await ApiRoom.joinByCode(
-                        code: inputCode,
-                        userId: widget.app.userId!,
-                        token: widget.app.token);
+                      code: inputCode,
+                      token: widget.app.token,
+                    );
                     _msg('Joined ✅');
                     _refresh(inputCode);
                   } catch (e) {
@@ -505,12 +492,6 @@ class _AssignTeamsCard extends StatelessWidget {
                       final value = set.first;
                       try {
                         if (value == 'NONE') {
-                          // set to no team? we’ll map to A/B null by setting neither:
-                          // simple approach: set to A then immediately undo? Better:
-                          // provide backend with 'A'|'B' only; to clear, assign B then A?
-                          // Simpler UX: keep only A/B; NONE just shows not assigned.
-                          // We’ll treat NONE as "A" toggled off -> send team A then ask user to move.
-                          // If you want true unassign, add an endpoint to clear team.
                           ScaffoldMessenger.of(context).showSnackBar(
                             const SnackBar(
                               content: Text('حالياً يمكن التعيين إلى A أو B فقط'),

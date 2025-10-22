@@ -10,3 +10,4 @@ void netLog(String label, Object data) {
     print('[$label] $part');
   }
 }
+//lib/net_log.dart

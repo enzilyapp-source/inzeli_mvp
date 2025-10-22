@@ -34,9 +34,9 @@ class _SponsorPageState extends State<SponsorPage> {
   void _openSponsor(String code) {
     setState(() {
       _openSponsorCode = code;
-      _sponsorDetailFuture = ApiSponsors.getSponsor(code);
+      _sponsorDetailFuture = ApiSponsors.getSponsorDetail(code: code, token: widget.app.token);
       _walletsFuture = (widget.app.token != null)
-          ? ApiSponsors.myWallets(code, widget.app.token!)
+          ? ApiSponsors.getMyWallets(sponsorCode: code, token: widget.app.token!)
           : Future.value(<Map<String, dynamic>>[]);
     });
   }
@@ -48,10 +48,10 @@ class _SponsorPageState extends State<SponsorPage> {
       return;
     }
     try {
-      await ApiSponsors.joinSponsor(_openSponsorCode!, widget.app.token!);
+      await ApiSponsors.joinSponsor(sponsorCode: _openSponsorCode!, token: widget.app.token!);
       _msg('تم تفعيل السبونسر ✅');
       setState(() {
-        _walletsFuture = ApiSponsors.myWallets(_openSponsorCode!, widget.app.token!);
+        _walletsFuture = ApiSponsors.getMyWallets(sponsorCode: _openSponsorCode!, token: widget.app.token!);
       });
     } catch (e) {
       _msg(e.toString());
@@ -148,11 +148,11 @@ class _SponsorPageState extends State<SponsorPage> {
                                 return '...';
                               }
                               if (snap.hasError || snap.data == null) {
-                                return _openSponsorCode!;
+                                return _openSponsorCode ?? '—';
                               }
-                              return (snap.data!['name'] ??
-                                  _openSponsorCode!)
-                                  .toString();
+                              // data from /sponsors/:code returns { sponsor, games }
+                              final s = snap.data!['sponsor'] as Map<String, dynamic>?;
+                              return (s?['name'] ?? _openSponsorCode ?? '—').toString();
                             }();
                             return Text(
                               name,
@@ -218,9 +218,13 @@ class _SponsorPageState extends State<SponsorPage> {
                         const Divider(height: 0),
                         itemBuilder: (_, i) {
                           final g = games[i];
-                          final gameId = (g['gameId'] ?? '').toString();
+                          final gameId = (g['gameId'] ??
+                              (g['game'] as Map?)?['id'] ??
+                              '')
+                              .toString();
                           final gameName =
-                          (g['gameName'] ?? gameId).toString();
+                          ((g['game'] as Map?)?['name'] ?? gameId)
+                              .toString();
                           final prize =
                           (g['prizeAmount'] ?? 0).toString();
 
@@ -236,14 +240,15 @@ class _SponsorPageState extends State<SponsorPage> {
                             trailing: const Icon(Icons.chevron_left),
                             onTap: () {
                               // 👉 Open the per-game sponsor screen
+                              final code = _openSponsorCode ?? '';
+                              if (code.isEmpty) return;
                               Navigator.push(
                                 context,
                                 MaterialPageRoute(
                                   builder: (_) => SponsorGameScreen(
                                     app: widget.app,
-                                    sponsorCode: _openSponsorCode!,
-                                    gameId: gameId,
-                                    gameName: gameName,
+                                    sponsorCode: code,       // ✅ non-null String
+                                    initialGameId: gameId,
                                   ),
                                 ),
                               );
@@ -288,7 +293,7 @@ class _SponsorPageState extends State<SponsorPage> {
                           itemBuilder: (_, i) {
                             final it = w[i];
                             final gameId =
-                            (it['gameId'] ?? '-').toString();
+                            (it['gameId'] ?? (it['game'] as Map?)?['id'] ?? '-').toString();
                             final pearls =
                             (it['pearls'] ?? 0).toString();
                             return Container(
