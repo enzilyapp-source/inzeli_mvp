@@ -34,3 +34,4 @@ class FireBadge extends StatelessWidget {
     );
   }
 }
+//lib/widgets/fire_badge.dart

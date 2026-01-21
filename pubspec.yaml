@@ -10,11 +10,11 @@ dependencies:
     sdk: flutter
   shared_preferences: ^2.3.2
   qr_flutter: ^4.1.0
+  mobile_scanner: ^4.0.1
   app_links: ^6.1.2
   http: ^1.2.0
   audioplayers: ^6.5.1
   win32: ^5.0.0
-
 
 dev_dependencies:
   flutter_test:
@@ -23,5 +23,20 @@ dev_dependencies:
 
 flutter:
   uses-material-design: true
-supabase_flutter:
-  path: <your-path-to-the-local-supabase-flutter-repo>/packages/supabase_flutter
+
+  assets:
+    - lib/assets/logo.png
+    - lib/assets/enzeli_logo.png
+    - lib/assets/pearl.png
+    - lib/assets/games_cards.png
+    - lib/assets/games_popular.png
+    - lib/assets/games_sports.png
+
+  fonts:
+    - family: Tajawal
+      fonts:
+        - asset: lib/assets/Tajawal/Tajawal-Regular.ttf
+        - asset: lib/assets/Tajawal/Tajawal-Medium.ttf
+          weight: 500
+        - asset: lib/assets/Tajawal/Tajawal-Bold.ttf
+          weight: 700

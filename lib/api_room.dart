@@ -1,225 +1,195 @@
+// lib/api_room.dart
 import 'dart:convert';
+import 'dart:async';
 import 'package:http/http.dart' as http;
 import 'api_base.dart';
 
 class ApiRoom {
-  /// Create a room.
-  /// Works with backends that rely on JWT (token) OR require explicit host id.
+  static const Duration _timeout = Duration(seconds: 20);
+
+  static Map<String, String> _headers({String? token}) => {
+    'Content-Type': 'application/json',
+    if (token != null && token.isNotEmpty) 'Authorization': 'Bearer $token',
+  };
+
+  static Map<String, dynamic> _decodeJson(http.Response res) {
+    try {
+      final m = jsonDecode(res.body);
+      if (m is Map<String, dynamic>) return m;
+      throw Exception('Invalid JSON shape');
+    } catch (e) {
+      throw Exception('Invalid JSON response: $e');
+    }
+  }
+
+  static Never _throwApiErr(
+      Map<String, dynamic>? m,
+      http.Response res,
+      String fallback,
+      ) {
+    final msg = (m != null && m['message'] is String)
+        ? m['message'] as String
+        : fallback;
+    throw Exception('$msg (HTTP ${res.statusCode})');
+  }
+
+  static Map<String, dynamic> _dataOrThrow(
+      http.Response res, {
+        String fallback = 'Request failed',
+      }) {
+    final m = _decodeJson(res);
+    if (res.statusCode >= 400 || m['ok'] != true) {
+      _throwApiErr(m, res, fallback);
+    }
+    final data = m['data'];
+    if (data is Map<String, dynamic>) return data;
+    return {'data': data};
+  }
+
+  /// إنشاء روم (عادي أو مع سبونسر)
   static Future<Map<String, dynamic>> createRoom({
     required String gameId,
-    String? hostUserId,
-    String? token,
+    String? sponsorCode,
+    required String? token,
   }) async {
-    // safer JSON body
-    final body = jsonEncode({
+    final body = <String, dynamic>{
       'gameId': gameId,
-      if (hostUserId != null && hostUserId.isNotEmpty) 'hostId': hostUserId,
-    });
+      if (sponsorCode != null && sponsorCode.trim().isNotEmpty)
+        'sponsorCode': sponsorCode.trim(),
+    };
 
-    final res = await http.post(
+    final res = await http
+        .post(
       Uri.parse('$apiBase/rooms'),
-      headers: {
-        'Content-Type': 'application/json',
-        if (token != null && token.isNotEmpty) 'Authorization': 'Bearer $token',
-      },
-      body: body,
-    );
-
-    // 🪲 print debug info to see what backend says
-    print('🔍 CreateRoom status: ${res.statusCode}');
-    print('🔍 Body sent: $body');
-    print('🔍 Response: ${res.body}');
-
-    Map<String, dynamic> m = {};
-    try {
-      m = jsonDecode(res.body) as Map<String, dynamic>;
-    } catch (_) {
-      throw 'Create failed (${res.statusCode}): invalid JSON response ${res.body}';
-    }
-
-    if (res.statusCode >= 400 || m['ok'] != true) {
-      final msg = (m['error'] ?? m['message'] ?? res.body).toString();
-      throw 'Create failed (${res.statusCode}): $msg';
-    }
-
-    return (m['data'] ?? const {}) as Map<String, dynamic>;
-  }
-
-  /// Join a room by code.
-  /// Works with backends that rely on JWT or expect explicit userId.
-  static Future<Map<String, dynamic>> joinByCode({
-    required String code,
-    String? userId, // optional
-    String? token,
-  }) async {
-    final body = <String, dynamic>{'code': code};
-    if (userId != null && userId.isNotEmpty) {
-      body['userId'] = userId;
-    }
-
-    final res = await http.post(
-      Uri.parse('$apiBase/rooms/join'),
-      headers: {
-        'Content-Type': 'application/json',
-        if (token != null && token.isNotEmpty) 'Authorization': 'Bearer $token',
-      },
+      headers: _headers(token: token),
       body: jsonEncode(body),
-    );
+    )
+        .timeout(_timeout);
 
-    Map<String, dynamic> m;
-    try {
-      m = jsonDecode(res.body) as Map<String, dynamic>;
-    } catch (_) {
-      throw 'Join failed: ${res.statusCode} ${res.body}';
-    }
-    if (res.statusCode >= 400 || m['ok'] != true) {
-      throw 'Join failed: ${res.statusCode} ${res.body}';
-    }
-    return (m['data'] ?? const {}) as Map<String, dynamic>;
+    return _dataOrThrow(res, fallback: 'Failed to create room');
   }
 
+  /// الانضمام لروم بالكود (userId من التوكن)
+  static Future<void> joinByCode({
+    required String code,
+    required String? token,
+  }) async {
+    final res = await http
+        .post(
+      Uri.parse('$apiBase/rooms/join'),
+      headers: _headers(token: token),
+      body: jsonEncode({'code': code}),
+    )
+        .timeout(_timeout);
+
+    final m = _decodeJson(res);
+    if (res.statusCode >= 400 || m['ok'] != true) {
+      _throwApiErr(m, res, 'Failed to join room');
+    }
+  }
+
+  /// جلب روم بالكود
   static Future<Map<String, dynamic>> getRoomByCode(
       String code, {
         String? token,
       }) async {
-    final res = await http.get(
+    final res = await http
+        .get(
       Uri.parse('$apiBase/rooms/$code'),
-      headers: {
-        if (token != null && token.isNotEmpty) 'Authorization': 'Bearer $token',
-      },
-    );
+      headers: _headers(token: token),
+    )
+        .timeout(_timeout);
 
-    Map<String, dynamic> m;
-    try {
-      m = jsonDecode(res.body) as Map<String, dynamic>;
-    } catch (_) {
-      throw 'Fetch failed: ${res.statusCode} ${res.body}';
-    }
-    if (res.statusCode >= 400 || m['ok'] != true) {
-      throw 'Fetch failed: ${res.statusCode} ${res.body}';
-    }
-    return (m['data'] ?? const {}) as Map<String, dynamic>;
+    return _dataOrThrow(res, fallback: 'Failed to fetch room');
   }
 
-  static Future<List<Map<String, dynamic>>> getPlayers(
-      String code, {
-        String? token,
-      }) async {
-    final room = await getRoomByCode(code, token: token);
-    final players = room['players'];
-    if (players is! List) return <Map<String, dynamic>>[];
-    return players.cast<Map<String, dynamic>>();
-  }
-
+  /// بدء الروم (المضيف فقط)
   static Future<Map<String, dynamic>> startRoom({
     required String code,
-    String? token,
+    required String? token,
+    int? timerSec,
     int? targetWinPoints,
     bool? allowZeroCredit,
-    int? timerSec,
   }) async {
-    final res = await http.post(
-      Uri.parse('$apiBase/rooms/$code/start'),
-      headers: {
-        'Content-Type': 'application/json',
-        if (token != null && token.isNotEmpty) 'Authorization': 'Bearer $token',
-      },
-      body: jsonEncode({
-        if (targetWinPoints != null) 'targetWinPoints': targetWinPoints,
-        if (allowZeroCredit != null) 'allowZeroCredit': allowZeroCredit,
-        if (timerSec != null) 'timerSec': timerSec,
-      }),
-    );
+    final body = <String, dynamic>{
+      if (targetWinPoints != null) 'targetWinPoints': targetWinPoints,
+      if (allowZeroCredit != null) 'allowZeroCredit': allowZeroCredit,
+      if (timerSec != null) 'timerSec': timerSec,
+    };
 
-    Map<String, dynamic> m;
-    try {
-      m = jsonDecode(res.body) as Map<String, dynamic>;
-    } catch (_) {
-      throw 'Start failed: ${res.statusCode} ${res.body}';
-    }
-    if (res.statusCode >= 400 || m['ok'] != true) {
-      throw 'Start failed: ${res.statusCode} ${res.body}';
-    }
-    return (m['data'] ?? const {}) as Map<String, dynamic>;
+    final res = await http
+        .post(
+      Uri.parse('$apiBase/rooms/$code/start'),
+      headers: _headers(token: token),
+      body: jsonEncode(body),
+    )
+        .timeout(_timeout);
+
+    return _dataOrThrow(res, fallback: 'Failed to start room');
   }
 
+  /// تعديل نقاط الرهان/اللعب قبل البدء
   static Future<Map<String, dynamic>> setStake({
     required String code,
     required int amount,
-    String? token,
+    required String? token,
   }) async {
-    final res = await http.post(
+    final res = await http
+        .post(
       Uri.parse('$apiBase/rooms/$code/stake'),
-      headers: {
-        'Content-Type': 'application/json',
-        if (token != null && token.isNotEmpty) 'Authorization': 'Bearer $token',
-      },
+      headers: _headers(token: token),
       body: jsonEncode({'amount': amount}),
-    );
+    )
+        .timeout(_timeout);
 
-    Map<String, dynamic> m;
-    try {
-      m = jsonDecode(res.body) as Map<String, dynamic>;
-    } catch (_) {
-      throw 'Set points failed: ${res.statusCode} ${res.body}';
-    }
-    if (res.statusCode >= 400 || m['ok'] != true) {
-      throw 'Set points failed: ${res.statusCode} ${res.body}';
-    }
-    return (m['data'] ?? const {}) as Map<String, dynamic>;
+    return _dataOrThrow(res, fallback: 'Failed to set stake');
   }
 
-  static Future<Map<String, dynamic>> setPlayerTeam({
+  /// تعيين فريق اللاعب (لو الباكند يدعم /rooms/:code/team)
+  static Future<void> setPlayerTeam({
     required String code,
     required String playerUserId,
-    required String team, // 'A' or 'B'
-    String? token,
+    required String team, // 'A' أو 'B'
+    required String? token,
   }) async {
-    final res = await http.post(
+    final res = await http
+        .post(
       Uri.parse('$apiBase/rooms/$code/team'),
-      headers: {
-        'Content-Type': 'application/json',
-        if (token != null && token.isNotEmpty) 'Authorization': 'Bearer $token',
-      },
-      body: jsonEncode({'playerUserId': playerUserId, 'team': team}),
-    );
+      headers: _headers(token: token),
+      body: jsonEncode({
+        'playerUserId': playerUserId,
+        'team': team,
+      }),
+    )
+        .timeout(_timeout);
 
-    Map<String, dynamic> m;
-    try {
-      m = jsonDecode(res.body) as Map<String, dynamic>;
-    } catch (_) {
-      throw 'Team set failed: ${res.statusCode} ${res.body}';
-    }
+    final m = _decodeJson(res);
     if (res.statusCode >= 400 || m['ok'] != true) {
-      throw 'Team set failed: ${res.statusCode} ${res.body}';
+      _throwApiErr(m, res, 'Failed to set team');
     }
-    return (m['data'] ?? const {}) as Map<String, dynamic>;
   }
 
-  static Future<Map<String, dynamic>> setTeamLeader({
+  /// تعيين قائد الفريق (لو الباكند يدعم /rooms/:code/leader)
+  static Future<void> setTeamLeader({
     required String code,
-    required String team, // 'A' or 'B'
+    required String team, // 'A' أو 'B'
     required String leaderUserId,
-    String? token,
+    required String? token,
   }) async {
-    final res = await http.post(
-      Uri.parse('$apiBase/rooms/$code/team-leader'),
-      headers: {
-        'Content-Type': 'application/json',
-        if (token != null && token.isNotEmpty) 'Authorization': 'Bearer $token',
-      },
-      body: jsonEncode({'team': team, 'leaderUserId': leaderUserId}),
-    );
+    final res = await http
+        .post(
+      Uri.parse('$apiBase/rooms/$code/leader'),
+      headers: _headers(token: token),
+      body: jsonEncode({
+        'team': team,
+        'leaderUserId': leaderUserId,
+      }),
+    )
+        .timeout(_timeout);
 
-    Map<String, dynamic> m;
-    try {
-      m = jsonDecode(res.body) as Map<String, dynamic>;
-    } catch (_) {
-      throw 'Leader set failed: ${res.statusCode} ${res.body}';
-    }
+    final m = _decodeJson(res);
     if (res.statusCode >= 400 || m['ok'] != true) {
-      throw 'Leader set failed: ${res.statusCode} ${res.body}';
+      _throwApiErr(m, res, 'Failed to set leader');
     }
-    return (m['data'] ?? const {}) as Map<String, dynamic>;
   }
 }

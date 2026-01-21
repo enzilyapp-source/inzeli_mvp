@@ -88,3 +88,6 @@ class _RoomTimerBannerState extends State<RoomTimerBanner> {
     return widget.dense ? child : Card(child: Padding(padding: const EdgeInsets.all(8), child: child));
   }
 }
+
+
+//lib/widgets/room_timer_banner.dart

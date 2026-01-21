@@ -21,7 +21,7 @@ class PearlChip extends StatelessWidget {
 
     final bg = selected
         ? cs.primary.withOpacity(.12)
-        : cs.surfaceVariant.withOpacity(.4);
+        : cs.surfaceContainerHighest.withOpacity(.4);
 
     final border = selected
         ? cs.primary
@@ -113,3 +113,6 @@ class _HexPainter extends CustomPainter {
   bool shouldRepaint(covariant _HexPainter oldDelegate) =>
       oldDelegate.fill != fill;
 }
+
+
+//lib/widgests/pearl_chip.dart

@@ -3,7 +3,8 @@ import 'package:http/http.dart' as http;
 
 const String baseUrl = String.fromEnvironment(
   'API_BASE',
-  defaultValue: 'http://10.0.2.2:3000/api', // Android emulator default. iOS: use --dart-define to override to http://localhost:3000/api
+  defaultValue:
+      'https://inzeli-api-6heq.onrender.com/api', // override locally with --dart-define=API_BASE=http://10.0.2.2:3000/api
 );
 
 class ApiResponse<T> {

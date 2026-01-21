@@ -16,7 +16,7 @@ class AnwatRow extends StatelessWidget {
         children: List.generate(_thresholds.length, (i) {
           final t = _thresholds[i];
           final achieved = wins >= t;
-          final fill = achieved ? cs.primary : cs.surfaceVariant.withOpacity(.6);
+          final fill = achieved ? cs.primary : cs.surfaceContainerHighest.withOpacity(.6);
           final border = achieved ? cs.primary : cs.outline.withOpacity(.4);
           return Padding(
             padding: EdgeInsetsDirectional.only(end: i == _thresholds.length - 1 ? 0 : 8),
@@ -43,3 +43,4 @@ class AnwatRow extends StatelessWidget {
     );
   }
 }
+//anwat_row.dart

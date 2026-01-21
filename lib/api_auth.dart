@@ -39,3 +39,6 @@ Future<ApiResponse<Map<String, dynamic>>> register({
 Future<ApiResponse<Map<String, dynamic>>> login({
   required String email, required String password,
 }) => _post('/auth/login', {'email': email, 'password': password});
+
+
+//api_auth.dart

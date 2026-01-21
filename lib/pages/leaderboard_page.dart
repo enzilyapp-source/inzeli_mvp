@@ -18,8 +18,8 @@ class _LeaderboardPageState extends State<LeaderboardPage> {
   void initState() {
     super.initState();
     final app = widget.app;
-    selectedCat = app.selectedCategory ?? app.categories.first;
-    final list = app.games[selectedCat] ?? const <String>[];
+    selectedCat = app.selectedCategory ?? (app.categories.isNotEmpty ? app.categories.first : null);
+    final list = (selectedCat == null) ? const <String>[] : (app.games[selectedCat] ?? const <String>[]);
     selectedGame = app.selectedGame ?? (list.isNotEmpty ? list.first : null);
   }
 
@@ -31,13 +31,13 @@ class _LeaderboardPageState extends State<LeaderboardPage> {
       padding: const EdgeInsets.all(12),
       child: Column(
         children: [
-          // الفئات + الألعاب (scroll أفقياً لتفادي الضيق)
           Card(
             child: Padding(
               padding: const EdgeInsets.all(10),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
+                  // Categories
                   SingleChildScrollView(
                     scrollDirection: Axis.horizontal,
                     child: Row(
@@ -47,9 +47,13 @@ class _LeaderboardPageState extends State<LeaderboardPage> {
                           padding: const EdgeInsetsDirectional.only(end: 8),
                           child: ChoiceChip(
                             selected: sel,
-                            label: Text(cat, style: TextStyle(
+                            label: Text(
+                              cat,
+                              style: TextStyle(
                                 fontWeight: FontWeight.w900,
-                                color: sel ? Colors.black : Colors.white)),
+                                color: sel ? Colors.black : Colors.white,
+                              ),
+                            ),
                             onSelected: (_) {
                               setState(() {
                                 selectedCat = cat;
@@ -63,6 +67,8 @@ class _LeaderboardPageState extends State<LeaderboardPage> {
                     ),
                   ),
                   const SizedBox(height: 8),
+
+                  // Games
                   SingleChildScrollView(
                     scrollDirection: Axis.horizontal,
                     child: Row(
@@ -72,9 +78,13 @@ class _LeaderboardPageState extends State<LeaderboardPage> {
                           padding: const EdgeInsetsDirectional.only(end: 8),
                           child: FilterChip(
                             selected: sel,
-                            label: Text(g, style: TextStyle(
+                            label: Text(
+                              g,
+                              style: TextStyle(
                                 fontWeight: FontWeight.w900,
-                                color: sel ? Colors.black : Colors.white)),
+                                color: sel ? Colors.black : Colors.white,
+                              ),
+                            ),
                             onSelected: (_) => setState(() => selectedGame = g),
                           ),
                         );
@@ -90,9 +100,7 @@ class _LeaderboardPageState extends State<LeaderboardPage> {
           Align(
             alignment: Alignment.centerRight,
             child: Text(
-              selectedGame == null
-                  ? 'اختر لعبة'
-                  : 'مراتب — ${selectedCat ?? ""} / ${selectedGame!}',
+              selectedGame == null ? 'اختر لعبة' : 'مراتب — ${selectedCat ?? ""} / ${selectedGame!}',
               style: const TextStyle(fontWeight: FontWeight.w900),
             ),
           ),
@@ -105,10 +113,12 @@ class _LeaderboardPageState extends State<LeaderboardPage> {
                 if (snap.connectionState == ConnectionState.waiting) {
                   return const Center(child: CircularProgressIndicator());
                 }
-                final rows = snap.data ?? const <LBRow>[];
-                if (rows.isEmpty) {
-                  return const Center(child: Text('ما فيه نتائج لهاللعبة بعد'));
+                if (snap.hasError) {
+                  return Center(child: Text('خطأ: ${snap.error}'));
                 }
+
+                final rows = snap.data ?? const <LBRow>[];
+                if (rows.isEmpty) return const Center(child: Text('ما فيه نتائج لهاللعبة بعد'));
 
                 final top3 = rows.take(3).toList();
                 final rest = rows.length > 3 ? rows.sublist(3) : <LBRow>[];
@@ -117,73 +127,72 @@ class _LeaderboardPageState extends State<LeaderboardPage> {
                   builder: (context, cons) {
                     final w = cons.maxWidth;
                     final podiumHeight = w < 360 ? 108.0 : (w < 420 ? 130.0 : 150.0);
-                    final cellH = podiumHeight;
 
-                    return CustomScrollView(
-                      slivers: [
-                        // بوديوم تفاعلي
-                        SliverToBoxAdapter(
-                          child: Row(
-                            crossAxisAlignment: CrossAxisAlignment.end,
-                            children: [
-                              if (top3.length >= 2)
-                                Expanded(child: _PodiumCell(
-                                  row: top3[1], rank: 2, height: cellH * 0.82,
-                                  onTap: ()=> _openPlayer(top3[1].name),
-                                )),
-                              if (top3.isNotEmpty)
-                                Expanded(child: _PodiumCell(
-                                  row: top3[0], rank: 1, height: cellH,
-                                  onTap: ()=> _openPlayer(top3[0].name),
-                                )),
-                              if (top3.length >= 3)
-                                Expanded(child: _PodiumCell(
-                                  row: top3[2], rank: 3, height: cellH * 0.75,
-                                  onTap: ()=> _openPlayer(top3[2].name),
-                                )),
-                            ],
-                          ),
+                    return ListView(
+                      children: [
+                        // Podium
+                        Row(
+                          crossAxisAlignment: CrossAxisAlignment.end,
+                          children: [
+                            if (top3.length >= 2)
+                              Expanded(
+                                child: _PodiumCell(
+                                  row: top3[1],
+                                  rank: 2,
+                                  height: podiumHeight * 0.82,
+                                  onTap: () => _openPlayer(top3[1].name),
+                                ),
+                              ),
+                            if (top3.isNotEmpty)
+                              Expanded(
+                                child: _PodiumCell(
+                                  row: top3[0],
+                                  rank: 1,
+                                  height: podiumHeight,
+                                  onTap: () => _openPlayer(top3[0].name),
+                                ),
+                              ),
+                            if (top3.length >= 3)
+                              Expanded(
+                                child: _PodiumCell(
+                                  row: top3[2],
+                                  rank: 3,
+                                  height: podiumHeight * 0.75,
+                                  onTap: () => _openPlayer(top3[2].name),
+                                ),
+                              ),
+                          ],
                         ),
-                        const SliverToBoxAdapter(child: SizedBox(height: 10)),
+                        const SizedBox(height: 10),
 
-                        if (rest.isNotEmpty)
-                          SliverPadding(
-                            padding: const EdgeInsets.only(bottom: 12),
-                            sliver: w >= 540
-                            // شاشة أوسع: Grid بعمودين
-                                ? SliverGrid(
+                        if (rest.isNotEmpty) ...[
+                          if (w >= 540)
+                            GridView.builder(
+                              shrinkWrap: true,
+                              physics: const NeverScrollableScrollPhysics(),
                               gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
                                 crossAxisCount: 2,
-                                childAspectRatio: 2.6, // كرت أفقي أنيق
+                                childAspectRatio: 2.6,
                                 mainAxisSpacing: 8,
                                 crossAxisSpacing: 8,
                               ),
-                              delegate: SliverChildBuilderDelegate(
-                                    (context, i) {
-                                  final r = rest[i];
-                                  final rank = i + 4;
-                                  return _PlayerCard(
-                                    row: r, rank: rank,
-                                    onTap: ()=> _openPlayer(r.name),
-                                  );
-                                },
-                                childCount: rest.length,
-                              ),
-                            )
-                            // شاشة ضيقة: قائمة عادية
-                                : SliverList.separated(
                               itemCount: rest.length,
-                              separatorBuilder: (_, __)=> const SizedBox(height: 8),
-                              itemBuilder: (_, i) {
+                              itemBuilder: (context, i) {
                                 final r = rest[i];
                                 final rank = i + 4;
-                                return _PlayerCard(
-                                  row: r, rank: rank,
-                                  onTap: ()=> _openPlayer(r.name),
-                                );
+                                return _PlayerCard(row: r, rank: rank, onTap: () => _openPlayer(r.name));
                               },
-                            ),
-                          ),
+                            )
+                          else
+                            ...List.generate(rest.length, (i) {
+                              final r = rest[i];
+                              final rank = i + 4;
+                              return Padding(
+                                padding: const EdgeInsets.only(bottom: 8),
+                                child: _PlayerCard(row: r, rank: rank, onTap: () => _openPlayer(r.name)),
+                              );
+                            }),
+                        ],
                       ],
                     );
                   },
@@ -206,7 +215,7 @@ class _LeaderboardPageState extends State<LeaderboardPage> {
 
 class _PodiumCell extends StatelessWidget {
   final LBRow row;
-  final int rank; // 1..3
+  final int rank;
   final double height;
   final VoidCallback onTap;
   const _PodiumCell({required this.row, required this.rank, required this.height, required this.onTap});
@@ -221,8 +230,6 @@ class _PodiumCell extends StatelessWidget {
         : const Color(0xFFBCAAA4);
 
     final initials = _initials(row.name);
-
-    // Give a few px extra to avoid text-scale overflow on small screens
     final h = height + 8;
 
     return InkWell(
@@ -239,17 +246,12 @@ class _PodiumCell extends StatelessWidget {
         ),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-          mainAxisSize: MainAxisSize.max,
           children: [
             CircleAvatar(
               radius: 20,
               backgroundColor: color.withOpacity(0.35),
-              child: Text(
-                initials,
-                style: const TextStyle(fontWeight: FontWeight.w900),
-              ),
+              child: Text(initials, style: const TextStyle(fontWeight: FontWeight.w900)),
             ),
-            // name
             Text(
               row.name,
               maxLines: 1,
@@ -257,7 +259,6 @@ class _PodiumCell extends StatelessWidget {
               textAlign: TextAlign.center,
               style: const TextStyle(fontWeight: FontWeight.w900, height: 1.1),
             ),
-            // points
             Text(
               '$medal نقاط: ${row.pts}',
               maxLines: 1,
@@ -270,7 +271,6 @@ class _PodiumCell extends StatelessWidget {
     );
   }
 }
-
 
 class _PlayerCard extends StatelessWidget {
   final LBRow row;
@@ -293,20 +293,18 @@ class _PlayerCard extends StatelessWidget {
           side: const BorderSide(color: Color(0xFFEADFCC)),
         ),
         child: Padding(
-          // reduce vertical padding to avoid bottom overflow on small screens
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
           child: Row(
             children: [
               Container(
-                width: 36, height: 36, alignment: Alignment.center,
+                width: 36,
+                height: 36,
+                alignment: Alignment.center,
                 decoration: BoxDecoration(
                   color: badgeColor.withOpacity(0.10),
                   borderRadius: BorderRadius.circular(8),
                 ),
-                child: Text(
-                  '$rank',
-                  style: TextStyle(color: badgeColor, fontWeight: FontWeight.w900),
-                ),
+                child: Text('$rank', style: TextStyle(color: badgeColor, fontWeight: FontWeight.w900)),
               ),
               const SizedBox(width: 10),
               CircleAvatar(
@@ -315,12 +313,10 @@ class _PlayerCard extends StatelessWidget {
                 child: Text(initials, style: const TextStyle(fontWeight: FontWeight.w900)),
               ),
               const SizedBox(width: 10),
-
-              // name + WL
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisSize: MainAxisSize.min, // <-- important
+                  mainAxisSize: MainAxisSize.min,
                   children: [
                     Text(
                       row.name,
@@ -338,7 +334,6 @@ class _PlayerCard extends StatelessWidget {
                   ],
                 ),
               ),
-
               const SizedBox(width: 8),
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
@@ -346,10 +341,7 @@ class _PlayerCard extends StatelessWidget {
                   color: badgeColor.withOpacity(0.10),
                   borderRadius: BorderRadius.circular(12),
                 ),
-                child: Text(
-                  '${row.pts} نقاط',
-                  style: TextStyle(color: badgeColor, fontWeight: FontWeight.w900),
-                ),
+                child: Text('${row.pts} نقاط', style: TextStyle(color: badgeColor, fontWeight: FontWeight.w900)),
               ),
             ],
           ),
@@ -359,12 +351,10 @@ class _PlayerCard extends StatelessWidget {
   }
 }
 
-
 String _initials(String name) {
-  final parts = name.trim().split(RegExp(r'\s+')).where((s)=>s.isNotEmpty).toList();
+  final parts = name.trim().split(RegExp(r'\s+')).where((s) => s.isNotEmpty).toList();
   if (parts.isEmpty) return '؟';
   if (parts.length == 1) return parts.first.characters.take(2).toString();
-  return (parts[0].characters.take(1).toString() +
-      parts[1].characters.take(1).toString());
+  return (parts[0].characters.take(1).toString() + parts[1].characters.take(1).toString());
 }
-//lib/pages/leaderboard_pages
+//leaderboard_page.dart

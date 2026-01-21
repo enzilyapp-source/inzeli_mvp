@@ -9,12 +9,17 @@ class PlayerProfilePage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final me = (app.displayName ?? app.name ?? '').trim().toLowerCase();
+    final isMe = playerName.trim().toLowerCase() == me;
+    final isPrivate = (app.profilePrivate ?? false) && !isMe;
     final p = app.profile(playerName);
     final game = app.selectedGame ?? '';
     final pts = app.pointsOf(playerName, game);
     final w   = app.winsOf(playerName, game);
     final l   = app.lossesOf(playerName, game);
     final matches = app.userMatches(playerName);
+    final bestGame = game.isNotEmpty ? app.gameLabel(game) : '—';
+    final themeName = app.themeId ?? 'افتراضي';
 
     return Scaffold(
       appBar: AppBar(title: Text('ملف: $playerName')),
@@ -25,7 +30,7 @@ class PlayerProfilePage extends StatelessWidget {
             child: ListTile(
               leading: CircleAvatar(child: Text(_initials(playerName))),
               title: Text(playerName, style: const TextStyle(fontWeight: FontWeight.w900)),
-              subtitle: Text(p?.phone ?? '—'),
+              subtitle: isPrivate ? const Text('الملف خاص') : Text(p?.phone ?? '—'),
               trailing: Text('اللعبة: $game'),
             ),
           ),
@@ -33,32 +38,59 @@ class PlayerProfilePage extends StatelessWidget {
           Card(
             child: Padding(
               padding: const EdgeInsets.all(12),
-              child: Row(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  _StatBox(title: 'النقاط', value: '$pts'),
-                  const SizedBox(width: 8),
-                  _StatBox(title: 'فوز', value: '$w'),
-                  const SizedBox(width: 8),
-                  _StatBox(title: 'خسارة', value: '$l'),
+                  Row(
+                    children: [
+                      _StatBox(title: 'النقاط', value: '$pts'),
+                      const SizedBox(width: 8),
+                      _StatBox(title: 'فوز', value: '$w'),
+                      const SizedBox(width: 8),
+                      _StatBox(title: 'خسارة', value: '$l'),
+                    ],
+                  ),
+                  const SizedBox(height: 10),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Text('أفضل لعبة: $bestGame', style: const TextStyle(fontWeight: FontWeight.w800)),
+                      ),
+                      Chip(
+                        avatar: const Icon(Icons.style_outlined, size: 16),
+                        label: Text('الثيم: $themeName'),
+                      ),
+                    ],
+                  ),
+                  if (isPrivate)
+                    const Padding(
+                      padding: EdgeInsets.only(top: 8.0),
+                      child: Text(
+                        'الملف خاص — البيانات المفصّلة مخفية، يظهر فقط الفوز/الخسارة وأفضل لعبة والثيم.',
+                        style: TextStyle(color: Colors.black54),
+                      ),
+                    ),
                 ],
               ),
             ),
           ),
-          const SizedBox(height: 8),
-          const Text('آخر المباريات', style: TextStyle(fontWeight: FontWeight.w900)),
-          const SizedBox(height: 6),
-          ...matches.map((t)=> Card(
-            child: ListTile(
-              leading: const Icon(Icons.sports_esports_outlined),
-              title: Text('${t.game} — ${t.roomCode}'),
-              subtitle: Text(
-                'فائز: ${t.winner} • خاسرون: ${t.losers.join("، ")}\n${t.ts}',
-                maxLines: 2,
+          if (!isPrivate) ...[
+            const SizedBox(height: 8),
+            const Text('آخر المباريات', style: TextStyle(fontWeight: FontWeight.w900)),
+            const SizedBox(height: 6),
+            ...matches.map((t)=> Card(
+              child: ListTile(
+                leading: const Icon(Icons.sports_esports_outlined),
+                title: Text('${t.game} — ${t.roomCode}'),
+                subtitle: Text(
+                  'فائز: ${t.winner} • خاسرون: ${t.losers.join("، ")}\n${t.ts}',
+                  maxLines: 2,
+                ),
               ),
-            ),
-          )),
-          if (matches.isEmpty)
-            const Text('ما في مباريات لهذا اللاعب بعد', style: TextStyle(color: Colors.black54)),
+            )),
+            if (matches.isEmpty)
+              const Text('ما في مباريات لهذا اللاعب بعد', style: TextStyle(color: Colors.black54)),
+          ],
         ],
       ),
     );
@@ -96,3 +128,4 @@ String _initials(String name) {
   return (parts[0].characters.take(1).toString() +
       parts[1].characters.take(1).toString());
 }
+//pages/player_profile_pages

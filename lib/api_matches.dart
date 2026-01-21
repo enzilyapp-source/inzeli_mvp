@@ -1,124 +1,105 @@
 // lib/api_matches.dart
 import 'dart:convert';
+import 'dart:async';
 import 'package:http/http.dart' as http;
 import 'api_base.dart';
 
 class ApiMatches {
-  /// Create a match result.
-  ///
-  /// - [roomCode] optional (for rooms with timers / locking)
-  /// - [gameId] required game key (e.g. "CHESS", "TREX")
-  /// - [winners] list of winner userIds
-  /// - [losers] list of loser userIds
-  /// - [stakeUnits] 1, 2, or 3 (clamped automatically)
-  /// - [sponsorCode] optional sponsor for sponsor-only matches
-  /// - [token] required JWT
-  ///
-  /// Returns created match as Map<String, dynamic>.
+  static const Duration _timeout = Duration(seconds: 20);
+
+  static Map<String, String> _headers({String? token}) => {
+    'Content-Type': 'application/json',
+    if (token != null && token.isNotEmpty) 'Authorization': 'Bearer $token',
+  };
+
+  static Map<String, dynamic> _decodeJson(http.Response res) {
+    try {
+      final body = res.body.isEmpty ? '{}' : res.body;
+      final m = jsonDecode(body);
+      if (m is Map<String, dynamic>) return m;
+      return {'raw': m};
+    } catch (e) {
+      return {'raw': res.body};
+    }
+  }
+
+  static Never _throwApiErr(
+      Map<String, dynamic> m,
+      http.Response res,
+      String fallback,
+      ) {
+    final msg = (m['message'] ?? fallback).toString();
+    throw Exception('$msg (status: ${res.statusCode})');
+  }
+
+  /// تسجيل مباراة جديدة
   static Future<Map<String, dynamic>> createMatch({
     String? roomCode,
     required String gameId,
     required List<String> winners,
     required List<String> losers,
-    int stakeUnits = 1,
     String? sponsorCode,
     String? token,
   }) async {
-    final int units = stakeUnits.clamp(1, 3);
-
-    final uri = Uri.parse('$apiBase/matches');
     final body = <String, dynamic>{
       'gameId': gameId,
       'winners': winners,
       'losers': losers,
-      'stakeUnits': units,
-      if (roomCode != null && roomCode.isNotEmpty) 'roomCode': roomCode,
-      if (sponsorCode != null && sponsorCode.trim().isNotEmpty)
-        'sponsorCode': sponsorCode.trim(),
+      if (roomCode != null) 'roomCode': roomCode,
+      if (sponsorCode != null) 'sponsorCode': sponsorCode,
     };
 
-    final res = await http.post(
-      uri,
-      headers: {
-        'Content-Type': 'application/json',
-        if (token != null && token.isNotEmpty) 'Authorization': 'Bearer $token',
-      },
-      body: jsonEncode(body),
-    );
-
-    Map<String, dynamic> m;
+    final uri = Uri.parse('$apiBase/matches');
+    late http.Response res;
     try {
-      m = jsonDecode(res.body) as Map<String, dynamic>;
-    } catch (_) {
-      throw 'Match failed: ${res.statusCode} — Bad server response';
+      res = await http
+          .post(
+        uri,
+        headers: _headers(token: token),
+        body: jsonEncode(body),
+      )
+          .timeout(_timeout);
+    } on TimeoutException {
+      throw 'Timeout while creating match';
+    } catch (e) {
+      throw 'Network error: $e';
     }
 
+    final m = _decodeJson(res);
+
     if (res.statusCode >= 400 || m['ok'] != true) {
-      final msg = (m['message'] ?? 'Match failed').toString();
-      final code = (m['code'] ?? '').toString();
-      throw code.isNotEmpty ? '$msg ($code)' : msg;
+      _throwApiErr(m, res, 'Match failed');
     }
 
     final data = m['data'];
-    if (data is! Map<String, dynamic>) {
-      throw 'Match failed: invalid data payload';
-    }
-    return data;
+    if (data is Map<String, dynamic>) return data;
+    return (data as Map).cast<String, dynamic>();
   }
 
-  /// Shortcut for a simple 1v1 duel match.
-  ///
-  /// - winnerId: ID of the winner
-  /// - loserId: ID of the loser
-  /// - sponsorCode: optional; pass for sponsor match
-  static Future<Map<String, dynamic>> createDuel({
-    String? roomCode,
-    required String gameId,
-    required String winnerId,
-    required String loserId,
-    int stakeUnits = 1,
-    String? sponsorCode,
-    String? token,
-  }) {
-    return createMatch(
-      roomCode: roomCode,
-      gameId: gameId,
-      winners: [winnerId],
-      losers: [loserId],
-      stakeUnits: stakeUnits,
-      sponsorCode: sponsorCode,
-      token: token,
-    );
-  }
-
-  /// Fetch all matches of a given user (optional: by sponsor).
-  static Future<List<Map<String, dynamic>>> listUserMatches({
-    required String userId,
-    String? sponsorCode,
+  /// (اختياري) جلب مباريات المستخدم/الروم لو حبيتي تبنين تايملاين
+  static Future<List<Map<String, dynamic>>> listMatchesForRoom({
+    required String roomCode,
     String? token,
   }) async {
-    final params = <String, String>{
-      'userId': userId,
-      if (sponsorCode != null && sponsorCode.isNotEmpty)
-        'sponsorCode': sponsorCode,
-    };
-
-    final uri = Uri.parse('$apiBase/matches/user').replace(queryParameters: params);
-
-    final res = await http.get(
-      uri,
-      headers: {
-        if (token != null && token.isNotEmpty) 'Authorization': 'Bearer $token',
-      },
-    );
-
-    if (res.statusCode >= 400) {
-      throw 'Failed to fetch matches (${res.statusCode})';
+    final uri = Uri.parse('$apiBase/matches?roomCode=$roomCode');
+    late http.Response res;
+    try {
+      res = await http
+          .get(
+        uri,
+        headers: _headers(token: token),
+      )
+          .timeout(_timeout);
+    } on TimeoutException {
+      throw 'Timeout while fetching matches';
+    } catch (e) {
+      throw 'Failed to fetch matches: $e';
     }
 
-    final m = jsonDecode(res.body);
-    if (m is! Map || m['ok'] != true) {
-      throw 'Failed to fetch matches';
+    final m = _decodeJson(res);
+
+    if (res.statusCode >= 400 || m['ok'] != true) {
+      _throwApiErr(m, res, 'Failed to fetch matches');
     }
 
     final data = m['data'];
@@ -126,4 +107,3 @@ class ApiMatches {
     return data.cast<Map<String, dynamic>>();
   }
 }
-//lib/api_matches.dart

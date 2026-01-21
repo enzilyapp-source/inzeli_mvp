@@ -2,6 +2,7 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:qr_flutter/qr_flutter.dart';
+
 import '../state.dart';
 import '../api_room.dart';
 import '../api_matches.dart';
@@ -9,9 +10,6 @@ import '../api_matches.dart';
 class MatchPage extends StatefulWidget {
   final AppState app;
   final Map<String, dynamic>? room;
-
-  /// OPTIONAL: when set, match results will transfer pearls
-  /// inside the SponsorGameWallet for this sponsor+game.
   final String? sponsorCode;
 
   const MatchPage({
@@ -28,17 +26,14 @@ class MatchPage extends StatefulWidget {
 class _MatchPageState extends State<MatchPage> {
   final _codeCtrl = TextEditingController();
 
-  // Room snapshot
   List<Map<String, dynamic>> players = [];
-  Map<String, int> _pearlsByUser = {}; // uid -> permanentScore (pearls)
-  Map<String, String?> _teamOf = {}; // uid -> 'A' | 'B' | null
-  Map<String, bool> _isLeader = {}; // uid -> true/false
-  Map<String, dynamic>? _teamQuorum; // {A:{required,available,quorumMet}, B:{...}}
+  final Map<String, int> _pearlsByUser = {};
+  final Map<String, String?> _teamOf = {};
+  final Map<String, bool> _isLeader = {};
+  Map<String, dynamic>? _teamQuorum;
 
-  // Winner selection
   String? _winnerUserId;
 
-  // Timer lock
   Timer? _ticker;
   int _remaining = 0;
   DateTime? _startedAt;
@@ -69,8 +64,21 @@ class _MatchPageState extends State<MatchPage> {
     return '$m:$ss';
   }
 
-  bool get _locked =>
-      _startedAt != null && _timerSec != null && (_remaining > 0);
+  String _nameForUser(String uid) {
+    final p = players.firstWhere(
+          (e) => (e['userId'] ?? '').toString() == uid,
+      orElse: () => const <String, dynamic>{},
+    );
+    final user = p['user'] as Map<String, dynamic>? ?? const {};
+    return (user['displayName'] ??
+        user['name'] ??
+        user['email'] ??
+        user['phone'] ??
+        uid).toString();
+  }
+
+  // نخلي الـ lock من الباكند فقط
+  bool get _locked => false;
 
   void _startTickerIfNeeded() {
     _ticker?.cancel();
@@ -78,35 +86,44 @@ class _MatchPageState extends State<MatchPage> {
       setState(() => _remaining = 0);
       return;
     }
-    void _tick() {
+
+    void tick() {
       final elapsed = DateTime.now().difference(_startedAt!).inSeconds;
       final remain = _timerSec! - elapsed;
       setState(() => _remaining = remain.clamp(0, 1 << 30));
       if (_remaining <= 0) _ticker?.cancel();
     }
 
-    _tick();
-    _ticker = Timer.periodic(const Duration(seconds: 1), (_) => _tick());
+    tick();
+    _ticker = Timer.periodic(const Duration(seconds: 1), (_) => tick());
   }
 
   Future<void> _refresh(String code) async {
     try {
-      final room =
-      await ApiRoom.getRoomByCode(code, token: widget.app.token);
+      final room = await ApiRoom.getRoomByCode(code, token: widget.app.token);
 
-      // core fields
       final p = room['players'];
       if (p is List) players = p.cast<Map<String, dynamic>>();
 
-      // pearls = permanentScore from nested user
       _pearlsByUser.clear();
       _teamOf.clear();
       _isLeader.clear();
 
+      final gameId = (room['gameId'] ?? widget.app.selectedGame ?? '').toString();
+
       for (final rp in players) {
         final uid = (rp['userId'] ?? '').toString();
         final user = rp['user'] as Map<String, dynamic>?;
-        final pearls = (user?['permanentScore'] as num?)?.toInt() ?? 0;
+        int pearls = (user?['permanentScore'] as num?)?.toInt() ?? 5; // fallback 5
+
+        // استخدم رصيد اللؤلؤ لكل لعبة للحساب الحالي (لصاحب الحساب فقط)
+        if (uid == widget.app.userId && gameId.isNotEmpty) {
+          pearls = widget.app.pearlsForGame(gameId);
+        }
+
+        // لو ما في بيانات، اعتبر 5 لؤلؤ لكل لاعب جديد
+        if (pearls <= 0) pearls = 5;
+
         _pearlsByUser[uid] = pearls;
 
         final team = rp['team']?.toString();
@@ -131,16 +148,13 @@ class _MatchPageState extends State<MatchPage> {
 
   @override
   Widget build(BuildContext context) {
-    final code =
-    (widget.room?['code'] ?? widget.app.roomCode ?? '').toString();
+    final code = (widget.room?['code'] ?? widget.app.roomCode ?? '').toString();
     final game =
-    (widget.room?['gameId'] ?? widget.app.selectedGame ?? 'لعبة')
-        .toString();
+    (widget.room?['gameId'] ?? widget.app.selectedGame ?? 'لعبة').toString();
     final sponsorCode = widget.sponsorCode;
+
     final hostId = widget.room?['hostUserId']?.toString();
-    final isHost =
-        widget.app.userId != null && hostId == widget.app.userId;
-    final onSurface = Theme.of(context).colorScheme.onSurface;
+    final isHost = widget.app.userId != null && hostId == widget.app.userId;
 
     return Scaffold(
       appBar: AppBar(
@@ -185,18 +199,25 @@ class _MatchPageState extends State<MatchPage> {
               ),
             ],
 
-            // Timer / lock
             const SizedBox(height: 12),
             if (_timerSec != null && _startedAt != null) ...[
-              Row(mainAxisAlignment: MainAxisAlignment.center, children: [
-                const Icon(Icons.timer_outlined),
-                const SizedBox(width: 6),
-                Text(_fmt(_remaining),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  const Icon(Icons.timer_outlined),
+                  const SizedBox(width: 6),
+                  Text(
+                    _fmt(_remaining),
                     style: const TextStyle(
-                        fontWeight: FontWeight.w900, fontSize: 16)),
-              ]),
+                      fontWeight: FontWeight.w900,
+                      fontSize: 16,
+                    ),
+                  ),
+                ],
+              ),
               const SizedBox(height: 8),
             ],
+
             if (isHost) ...[
               Align(
                 alignment: Alignment.center,
@@ -215,7 +236,8 @@ class _MatchPageState extends State<MatchPage> {
                       );
                       _timerSec = (data['timerSec'] as num?)?.toInt();
                       final s = data['startedAt'] as String?;
-                      _startedAt = s != null ? DateTime.tryParse(s) : null;
+                      _startedAt =
+                      s != null ? DateTime.tryParse(s) : null;
                       _startTickerIfNeeded();
                       _msg('بدأت الجولة ⏱️');
                       _refresh(code);
@@ -228,13 +250,11 @@ class _MatchPageState extends State<MatchPage> {
               const SizedBox(height: 12),
             ],
 
-            // Team quorum snapshot (if backend sends it)
             if (_teamQuorum != null) ...[
               _TeamQuorumCard(teamQuorum: _teamQuorum!),
               const SizedBox(height: 16),
             ],
 
-            // Host-only: assign teams
             if (isHost) ...[
               _AssignTeamsCard(
                 app: widget.app,
@@ -257,12 +277,13 @@ class _MatchPageState extends State<MatchPage> {
               const SizedBox(height: 16),
             ],
 
-            // Players list & winner selection
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                const Text('اللاعبون',
-                    style: TextStyle(fontWeight: FontWeight.w900)),
+                const Text(
+                  'اللاعبون',
+                  style: TextStyle(fontWeight: FontWeight.w900),
+                ),
                 Chip(label: Text('${players.length} لاعب')),
               ],
             ),
@@ -298,92 +319,160 @@ class _MatchPageState extends State<MatchPage> {
                   return ChoiceChip(
                     selected: selected,
                     label: Text(labelText),
-                    onSelected: (_) => setState(() => _winnerUserId = uid),
+                    onSelected: (_) =>
+                        setState(() => _winnerUserId = uid),
                   );
                 }).toList(),
               ),
 
             const SizedBox(height: 12),
+
             FilledButton.icon(
               icon: const Icon(Icons.flag),
               label: const Text('حسم النتيجة (نقل لؤلؤة واحدة)'),
-              onPressed: _locked
-                  ? null
+              onPressed: _locked || !isHost
+                  ? () => _msg('الحسم للمضيف فقط')
                   : () async {
-                final codeSafe = code;
-                if (_winnerUserId == null) {
-                  _msg('اختار الفائز أولًا');
-                  return;
-                }
-                final losers = players
-                    .map((p) => p['userId']?.toString() ?? '')
-                    .where((uid) =>
-                uid.isNotEmpty && uid != _winnerUserId)
-                    .toList();
-                try {
-                  await ApiMatches.createMatch(
-                    roomCode: codeSafe.isEmpty ? null : codeSafe,
-                    gameId: game,
-                    winners: [_winnerUserId!],
-                    losers: losers,
-                    stakeUnits: 1, // backend ignores and forces 1
-                    token: widget.app.token,
-                    // Record into SponsorGameWallet when sponsor is active
-                    sponsorCode: sponsorCode,
-                  );
-                  _msg('تم النقل: كل خاسر -1 لؤلؤة، توزيعها على الفائز');
-                  setState(() => _winnerUserId = null);
-                  if (codeSafe.isNotEmpty) _refresh(codeSafe);
+                    final codeSafe = code;
+                    if (_winnerUserId == null) {
+                      _msg('اختَر الفائز أولًا');
+                      return;
+                    }
+                    if (players.length < 2) {
+                      _msg('لا يمكن حسم النتيجة بلاعب واحد');
+                      return;
+                    }
 
-                  // Optional: return to previous screen (e.g., sponsor page) so wallet refreshes
-                  await Future.delayed(const Duration(milliseconds: 400));
-                  if (mounted) Navigator.pop(context);
-                } catch (e) {
-                  _msg(e.toString());
-                }
-              },
+                    final losers = players
+                        .map((p) => p['userId']?.toString() ?? '')
+                        .where((uid) => uid.isNotEmpty && uid != _winnerUserId)
+                        .toList();
+
+                    final zeroPearlPlayers = losers
+                        .where((uid) => (_pearlsByUser[uid] ?? 0) <= 0)
+                        .map(_nameForUser)
+                        .toList();
+
+                    final winnerName = _nameForUser(_winnerUserId!);
+                    final loserNames = losers.map(_nameForUser).join('، ');
+
+                    final confirm = await showDialog<bool>(
+                      context: context,
+                      builder: (ctx) => AlertDialog(
+                        title: const Text('تأكيد النتيجة'),
+                        content: Text([
+                          'الفائز: $winnerName',
+                          'الخاسرون: $loserNames',
+                          if (zeroPearlPlayers.isNotEmpty)
+                            'تنبيه: ${zeroPearlPlayers.join("، ")} رصيده 0 لؤلؤة — لن يُخصم منه شيء إن خسر.'
+                        ].join('\n')),
+                        actions: [
+                          TextButton(
+                            onPressed: () => Navigator.pop(ctx, false),
+                            child: const Text('إلغاء'),
+                          ),
+                          FilledButton(
+                            onPressed: () => Navigator.pop(ctx, true),
+                            child: const Text('تأكيد'),
+                          ),
+                        ],
+                      ),
+                    );
+                    if (confirm != true) return;
+
+                    try {
+                      await ApiMatches.createMatch(
+                        roomCode: codeSafe.isEmpty ? null : codeSafe,
+                        gameId: game,
+                        winners: [_winnerUserId!],
+                        losers: losers,
+                        token: widget.app.token,
+                        sponsorCode: sponsorCode,
+                      );
+
+                      widget.app.addLocalMatch(
+                        game: game,
+                        roomCode: codeSafe,
+                        winner: winnerName,
+                        losers: loserNames.isEmpty ? const [] : loserNames.split('، ').where((e) => e.isNotEmpty).toList(),
+                      );
+
+                      // حدّث اللآلئ لجميع اللاعبين محليًا (عرض)
+                      _pearlsByUser[_winnerUserId!] = (_pearlsByUser[_winnerUserId!] ?? 0) +
+                          losers.where((uid) => (_pearlsByUser[uid] ?? 0) > 0).length;
+                      for (final uid in losers) {
+                        final cur = _pearlsByUser[uid] ?? 0;
+                        if (cur > 0) _pearlsByUser[uid] = cur - 1;
+                      }
+
+                      // تحديث رصيد اللآلئ المحلي لصاحب الحساب فقط
+                      final myId = widget.app.userId;
+                      if (myId != null && myId.isNotEmpty) {
+                        if (myId == _winnerUserId) {
+                          // اربح لؤلؤة لكل خاسر يملك لؤلؤة > 0
+                          final gain = losers.where((uid) => (_pearlsByUser[uid] ?? 0) > 0).length;
+                          if (gain > 0) widget.app.grantPearlsForGame(game, gain);
+                        } else if (losers.contains(myId)) {
+                          if ((widget.app.pearlsForGame(game)) > 0) {
+                            widget.app.spendPearlForGame(game);
+                          }
+                        }
+                      }
+
+                      _msg('تم النقل: كل خاسر -1 لؤلؤة، توزيعها على الفائز');
+                      setState(() => _winnerUserId = null);
+                      if (codeSafe.isNotEmpty) _refresh(codeSafe);
+
+                      await Future.delayed(const Duration(milliseconds: 400));
+                      if (mounted) Navigator.pop(context);
+                    } catch (e) {
+                      _msg(e.toString());
+                    }
+                  },
             ),
 
             const SizedBox(height: 16),
             const Text('انضم بالكود (اختبار سريع)'),
             const SizedBox(height: 6),
-            Row(children: [
-              Expanded(
-                child: TextField(
-                  controller: _codeCtrl,
-                  decoration:
-                  const InputDecoration(labelText: 'اكتب كود الروم'),
+            Row(
+              children: [
+                Expanded(
+                  child: TextField(
+                    controller: _codeCtrl,
+                    decoration: const InputDecoration(
+                      labelText: 'اكتب كود الروم',
+                    ),
+                  ),
                 ),
-              ),
-              const SizedBox(width: 8),
-              FilledButton(
-                onPressed: () async {
-                  final inputCode = _codeCtrl.text.trim().isEmpty
-                      ? code
-                      : _codeCtrl.text.trim();
-                  if (inputCode.isEmpty) {
-                    _msg('اكتب الكود');
-                    return;
-                  }
-                  if (!widget.app.isSignedIn) {
-                    _msg('سجّل دخول أول');
-                    return;
-                  }
-                  try {
-                    // ✅ no userId param anymore
-                    await ApiRoom.joinByCode(
-                      code: inputCode,
-                      token: widget.app.token,
-                    );
-                    _msg('Joined ✅');
-                    _refresh(inputCode);
-                  } catch (e) {
-                    _msg('خطأ: $e');
-                  }
-                },
-                child: const Text('انضم'),
-              ),
-            ]),
+                const SizedBox(width: 8),
+                FilledButton(
+                  onPressed: () async {
+                    final inputCode = _codeCtrl.text.trim().isEmpty
+                        ? code
+                        : _codeCtrl.text.trim();
+                    if (inputCode.isEmpty) {
+                      _msg('اكتب الكود');
+                      return;
+                    }
+                    if (!widget.app.isSignedIn) {
+                      _msg('سجّل دخول أول');
+                      return;
+                    }
+                    try {
+                      await ApiRoom.joinByCode(
+                        code: inputCode,
+                        token: widget.app.token,
+                      );
+                      _msg('Joined ✅');
+                      _refresh(inputCode);
+                    } catch (e) {
+                      _msg('خطأ: $e');
+                    }
+                  },
+                  child: const Text('انضم'),
+                ),
+              ],
+            ),
           ],
         ),
       ),
@@ -391,7 +480,7 @@ class _MatchPageState extends State<MatchPage> {
   }
 }
 
-/* -------------------------- UI helper widgets -------------------------- */
+/* -------------------------- Helper Widgets -------------------------- */
 
 class _TeamQuorumCard extends StatelessWidget {
   final Map<String, dynamic> teamQuorum;
@@ -406,16 +495,25 @@ class _TeamQuorumCard extends StatelessWidget {
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(12),
-        child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-          const Text('حالة النصاب (اللآلئ)',
-              style: TextStyle(fontWeight: FontWeight.w900)),
-          const SizedBox(height: 6),
-          _row('الفريق A',
-              'مطلوب: ${qa['required'] ?? 0} — متاح: ${qa['available'] ?? 0} — ${_ok(qa['quorumMet'])}'),
-          const SizedBox(height: 4),
-          _row('الفريق B',
-              'مطلوب: ${qb['required'] ?? 0} — متاح: ${qb['available'] ?? 0} — ${_ok(qb['quorumMet'])}'),
-        ]),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            const Text(
+              'حالة النصاب (اللآلئ)',
+              style: TextStyle(fontWeight: FontWeight.w900),
+            ),
+            const SizedBox(height: 6),
+            _row(
+              'الفريق A',
+              'مطلوب: ${qa['required'] ?? 0} — متاح: ${qa['available'] ?? 0} — ${_ok(qa['quorumMet'])}',
+            ),
+            const SizedBox(height: 4),
+            _row(
+              'الفريق B',
+              'مطلوب: ${qb['required'] ?? 0} — متاح: ${qb['available'] ?? 0} — ${_ok(qb['quorumMet'])}',
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -455,68 +553,78 @@ class _AssignTeamsCard extends StatelessWidget {
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(12),
-        child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-          Text('توزيع الفرق (للمضيف فقط)',
-              style: TextStyle(fontWeight: FontWeight.w900, color: onSurface)),
-          const SizedBox(height: 8),
-          ...players.map((p) {
-            final uid = (p['userId'] ?? '').toString();
-            final user = p['user'] as Map<String, dynamic>?;
-            final name = user?['displayName']?.toString() ??
-                user?['email']?.toString() ??
-                uid;
-            final pearls = pearlsByUser[uid] ?? 0;
-            final leader = isLeader[uid] == true;
-
-            final sel = teamOf[uid];
-            return Padding(
-              padding: const EdgeInsets.symmetric(vertical: 6),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: Text(
-                      '$name — $pearls 💎 ${leader ? "⭐" : ""}',
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  SegmentedButton<String>(
-                    segments: const [
-                      ButtonSegment(value: 'A', label: Text('A')),
-                      ButtonSegment(value: 'B', label: Text('B')),
-                      ButtonSegment(value: 'NONE', label: Text('—')),
-                    ],
-                    selected: {sel ?? 'NONE'},
-                    onSelectionChanged: (set) async {
-                      final value = set.first;
-                      try {
-                        if (value == 'NONE') {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(
-                              content: Text('حالياً يمكن التعيين إلى A أو B فقط'),
-                            ),
-                          );
-                        } else {
-                          await ApiRoom.setPlayerTeam(
-                            code: code,
-                            playerUserId: uid,
-                            team: value,
-                            token: app.token,
-                          );
-                          onChanged();
-                        }
-                      } catch (e) {
-                        ScaffoldMessenger.of(context)
-                            .showSnackBar(SnackBar(content: Text('Team error: $e')));
-                      }
-                    },
-                  ),
-                ],
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text(
+              'توزيع الفرق (للمضيف فقط)',
+              style: TextStyle(
+                fontWeight: FontWeight.w900,
+                color: onSurface,
               ),
-            );
-          }),
-        ]),
+            ),
+            const SizedBox(height: 8),
+            ...players.map((p) {
+              final uid = (p['userId'] ?? '').toString();
+              final user = p['user'] as Map<String, dynamic>?;
+              final name = user?['displayName']?.toString() ??
+                  user?['email']?.toString() ??
+                  uid;
+              final pearls = pearlsByUser[uid] ?? 0;
+              final leader = isLeader[uid] == true;
+
+              final sel = teamOf[uid];
+              return Padding(
+                padding: const EdgeInsets.symmetric(vertical: 6),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        '$name — $pearls 💎 ${leader ? "⭐" : ""}',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    SegmentedButton<String>(
+                      segments: const [
+                        ButtonSegment(value: 'A', label: Text('A')),
+                        ButtonSegment(value: 'B', label: Text('B')),
+                        ButtonSegment(value: 'NONE', label: Text('—')),
+                      ],
+                      selected: {sel ?? 'NONE'},
+                      onSelectionChanged: (set) async {
+                        final value = set.first;
+                        try {
+                          if (value == 'NONE') {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                content: Text(
+                                    'حالياً يمكن التعيين إلى A أو B فقط'),
+                              ),
+                            );
+                          } else {
+                            await ApiRoom.setPlayerTeam(
+                              code: code,
+                              playerUserId: uid,
+                              team: value,
+                              token: app.token,
+                            );
+                            onChanged();
+                          }
+                        } catch (e) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(content: Text('Team error: $e')),
+                          );
+                        }
+                      },
+                    ),
+                  ],
+                ),
+              );
+            }),
+          ],
+        ),
       ),
     );
   }
@@ -560,40 +668,41 @@ class _SetLeaderCard extends StatelessWidget {
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(12),
-        child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-          const Text('تعيين القادة (للمضيف فقط)',
-              style: TextStyle(fontWeight: FontWeight.w900)),
-          const SizedBox(height: 10),
-
-          // Team A leader
-          _LeaderPickerRow(
-            teamLabel: 'الفريق A',
-            team: 'A',
-            code: code,
-            app: app,
-            players: teamA,
-            currentLeaderUserId:
-            (currentLeaderA is Map && currentLeaderA.isNotEmpty)
-                ? currentLeaderA['userId']?.toString()
-                : null,
-            onChanged: onChanged,
-          ),
-          const SizedBox(height: 10),
-
-          // Team B leader
-          _LeaderPickerRow(
-            teamLabel: 'الفريق B',
-            team: 'B',
-            code: code,
-            app: app,
-            players: teamB,
-            currentLeaderUserId:
-            (currentLeaderB is Map && currentLeaderB.isNotEmpty)
-                ? currentLeaderB['userId']?.toString()
-                : null,
-            onChanged: onChanged,
-          ),
-        ]),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            const Text(
+              'تعيين القادة (للمضيف فقط)',
+              style: TextStyle(fontWeight: FontWeight.w900),
+            ),
+            const SizedBox(height: 10),
+            _LeaderPickerRow(
+              teamLabel: 'الفريق A',
+              team: 'A',
+              code: code,
+              app: app,
+              players: teamA,
+              currentLeaderUserId:
+              (currentLeaderA.isNotEmpty)
+                  ? currentLeaderA['userId']?.toString()
+                  : null,
+              onChanged: onChanged,
+            ),
+            const SizedBox(height: 10),
+            _LeaderPickerRow(
+              teamLabel: 'الفريق B',
+              team: 'B',
+              code: code,
+              app: app,
+              players: teamB,
+              currentLeaderUserId:
+              (currentLeaderB.isNotEmpty)
+                  ? currentLeaderB['userId']?.toString()
+                  : null,
+              onChanged: onChanged,
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -601,7 +710,7 @@ class _SetLeaderCard extends StatelessWidget {
 
 class _LeaderPickerRow extends StatefulWidget {
   final String teamLabel;
-  final String team; // 'A' or 'B'
+  final String team;
   final String code;
   final AppState app;
   final List<Map<String, dynamic>> players;
@@ -643,8 +752,9 @@ class _LeaderPickerRowState extends State<_LeaderPickerRow> {
   Widget build(BuildContext context) {
     final items = widget.players.map((p) {
       final user = p['user'] as Map<String, dynamic>?;
-      final name =
-          user?['displayName']?.toString() ?? user?['email']?.toString() ?? p['userId'].toString();
+      final name = user?['displayName']?.toString() ??
+          user?['email']?.toString() ??
+          p['userId'].toString();
       final uid = (p['userId'] ?? '').toString();
       return DropdownMenuItem<String>(
         value: uid,
@@ -655,14 +765,17 @@ class _LeaderPickerRowState extends State<_LeaderPickerRow> {
     return Row(
       children: [
         Expanded(
-          child: Text(widget.teamLabel, style: const TextStyle(fontWeight: FontWeight.w700)),
+          child: Text(
+            widget.teamLabel,
+            style: const TextStyle(fontWeight: FontWeight.w700),
+          ),
         ),
         const SizedBox(width: 8),
         SizedBox(
           width: 220,
           child: DropdownButtonFormField<String>(
             isExpanded: true,
-            value: _selected,
+            initialValue: _selected,
             hint: const Text('اختر القائد'),
             items: items,
             onChanged: (val) async {
@@ -677,8 +790,9 @@ class _LeaderPickerRowState extends State<_LeaderPickerRow> {
                 setState(() => _selected = val);
                 widget.onChanged();
               } catch (e) {
-                ScaffoldMessenger.of(context)
-                    .showSnackBar(SnackBar(content: Text('Leader error: $e')));
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text('Leader error: $e')),
+                );
               }
             },
           ),

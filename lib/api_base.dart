@@ -1,6 +1,26 @@
-import 'package:flutter/foundation.dart' show kIsWeb;
+// lib/api_base.dart
+import 'package:flutter/foundation.dart';
 
-const String apiBase = kIsWeb
-    ? String.fromEnvironment('API_BASE_WEB', defaultValue: 'http://localhost:3000/api') // للويب
-    : String.fromEnvironment('API_BASE',     defaultValue: 'http://10.0.2.2:3000/api'); // للأندرويد إموليتر                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 
-//lib/widgets/api_base.dart
+// Override at run time with:
+// flutter run -d chrome  --dart-define=API_BASE_URL=https://inzeli-api-6heq.onrender.com/api
+// flutter run -d android --dart-define=API_BASE_URL=https://inzeli-api-6heq.onrender.com/api
+const String _envApiBase =
+    String.fromEnvironment('API_BASE_URL', defaultValue: 'https://inzeli-api-6heq.onrender.com/api');
+
+String _androidLoopback(String url) {
+  if (!url.contains('localhost') && !url.contains('127.0.0.1')) return url;
+  final uri = Uri.parse(url);
+  return uri.replace(host: '10.0.2.2').toString();
+}
+
+String get apiBase {
+  // Web uses the URL as-is
+  if (kIsWeb) return _envApiBase;
+
+  switch (defaultTargetPlatform) {
+    case TargetPlatform.android:
+      return _androidLoopback(_envApiBase);
+    default:
+      return _envApiBase;
+  }
+}

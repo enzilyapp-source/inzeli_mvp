@@ -4,11 +4,10 @@ import 'state.dart';
 
 // pages
 import 'pages/games_page.dart';
-import 'pages/leaderboard_page.dart';
+import 'pages/leaderboard_hub_page.dart'; // ✅ NEW (leaderboards first)
 import 'pages/timeline_page.dart';
 import 'pages/profile_page.dart';
 import 'pages/signin_page.dart';
-import 'pages/sponsor_page.dart'; // ✅ sponsor tab
 
 void main() => runApp(const InzeliApp());
 
@@ -19,34 +18,97 @@ class InzeliApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       title: 'Inzeli',
-      themeMode: ThemeMode.system,
+      debugShowCheckedModeBanner: false,
+      themeMode: ThemeMode.dark,
       theme: ThemeData(
-        useMaterial3: true,
-        brightness: Brightness.light,
-        colorSchemeSeed: const Color(0xFF3D5AFE),
-        textTheme: const TextTheme(),
-      ),
-      darkTheme: ThemeData(
-        useMaterial3: true,
         brightness: Brightness.dark,
-        colorSchemeSeed: const Color(0xFF3D5AFE),
-        textTheme: const TextTheme(),
+        useMaterial3: true,
+        fontFamily: 'Tajawal',
+        colorScheme: ColorScheme.dark(
+          primary: const Color(0xFFE49A2C), // البرتقالي للأكشن
+          secondary: const Color(0xFF5E9EB4), // أزرق فاتح للأيقونات
+          surface: const Color(0xFF1C273B),
+          onSurface: Colors.white,
+          outline: Colors.white.withOpacity(0.12),
+        ),
+        scaffoldBackgroundColor: const Color(0xFF223448),
+        textButtonTheme: TextButtonThemeData(
+          style: ButtonStyle(
+            foregroundColor: const WidgetStatePropertyAll(Color(0xFFE49A2C)),
+            textStyle: const WidgetStatePropertyAll(
+              TextStyle(
+                fontFamily: 'Tajawal',
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ),
+        ),
+        outlinedButtonTheme: OutlinedButtonThemeData(
+          style: ButtonStyle(
+            foregroundColor: const WidgetStatePropertyAll(Color(0xFFE49A2C)),
+            side: WidgetStatePropertyAll(
+              BorderSide(color: Colors.white.withOpacity(0.35)),
+            ),
+            textStyle: const WidgetStatePropertyAll(
+              TextStyle(
+                fontFamily: 'Tajawal',
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ),
+        ),
+        filledButtonTheme: FilledButtonThemeData(
+          style: ButtonStyle(
+            backgroundColor: const WidgetStatePropertyAll(Color(0xFFE9F2FB)),
+            foregroundColor: const WidgetStatePropertyAll(Color(0xFFE49A2C)),
+            textStyle: const WidgetStatePropertyAll(
+              TextStyle(
+                fontFamily: 'Tajawal',
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+          ),
+        ),
+        elevatedButtonTheme: ElevatedButtonThemeData(
+          style: ButtonStyle(
+            backgroundColor: const WidgetStatePropertyAll(Color(0xFFE9F2FB)),
+            foregroundColor: const WidgetStatePropertyAll(Color(0xFFE49A2C)),
+            textStyle: const WidgetStatePropertyAll(
+              TextStyle(
+                fontFamily: 'Tajawal',
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+          ),
+        ),
+        navigationBarTheme: const NavigationBarThemeData(
+          backgroundColor: Color(0xFF1C273B),
+          indicatorColor: Color(0xFF3F6F82),
+          surfaceTintColor: Colors.transparent,
+          labelTextStyle: WidgetStatePropertyAll(
+            TextStyle(
+              fontFamily: 'Tajawal',
+              fontWeight: FontWeight.w700,
+              fontSize: 12,
+            ),
+          ),
+        ),
       ),
       home: const AuthGate(),
     );
   }
 }
 
-/// يشيّك لو عندك توكن محفوظ → يدخل الهوم، وإلا يفتح سيجن إن
 class AuthGate extends StatefulWidget {
   const AuthGate({super.key});
+
   @override
   State<AuthGate> createState() => _AuthGateState();
 }
 
 class _AuthGateState extends State<AuthGate> {
-  final app = AppState();
-  bool loading = true;
+  final AppState app = AppState();
+  bool _loading = true;
 
   @override
   void initState() {
@@ -55,16 +117,18 @@ class _AuthGateState extends State<AuthGate> {
   }
 
   Future<void> _boot() async {
-    await app.load(); // يحمل SharedPreferences + الأوث
-    if (mounted) setState(() => loading = false);
+    await app.load(); // SharedPreferences (auth)
+    if (mounted) setState(() => _loading = false);
   }
 
   @override
   Widget build(BuildContext context) {
-    if (loading) {
-      return const Scaffold(body: Center(child: CircularProgressIndicator()));
+    if (_loading) {
+      return const Scaffold(
+        body: Center(child: CircularProgressIndicator()),
+      );
     }
-    // لا نمرر onAuthChange لأن SignInPage لا يعرّفه عندك
+
     return app.isSignedIn ? HomePage(app: app) : SignInPage(app: app);
   }
 }
@@ -78,81 +142,195 @@ class HomePage extends StatefulWidget {
 }
 
 class _HomePageState extends State<HomePage> {
-  int index = 0;
+  int _index = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    widget.app.addListener(_onAppChange);
+  }
+
+  @override
+  void dispose() {
+    widget.app.removeListener(_onAppChange);
+    super.dispose();
+  }
+
+  void _onAppChange() {
+    if (mounted) setState(() {});
+  }
 
   @override
   Widget build(BuildContext context) {
     final app = widget.app;
-    final onSurface = Theme.of(context).colorScheme.onSurface;
 
-    final pages = <Widget>[
+    // ✅ New order: Leaderboards first
+    final pages = [
+      LeaderboardHubPage(app: app),
       GamesPage(app: app),
-      LeaderboardPage(app: app),
       TimelinePage(app: app),
-      ProfilePage(app: app),
-      SponsorPage(app: app), // ✅ NEW tab content
+      LeaderboardHubPage(app: app, initialTab: 1), // الراعي جنب شسالفه؟
+      ProfilePage(app: app), // الملف آخر أيقونة (يمين)
     ];
 
     return Scaffold(
-      appBar: AppBar(
-        title: Text('أهلًا ${app.displayName ?? app.name ?? ""}'),
-        actions: [
-          IconButton(
-            tooltip: 'خروج',
-            icon: const Icon(Icons.logout),
-            onPressed: () async {
-              await app.clearAuth();
-              if (!mounted) return;
-              // بعد تسجيل الخروج نرجّع لـ AuthGate
-              Navigator.pushAndRemoveUntil(
-                context,
-                MaterialPageRoute(builder: (_) => const AuthGate()),
-                    (_) => false,
-              );
-            },
+      body: Container(
+        decoration: const BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [
+              Color(0xFF34677A), // lighter top
+              Color(0xFF232E4A), // darker bottom
+            ],
+          ),
+        ),
+        child: SafeArea(
+          child: Column(
+            children: [
+              const SizedBox(height: 8),
+              Text(
+                '${app.tr(ar: 'أهلاً', en: 'Welcome')} ${app.displayName ?? app.name ?? ''}',
+                style: const TextStyle(
+                  fontSize: 20,
+                  fontWeight: FontWeight.w900,
+                  color: Colors.white,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                child: _TopProfileCard(app: app),
+              ),
+              const SizedBox(height: 12),
+              Expanded(
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 8),
+                  child: pages[_index],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+
+      // ✅ Bottom Nav updated labels/icons order
+      bottomNavigationBar: NavigationBar(
+        selectedIndex: _index,
+        onDestinationSelected: (i) => setState(() => _index = i),
+        destinations: [
+          NavigationDestination(
+            icon: const Icon(Icons.emoji_events_outlined),
+            selectedIcon: const Icon(Icons.emoji_events),
+            label: app.tr(ar: 'المراتب', en: 'Leaders'),
+          ),
+          NavigationDestination(
+            icon: const Icon(Icons.sports_esports_outlined),
+            selectedIcon: const Icon(Icons.sports_esports),
+            label: app.tr(ar: 'الألعاب', en: 'Games'),
+          ),
+          NavigationDestination(
+            icon: const Icon(Icons.help_outline),
+            selectedIcon: const Icon(Icons.help),
+            label: app.tr(ar: 'شسالفة؟', en: 'Timeline'),
+          ),
+          NavigationDestination(
+            icon: const Icon(Icons.tv_outlined),
+            selectedIcon: const Icon(Icons.tv),
+            label: app.tr(ar: 'السبونسر', en: 'Sponsor'),
+          ),
+          NavigationDestination(
+            icon: const Icon(Icons.person_outline),
+            selectedIcon: const Icon(Icons.person),
+            label: app.tr(ar: 'ملفي', en: 'Profile'),
           ),
         ],
       ),
-      body: ListView(
-        padding: const EdgeInsets.all(16),
+    );
+  }
+}
+
+/// top profile card
+class _TopProfileCard extends StatelessWidget {
+  final AppState app;
+  const _TopProfileCard({required this.app});
+
+  @override
+  Widget build(BuildContext context) {
+    final pearls = app.creditPoints ?? 0; // (or app.pearls if you renamed)
+    final name = app.displayName ?? app.name ?? '—';
+    final email = app.email ?? app.phone ?? '';
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+      decoration: BoxDecoration(
+        color: const Color(0xFF172133).withOpacity(0.96),
+        borderRadius: BorderRadius.circular(24),
+      ),
+      child: Row(
         children: [
-          Card(
-            child: ListTile(
-              leading: const Icon(Icons.person, size: 28),
-              title: Text(
-                app.displayName ?? app.name ?? '—',
-                style: const TextStyle(fontWeight: FontWeight.w900),
-              ),
-              subtitle: Text(
-                app.email ?? app.phone ?? '—',
-                style: TextStyle(color: onSurface.withOpacity(0.7)),
-              ),
-              trailing: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                crossAxisAlignment: CrossAxisAlignment.end,
-                children: [
-                  Text('الرصيد: ${app.creditPoints ?? 0}'),
-                  Text('النقاط: ${app.permanentScore ?? 0}'),
-                ],
+          CircleAvatar(
+            radius: 22,
+            backgroundColor: const Color(0xFF273347),
+            child: Text(
+              name.isNotEmpty ? name.characters.first : '؟',
+              style: const TextStyle(
+                fontWeight: FontWeight.w900,
+                fontSize: 18,
               ),
             ),
           ),
-          const SizedBox(height: 12),
-          SizedBox(
-            height: MediaQuery.of(context).size.height * 0.75,
-            child: pages[index],
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  name,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 16,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+                if (email.isNotEmpty) ...[
+                  const SizedBox(height: 2),
+                  Text(
+                    email,
+                    style: TextStyle(
+                      color: Colors.white.withOpacity(0.65),
+                      fontSize: 12,
+                    ),
+                  ),
+                ],
+              ],
+            ),
           ),
-        ],
-      ),
-      bottomNavigationBar: NavigationBar(
-        selectedIndex: index,
-        onDestinationSelected: (i) => setState(() => index = i),
-        destinations: const [
-          NavigationDestination(icon: Icon(Icons.videogame_asset), label: 'الألعاب'),
-          NavigationDestination(icon: Icon(Icons.emoji_events), label: 'المراتب'),
-          NavigationDestination(icon: Icon(Icons.timeline), label: 'شسالفة؟'),
-          NavigationDestination(icon: Icon(Icons.person), label: 'ملفي'),
-          NavigationDestination(icon: Icon(Icons.card_membership), label: 'سبونسر'), // ✅ NEW
+          const SizedBox(width: 12),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+            decoration: BoxDecoration(
+              color: const Color(0xFF232E4A),
+              borderRadius: BorderRadius.circular(20),
+            ),
+            child: Row(
+              children: [
+                Image.asset(
+                  'lib/assets/pearl.png',
+                  width: 18,
+                  height: 18,
+                ),
+                const SizedBox(width: 4),
+                Text(
+                  '$pearls',
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+              ],
+            ),
+          ),
         ],
       ),
     );
