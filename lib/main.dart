@@ -29,7 +29,7 @@ class InzeliApp extends StatelessWidget {
           secondary: const Color(0xFF5E9EB4), // أزرق فاتح للأيقونات
           surface: const Color(0xFF1C273B),
           onSurface: Colors.white,
-          outline: Colors.white.withOpacity(0.12),
+          outline: Colors.white.withValues(alpha: 0.12),
         ),
         scaffoldBackgroundColor: const Color(0xFF223448),
         textButtonTheme: TextButtonThemeData(
@@ -47,7 +47,7 @@ class InzeliApp extends StatelessWidget {
           style: ButtonStyle(
             foregroundColor: const WidgetStatePropertyAll(Color(0xFFE49A2C)),
             side: WidgetStatePropertyAll(
-              BorderSide(color: Colors.white.withOpacity(0.35)),
+              BorderSide(color: Colors.white.withValues(alpha: 0.35)),
             ),
             textStyle: const WidgetStatePropertyAll(
               TextStyle(
@@ -166,10 +166,10 @@ class _HomePageState extends State<HomePage> {
 
     // ✅ New order: Leaderboards first
     final pages = [
-      LeaderboardHubPage(app: app),
+      LeaderboardHubPage(key: const ValueKey('lb-regular'), app: app),
       GamesPage(app: app),
       TimelinePage(app: app),
-      LeaderboardHubPage(app: app, initialTab: 1), // الراعي جنب شسالفه؟
+      LeaderboardHubPage(key: const ValueKey('lb-sponsor'), app: app, initialTab: 1), // الراعي جنب شسالفه؟
       ProfilePage(app: app), // الملف آخر أيقونة (يمين)
     ];
 
@@ -190,7 +190,7 @@ class _HomePageState extends State<HomePage> {
             children: [
               const SizedBox(height: 8),
               Text(
-                '${app.tr(ar: 'أهلاً', en: 'Welcome')} ${app.displayName ?? app.name ?? ''}',
+                '',
                 style: const TextStyle(
                   fontSize: 20,
                   fontWeight: FontWeight.w900,
@@ -237,7 +237,7 @@ class _HomePageState extends State<HomePage> {
           NavigationDestination(
             icon: const Icon(Icons.tv_outlined),
             selectedIcon: const Icon(Icons.tv),
-            label: app.tr(ar: 'السبونسر', en: 'Sponsor'),
+            label: app.tr(ar: 'سبونسرات', en: 'Sponsors'),
           ),
           NavigationDestination(
             icon: const Icon(Icons.person_outline),
@@ -264,7 +264,7 @@ class _TopProfileCard extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
       decoration: BoxDecoration(
-        color: const Color(0xFF172133).withOpacity(0.96),
+        color: const Color(0xFF172133).withValues(alpha: 0.96),
         borderRadius: BorderRadius.circular(24),
       ),
       child: Row(
@@ -298,7 +298,7 @@ class _TopProfileCard extends StatelessWidget {
                   Text(
                     email,
                     style: TextStyle(
-                      color: Colors.white.withOpacity(0.65),
+                      color: Colors.white.withValues(alpha: 0.65),
                       fontSize: 12,
                     ),
                   ),

@@ -8,6 +8,7 @@ class PrimaryPillButton extends StatelessWidget {
   final IconData? icon;
   final EdgeInsetsGeometry? padding;
   final bool loading;
+  final double? maxWidth;
 
   const PrimaryPillButton({
     super.key,
@@ -16,6 +17,7 @@ class PrimaryPillButton extends StatelessWidget {
     this.icon,
     this.padding,
     this.loading = false,
+    this.maxWidth,
   });
 
   static const Color _accent = Color(0xFFF1A949);
@@ -58,7 +60,10 @@ class PrimaryPillButton extends StatelessWidget {
 
     return Center(
       child: ConstrainedBox(
-        constraints: const BoxConstraints(minHeight: 60, maxWidth: 360),
+        constraints: BoxConstraints(
+          minHeight: 60,
+          maxWidth: maxWidth ?? 360,
+        ),
         child: DecoratedBox(
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(18),
@@ -73,7 +78,7 @@ class PrimaryPillButton extends StatelessWidget {
             ),
             boxShadow: [
               BoxShadow(
-                color: Colors.black.withOpacity(0.12),
+                color: Colors.black.withValues(alpha: 0.12),
                 blurRadius: 14,
                 offset: const Offset(0, 6),
               ),

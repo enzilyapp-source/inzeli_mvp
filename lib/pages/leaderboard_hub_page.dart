@@ -3,11 +3,12 @@ import 'package:flutter/material.dart';
 import '../state.dart';
 import '../api_leaderboard.dart';
 import '../api_sponsor.dart';
+import '../api_dewanyah.dart';
+import '../api_user.dart';
 import 'sponsor_page.dart';
 import 'games_page.dart';
 import 'player_profile_page.dart';
-import 'owner_dashboard_page.dart';
-import 'sponsor_game_page.dart';
+import 'dewanyah_list_page.dart';
 
 class LeaderboardHubPage extends StatefulWidget {
   final AppState app;
@@ -30,6 +31,7 @@ class _LeaderboardHubPageState extends State<LeaderboardHubPage> {
   final PageController _regularPager = PageController();
   final PageController _sponsorPager = PageController();
   final PageController _dewPager = PageController();
+  bool _tutorialShown = false;
 
   int _regularPage = 0;
   int _sponsorPage = 0;
@@ -43,8 +45,10 @@ class _LeaderboardHubPageState extends State<LeaderboardHubPage> {
 
   late List<Map<String, dynamic>> _dewanyahSpaces;
   bool _loadingSponsors = false;
+  bool _loadingDew = false;
   bool _loadingGames = false;
   String? _sponsorError;
+  String? _dewError;
   List<Map<String, dynamic>> _sponsors = const [];
   List<Map<String, dynamic>> _sponsorGames = const [];
 
@@ -73,6 +77,8 @@ class _LeaderboardHubPageState extends State<LeaderboardHubPage> {
     tab = widget.initialTab.clamp(0, 2);
     _dewanyahSpaces = [..._seedDewanyahs(), ..._ownedAsSpaces()];
     _loadSponsors();
+    _loadDewanyahs();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _maybeShowTutorial());
   }
 
   @override
@@ -155,6 +161,113 @@ class _LeaderboardHubPageState extends State<LeaderboardHubPage> {
     }
   }
 
+  Future<void> _loadDewanyahs() async {
+    setState(() {
+      _loadingDew = true;
+      _dewError = null;
+    });
+    try {
+      final list = await ApiDewanyah.listAll();
+      final mapped = list.map((d) {
+        final games = (d['games'] as List?) ?? const [];
+        final gid = games.isNotEmpty
+            ? (games.first is Map ? (games.first['gameId'] ?? games.first['id']) : games.first).toString()
+            : (d['gameId'] ?? '').toString();
+        return {
+          'id': d['id']?.toString(),
+          'name': d['name'],
+          'owner': d['ownerName'] ?? d['owner'] ?? '',
+          'ownerUserId': d['ownerUserId'],
+          'gameId': gid,
+          'games': games,
+          'status': d['status'] ?? 'active',
+          'players': const <Map<String, dynamic>>[],
+          'prizeAmount': d['prizeAmount'] ?? 50,
+        };
+      }).toList();
+
+      setState(() {
+        _dewanyahSpaces = mapped.isNotEmpty ? mapped : _seedDewanyahs();
+        _dewPage = 0;
+        if (_dewPager.hasClients) _dewPager.jumpToPage(0);
+      });
+    } catch (e) {
+      setState(() => _dewError = e.toString());
+    } finally {
+      if (mounted) setState(() => _loadingDew = false);
+    }
+  }
+
+  Future<void> _maybeShowTutorial() async {
+    if (_tutorialShown || widget.app.tutorialSeen == true) return;
+    _tutorialShown = true;
+    if (!mounted) return;
+    await showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(18))),
+      builder: (_) => Directionality(
+        textDirection: TextDirection.rtl,
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text('جولة سريعة', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 18)),
+              const SizedBox(height: 10),
+              _tutorialRow('١) اختر اللعبة', 'من الشريط العلوي: العاب إنزلي / سبونسرات / دواوين.'),
+              const SizedBox(height: 6),
+              _tutorialRow('٢) اضغط انزلي وبلّش التحدي', 'يُنفتح روم، وانتظر لاعبين ثم شغّل العدّاد.'),
+              const SizedBox(height: 6),
+              _tutorialRow('٣) النتيجة بعد انتهاء العدّاد', 'إذا صفّر العداد احسم النتيجة واختر الفائز. اللآلئ تُخصم من الخاسرين فقط.'),
+              const SizedBox(height: 6),
+              _tutorialRow('٤) ادخل شسالفة وشوف شسالفة!', 'تابع الخط الزمني والستريك وآخر النتائج.'),
+              const SizedBox(height: 10),
+              _tutorialRow('🏆 المراتب', 'شوف وين واصل كل لاعب.'),
+              _tutorialRow('🎮 الألعاب', 'الروم والعدّاد والحسم.'),
+              _tutorialRow('❓ شسالفة؟', 'الخطة الزمنية للتحديثات.'),
+              _tutorialRow('📺 سبونسرات', 'لآلئ الرعاة لكل لعبة.'),
+              _tutorialRow('👤 ملفي', 'بياناتك وإعداداتك.'),
+              const SizedBox(height: 14),
+              SizedBox(
+                width: double.infinity,
+                child: FilledButton(
+                  onPressed: () {
+                    widget.app.markTutorialSeen();
+                    Navigator.pop(context);
+                  },
+                  child: const Text('تم'),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _tutorialRow(String title, String body) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Icon(Icons.arrow_back_ios_new, size: 16),
+        const SizedBox(width: 8),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(title, style: const TextStyle(fontWeight: FontWeight.w800)),
+              const SizedBox(height: 2),
+              Text(body, style: const TextStyle(color: Colors.white70)),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
   Future<void> _selectSponsor(String code, String name) async {
     setState(() {
       _sponsorCode = code;
@@ -206,26 +319,58 @@ class _LeaderboardHubPageState extends State<LeaderboardHubPage> {
         {"displayName": "Futun", "pearls": basePearls - 3, "streak": 0},
       ];
 
-  void _msg(String text) => ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(text)));
-
-  void _openStart() {
-    if (tab == 0) {
-      Navigator.push(context, MaterialPageRoute(builder: (_) => GamesPage(app: widget.app)));
-      return;
-    }
-    _showApplySheet();
+  void _msg(String text) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(text)));
   }
 
-  void _openPlayerProfile() {
+  Future<void> _openPlayerProfile() async {
     final name = _playerSearchCtrl.text.trim();
     if (name.isEmpty) {
       _msg('اكتب اسم اللاعب للبحث');
       return;
     }
-    Navigator.push(
-      context,
-      MaterialPageRoute(builder: (_) => PlayerProfilePage(app: widget.app, playerName: name)),
-    );
+    try {
+      _msg('جارِ البحث ...');
+      final results = await searchUsers(name, token: widget.app.token);
+      if (results.isEmpty) {
+      _msg('لم يتم العثور على اللاعب');
+      return;
+    }
+      Map<String, dynamic> pickExact() {
+        String norm(String? s) => (s ?? '').trim().toLowerCase();
+        for (final r in results) {
+          if (norm(r['displayName']) == norm(name) || norm(r['name']) == norm(name)) {
+            return r;
+          }
+        }
+        return results.first;
+      }
+
+      final user = pickExact();
+      final display = (user['displayName'] ?? user['name'] ?? name).toString();
+      final profileKey = display;
+      widget.app.upsertUserProfile(profileKey, {
+        'id': user['id'] ?? user['userId'],
+        'publicId': user['publicId'],
+        'email': user['email'],
+        'phone': user['phone'],
+        'displayName': display,
+      });
+
+      final uid = (user['id'] ?? user['userId'])?.toString();
+      if (uid != null && uid.isNotEmpty) {
+        final stats = await getUserStats(uid, token: widget.app.token, gameId: widget.app.selectedGame);
+        if (stats != null) {
+          widget.app.upsertUserStats(profileKey, stats);
+        }
+      }
+
+      if (!mounted) return;
+      await _showSearchResultsSheet(results);
+    } catch (_) {
+      _msg('تعذر إحضار بيانات اللاعب، حاول مرة أخرى');
+    }
   }
 
   VoidCallback _ctaActionForTab() {
@@ -235,17 +380,24 @@ class _LeaderboardHubPageState extends State<LeaderboardHubPage> {
     if (tab == 1) {
       return _openSponsorPage;
     }
-    return _showApplySheet;
+    return _openDewanyahList;
   }
 
   String _ctaLabelForTab() {
-    if (tab == 0) return widget.app.tr(ar: 'انزلي', en: 'Start');
-    if (tab == 1) return widget.app.tr(ar: 'انزلي سبونسر', en: 'Start Sponsor');
-    return widget.app.tr(ar: 'انزلي ديوانية', en: 'Start Dewanyah');
+    if (tab == 0) return widget.app.tr(ar: 'انــزلـي', en: 'Start');
+    if (tab == 1) return widget.app.tr(ar: 'سبونسرات', en: 'Sponsors');
+    return widget.app.tr(ar: 'دواوين', en: 'Dewanyahs');
   }
 
   void _openSponsorPage() {
     Navigator.push(context, MaterialPageRoute(builder: (_) => SponsorPage(app: widget.app)));
+  }
+
+  void _openDewanyahList() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => DewanyahListPage(app: widget.app)),
+    );
   }
 
   Future<void> _submitDewanyahRequest({bool closeSheet = false}) async {
@@ -282,85 +434,34 @@ class _LeaderboardHubPageState extends State<LeaderboardHubPage> {
     if (closeSheet && mounted) Navigator.pop(context);
   }
 
-  void _showApplySheet() {
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      builder: (ctx) => Padding(
-        padding: EdgeInsets.only(
-          bottom: MediaQuery.of(ctx).viewInsets.bottom + 16,
-          top: 16,
-          left: 16,
-          right: 16,
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            const Text('طلب فتح ديوانية', style: TextStyle(fontWeight: FontWeight.w900)),
-            const SizedBox(height: 10),
-            _buildApplyFields(compact: true),
-            const SizedBox(height: 12),
-            FilledButton.icon(
-              onPressed: () => _submitDewanyahRequest(closeSheet: true),
-              icon: const Icon(Icons.send),
-              label: const Text('إرسال الطلب'),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Future<void> _openSponsorGameScreen() async {
-    final code = _sponsorCode;
-    if (code == null || code.isEmpty) {
-      _msg('اختَر سبونسر أولاً');
-      return;
+  List<_BoardSpec> _regularBoards(AppState app) {
+    final games = <String>{};
+    for (final list in app.games.values) {
+      games.addAll(list);
     }
-    final gameId = _selectedGameId ??
-        (_sponsorGames.isNotEmpty ? (_sponsorGames.first['gameId'] ?? '').toString() : null);
-    if (gameId == null || gameId.isEmpty) {
-      _msg('اختَر لعبة السبونسر أولاً');
-      return;
-    }
+    if (games.isEmpty) return const [];
 
-    await Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (_) => SponsorGameScreen(
-          app: widget.app,
-          sponsorCode: code,
-          initialGameId: gameId,
-        ),
-      ),
-    );
+    return games.map((g) {
+      return _BoardSpec(
+        title: 'Top Players • ${app.gameLabel(g)}',
+        gameId: g,
+        prize: null,
+        showSponsorPearls: false,
+        loader: () async {
+          final rows = await ApiLeaderboard.globalTop(token: app.token, gameId: g);
+          if (rows.isEmpty) return _mockBoard(basePearls: 5);
+          return rows
+              .map((r) => {
+                    'displayName': (r['displayName'] ?? r['name'] ?? '').toString(),
+                    'pearls': (r['pearls'] ?? r['permanentScore'] ?? 0),
+                    'streak': 0,
+                  })
+              .toList();
+        },
+        fallback: _mockBoard(basePearls: 5),
+      );
+    }).toList();
   }
-
-  List<_BoardSpec> _regularBoards(AppState app) => [
-        _BoardSpec(
-          title: 'Top Players • بلوت',
-          gameId: 'بلوت',
-          prize: 300,
-          showSponsorPearls: false,
-          loader: () => ApiLeaderboard.globalTop(token: app.token),
-          fallback: _mockBoard(),
-        ),
-        _BoardSpec(
-          title: 'Top Players • كونكان',
-          gameId: 'كونكان',
-          prize: 200,
-          showSponsorPearls: false,
-          fallback: _mockBoard(basePearls: 5),
-        ),
-        _BoardSpec(
-          title: 'Top Players • كوت',
-          gameId: 'كوت',
-          prize: 180,
-          showSponsorPearls: false,
-          fallback: _mockBoard(basePearls: 5),
-        ),
-      ];
 
   List<_BoardSpec> _sponsorBoards(AppState app) {
     if (_sponsorCode == null || _sponsorGames.isEmpty) return const [];
@@ -385,22 +486,59 @@ class _LeaderboardHubPageState extends State<LeaderboardHubPage> {
   }
 
   List<_BoardSpec> _dewBoards() {
-    return _dewanyahSpaces.map((d) {
-      return _BoardSpec(
-        title: d['name']?.toString() ?? 'ديوانية',
-        gameId: d['gameId']?.toString() ?? '—',
-        prize: d['prizeAmount'] is int ? d['prizeAmount'] as int : null,
-        showSponsorPearls: false,
-        fallback: (d['players'] as List?)?.cast<Map<String, dynamic>>() ?? _mockBoard(basePearls: 5),
-        badge: d['status']?.toString(),
-        owner: d['owner']?.toString(),
-        fivePearlsNote: true,
-      );
-    }).toList();
+    final specs = <_BoardSpec>[];
+    for (final d in _dewanyahSpaces) {
+      final dewId = d['id']?.toString();
+      final games = ((d['games'] as List?) ?? const [])
+          .map((g) => g is Map ? (g['gameId']?.toString() ?? '') : g.toString())
+          .where((g) => g.isNotEmpty)
+          .toList();
+      final fallbackGame = (d['gameId'] ?? '').toString();
+      final gameIds = games.isNotEmpty ? games : [fallbackGame];
+
+      for (final gid in gameIds) {
+        specs.add(
+          _BoardSpec(
+            title: '${d['name']?.toString() ?? 'ديوانية'} • $gid',
+            gameId: gid.isNotEmpty ? gid : '—',
+            prize: d['prizeAmount'] is int ? d['prizeAmount'] as int : null,
+            showSponsorPearls: false,
+            fallback: (d['players'] as List?)?.cast<Map<String, dynamic>>() ?? _mockBoard(basePearls: 5),
+            badge: d['status']?.toString(),
+            owner: d['owner']?.toString(),
+            fivePearlsNote: true,
+            loader: dewId == null ? null : () => ApiDewanyah.leaderboard(dewanyahId: dewId),
+          ),
+        );
+      }
+    }
+    return specs;
+  }
+
+  void _openBoardDetail(List<_BoardSpec> specs, int index) {
+    if (specs.isEmpty) return;
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => _BoardDetailPage(
+          specs: specs,
+          initialIndex: index.clamp(0, specs.length - 1),
+        ),
+      ),
+    );
   }
 
   Widget _buildApplyFields({bool compact = false}) {
     final spacing = compact ? 8.0 : 12.0;
+    final gameOptions = <String>[];
+    for (final cat in widget.app.categories) {
+      for (final g in widget.app.games[cat] ?? const <String>[]) {
+        if (!gameOptions.contains(g)) gameOptions.add(g);
+      }
+    }
+    final currentGame =
+        gameOptions.contains(_dewGame) ? _dewGame : (gameOptions.isNotEmpty ? gameOptions.first : null);
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -410,14 +548,14 @@ class _LeaderboardHubPageState extends State<LeaderboardHubPage> {
         ),
         SizedBox(height: spacing),
         DropdownButtonFormField<String>(
-          initialValue: _dewGame,
+          initialValue: currentGame,
           decoration: const InputDecoration(labelText: 'اللعبة الأساسية'),
-          items: const [
-            DropdownMenuItem(value: 'بلوت', child: Text('بلوت')),
-            DropdownMenuItem(value: 'كونكان', child: Text('كونكان')),
-            DropdownMenuItem(value: 'كوت', child: Text('كوت')),
-            DropdownMenuItem(value: 'دومينو', child: Text('دومينو')),
-          ],
+          items: gameOptions
+              .map((g) => DropdownMenuItem(
+                    value: g,
+                    child: Text(widget.app.gameLabel(g)),
+                  ))
+              .toList(),
           onChanged: (v) => setState(() => _dewGame = v ?? _dewGame),
         ),
         SizedBox(height: spacing),
@@ -449,16 +587,16 @@ class _LeaderboardHubPageState extends State<LeaderboardHubPage> {
       return ListView(
         padding: const EdgeInsets.all(12),
         children: [
-          Row(
-            children: [
-              Expanded(
-                child: Text(
-                  'الرعاة',
-                  style: TextStyle(
-                    fontWeight: FontWeight.w900,
-                    color: onSurface,
-                    fontSize: 20,
-                  ),
+        Row(
+          children: [
+            Expanded(
+              child: Text(
+                'سبونسر',
+                style: TextStyle(
+                  fontWeight: FontWeight.w900,
+                  color: onSurface,
+                  fontSize: 20,
+                ),
                 ),
               ),
               TextButton.icon(
@@ -470,13 +608,11 @@ class _LeaderboardHubPageState extends State<LeaderboardHubPage> {
           ),
           const SizedBox(height: 10),
           _buildSponsorSelectorCard(),
-          const SizedBox(height: 12),
-          _SectionTitle('لوحة السبونسر', icon: Icons.local_fire_department),
-          const SizedBox(height: 8),
-          _SponsorPlayCtas(onPlay: _openSponsorGameScreen),
           const SizedBox(height: 10),
+          _SectionTitle('لوحة السبونسر', icon: Icons.local_fire_department),
+          const SizedBox(height: 6),
           _buildSponsorLeaderboards(sponsorSpecs),
-          const SizedBox(height: 14),
+          const SizedBox(height: 10),
           _PrimaryCtaButton(
             label: _ctaLabelForTab(),
             onPressed: _ctaActionForTab(),
@@ -488,18 +624,6 @@ class _LeaderboardHubPageState extends State<LeaderboardHubPage> {
     return ListView(
       padding: const EdgeInsets.all(12),
       children: [
-        Align(
-          alignment: Alignment.centerRight,
-          child: OutlinedButton.icon(
-            icon: const Icon(Icons.dashboard_customize_outlined),
-            label: const Text('لوحة المالك'),
-            onPressed: () => Navigator.push(
-              context,
-              MaterialPageRoute(builder: (_) => OwnerDashboardPage(app: app)),
-            ),
-          ),
-        ),
-        const SizedBox(height: 8),
         _PlayerSearchBar(
           controller: _playerSearchCtrl,
           onSearch: _openPlayerProfile,
@@ -511,7 +635,7 @@ class _LeaderboardHubPageState extends State<LeaderboardHubPage> {
         Container(
           padding: const EdgeInsets.all(6),
           decoration: BoxDecoration(
-            color: const Color(0xFF172133).withOpacity(0.7),
+            color: const Color(0xFF172133).withValues(alpha: 0.7),
             borderRadius: BorderRadius.circular(18),
           ),
           child: Row(
@@ -527,7 +651,7 @@ class _LeaderboardHubPageState extends State<LeaderboardHubPage> {
               Expanded(
                 child: _TabChip(
                   selected: tab == 1,
-                  text: widget.app.tr(ar: 'انزلي سبونسر', en: 'Start Sponsor'),
+                  text: widget.app.tr(ar: 'سبونسرات', en: 'Sponsors'),
                   onTap: () => setState(() => tab = 1),
                 ),
               ),
@@ -535,7 +659,7 @@ class _LeaderboardHubPageState extends State<LeaderboardHubPage> {
               Expanded(
                 child: _TabChip(
                   selected: tab == 2,
-                  text: widget.app.tr(ar: 'انزلي ديوانية', en: 'Start Dewanyah'),
+                  text: widget.app.tr(ar: 'دواوين', en: 'Dewanyahs'),
                   onTap: () => setState(() => tab = 2),
                 ),
               ),
@@ -553,6 +677,7 @@ class _LeaderboardHubPageState extends State<LeaderboardHubPage> {
             current: _regularPage,
             specs: regularSpecs,
             onPageChanged: (i) => setState(() => _regularPage = i),
+            onOpen: (i) => _openBoardDetail(regularSpecs, i),
           ),
         ] else if (tab == 1) ...[
           _buildSponsorSelectorCard(),
@@ -560,15 +685,13 @@ class _LeaderboardHubPageState extends State<LeaderboardHubPage> {
           _SectionTitle('Top Players (${_sponsorName ?? _sponsorCode ?? 'السبونسر'})',
               icon: Icons.local_fire_department),
           const SizedBox(height: 8),
-          _SponsorPlayCtas(onPlay: _openSponsorGameScreen),
-          const SizedBox(height: 10),
           _buildSponsorLeaderboards(sponsorSpecs),
         ] else if (tab == 1) ...[
           Row(
             children: [
               Expanded(
                 child: Text(
-                  'الرعاة',
+                  'سبونسر',
                   style: TextStyle(
                     fontWeight: FontWeight.w900,
                     color: onSurface,
@@ -585,25 +708,63 @@ class _LeaderboardHubPageState extends State<LeaderboardHubPage> {
           ),
           const SizedBox(height: 10),
           _buildSponsorSelectorCard(),
-          const SizedBox(height: 12),
-          _SectionTitle('لوحة السبونسر', icon: Icons.local_fire_department),
-          const SizedBox(height: 8),
-          _SponsorPlayCtas(onPlay: _openSponsorGameScreen),
           const SizedBox(height: 10),
+          _SectionTitle('لوحة السبونسر', icon: Icons.local_fire_department),
+          const SizedBox(height: 6),
           _buildSponsorLeaderboards(sponsorSpecs),
         ] else ...[
-          _DewanyahRulesCard(),
           const SizedBox(height: 10),
+          Row(
+            children: [
+              Expanded(
+                child: Text('الدواوين', style: TextStyle(fontWeight: FontWeight.w900, color: onSurface)),
+              ),
+              TextButton.icon(
+                onPressed: _loadDewanyahs,
+                icon: const Icon(Icons.refresh),
+                label: const Text('تحديث'),
+              ),
+            ],
+          ),
+          if (_loadingDew)
+            const Card(
+              child: Padding(
+                padding: EdgeInsets.all(12),
+                child: Center(child: CircularProgressIndicator()),
+              ),
+            )
+          else if (_dewError != null)
+            Card(
+              child: Padding(
+                padding: const EdgeInsets.all(12),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Text('تعذّر تحميل الدواوين', style: TextStyle(fontWeight: FontWeight.w900, color: onSurface)),
+                    const SizedBox(height: 6),
+                    Text(_dewError!, style: TextStyle(color: onSurface.withValues(alpha: 0.7))),
+                    const SizedBox(height: 8),
+                    FilledButton.icon(
+                      onPressed: _loadDewanyahs,
+                      icon: const Icon(Icons.refresh),
+                      label: const Text('إعادة المحاولة'),
+                    ),
+                  ],
+                ),
+              ),
+            ),
           _buildApplyCard(),
           const SizedBox(height: 12),
           _SectionTitle('لوحة الديوانيات', icon: Icons.groups_3),
           const SizedBox(height: 8),
-          _LeaderboardPager(
-            controller: _dewPager,
-            current: _dewPage,
-            specs: dewSpecs,
-            onPageChanged: (i) => setState(() => _dewPage = i),
-          ),
+        _LeaderboardPager(
+          controller: _dewPager,
+          current: _dewPage,
+          specs: dewSpecs,
+          onPageChanged: (i) => setState(() => _dewPage = i),
+          onOpen: (i) => _openBoardDetail(dewSpecs, i),
+          showDots: false,
+        ),
         ],
         const SizedBox(height: 14),
         _PrimaryCtaButton(
@@ -641,7 +802,7 @@ class _LeaderboardHubPageState extends State<LeaderboardHubPage> {
             children: [
               Text('تعذّر تحميل الرعاة', style: TextStyle(color: onSurface, fontWeight: FontWeight.w900)),
               const SizedBox(height: 6),
-              Text(_sponsorError!, style: TextStyle(color: onSurface.withOpacity(0.7))),
+              Text(_sponsorError!, style: TextStyle(color: onSurface.withValues(alpha: 0.7))),
               const SizedBox(height: 10),
               FilledButton.icon(
                 onPressed: _loadSponsors,
@@ -669,9 +830,6 @@ class _LeaderboardHubPageState extends State<LeaderboardHubPage> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Text('اختر سبونسر + لعبة', style: TextStyle(fontWeight: FontWeight.w900, color: onSurface)),
-            const SizedBox(height: 10),
-
             // sponsor chips
             Wrap(
               spacing: 8,
@@ -701,7 +859,7 @@ class _LeaderboardHubPageState extends State<LeaderboardHubPage> {
               if (currentGameName != null)
                 Text(
                   currentPrize != null ? 'اللعبة الحالية: $currentGameName — جائزة: $currentPrize' : 'اللعبة الحالية: $currentGameName',
-                  style: TextStyle(color: onSurface.withOpacity(0.8), fontWeight: FontWeight.w700),
+                  style: TextStyle(color: onSurface.withValues(alpha: 0.8), fontWeight: FontWeight.w700),
                 ),
               const SizedBox(height: 8),
               Wrap(
@@ -771,6 +929,8 @@ class _LeaderboardHubPageState extends State<LeaderboardHubPage> {
       current: safePage,
       specs: sponsorSpecs,
       onPageChanged: (i) => setState(() => _sponsorPage = i),
+      onOpen: (i) => _openBoardDetail(sponsorSpecs, i),
+      showDots: false,
     );
   }
 
@@ -787,8 +947,8 @@ class _LeaderboardHubPageState extends State<LeaderboardHubPage> {
                 const SizedBox(width: 8),
                 Expanded(
                   child: Text(
-                    'افتح ديوانية صغيرة لك ولرفاقك — نراجع الطلب ونتواصل معك للتفعيل',
-                    style: TextStyle(color: Colors.white.withOpacity(0.8)),
+                    'افتح ديوانية — نراجع الطلب ونتواصل معك للتفعيل',
+                    style: TextStyle(color: Colors.white.withValues(alpha: 0.8)),
                   ),
                 ),
               ],
@@ -803,12 +963,94 @@ class _LeaderboardHubPageState extends State<LeaderboardHubPage> {
             ),
             const SizedBox(height: 6),
             Text(
-              'كل لعبة في الديوانية تبدأ بـ 5 لآلئ — نرجع لك لنوضح القواعد ونفتح لك لوحة المراتب.',
-              style: TextStyle(color: Colors.white.withOpacity(0.7), fontSize: 12),
+              'نرجع لك لنوضح القواعد ونفتح لك لوحة المراتب.',
+              style: TextStyle(color: Colors.white.withValues(alpha: 0.7), fontSize: 12),
             ),
           ],
         ),
       ),
+    );
+  }
+}
+
+extension _UserResultCard on _LeaderboardHubPageState {
+  Future<void> _showSearchResultsSheet(List<Map<String, dynamic>> results) async {
+    final limited = results.take(6).toList();
+    final enriched = <Map<String, dynamic>>[];
+    for (final r in limited) {
+      final uid = (r['id'] ?? r['userId'])?.toString();
+      Map<String, dynamic>? stats;
+      if (uid != null && uid.isNotEmpty) {
+        stats = await getUserStats(uid, token: widget.app.token, gameId: widget.app.selectedGame);
+      }
+      enriched.add({
+        'displayName': (r['displayName'] ?? r['name'] ?? 'لاعب').toString(),
+        'email': r['email']?.toString(),
+        'avatarUrl': r['avatarUrl']?.toString(),
+        'id': uid,
+        'stats': stats,
+      });
+    }
+
+    if (!mounted) return;
+    await showModalBottomSheet(
+      context: context,
+      showDragHandle: true,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(18))),
+      builder: (_) => Padding(
+        padding: const EdgeInsets.all(12),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text('نتائج البحث', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 18)),
+            const SizedBox(height: 8),
+            ...enriched.map((u) {
+              final stats = u['stats'] as Map<String, dynamic>?;
+              final pearls = stats?['pearls'] ?? stats?['points'] ?? 0;
+              final totalGames = (stats?['wins'] ?? 0) + (stats?['losses'] ?? 0);
+              final streak = stats?['streak'] ?? 0;
+              final display = u['displayName']?.toString() ?? 'لاعب';
+              return Card(
+                child: ListTile(
+                  leading: u['avatarUrl'] != null && (u['avatarUrl'] as String).isNotEmpty
+                      ? CircleAvatar(backgroundImage: NetworkImage(u['avatarUrl']))
+                      : CircleAvatar(child: Text(display.characters.take(2).toString())),
+                  title: Text(display, style: const TextStyle(fontWeight: FontWeight.w800)),
+                  subtitle: Wrap(
+                    spacing: 8,
+                    runSpacing: 4,
+                    children: [
+                      _tag('لآلئ: $pearls'),
+                      _tag('مباريات: $totalGames'),
+                      if (streak is num && streak > 0) _tag('ستريك: $streak'),
+                    ],
+                  ),
+                  onTap: () {
+                    Navigator.pop(context);
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(builder: (_) => PlayerProfilePage(app: widget.app, playerName: display)),
+                    );
+                  },
+                ),
+              );
+            }),
+            if (enriched.isEmpty) const Text('لا توجد نتائج', style: TextStyle(color: Colors.black54)),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _tag(String text) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Text(text, style: const TextStyle(fontSize: 12)),
     );
   }
 }
@@ -842,11 +1084,15 @@ class _LeaderboardPager extends StatelessWidget {
   final int current;
   final List<_BoardSpec> specs;
   final ValueChanged<int> onPageChanged;
+  final ValueChanged<int>? onOpen;
+  final bool showDots;
   const _LeaderboardPager({
     required this.controller,
     required this.current,
     required this.specs,
     required this.onPageChanged,
+    this.onOpen,
+    this.showDots = true,
   });
 
   @override
@@ -869,12 +1115,15 @@ class _LeaderboardPager extends StatelessWidget {
             itemCount: specs.length,
             itemBuilder: (_, i) => Padding(
               padding: const EdgeInsets.symmetric(horizontal: 2),
-              child: _LeaderboardPanel(spec: specs[i]),
+              child: GestureDetector(
+                onTap: onOpen != null ? () => onOpen!(i) : null,
+                child: _LeaderboardPanel(spec: specs[i]),
+              ),
             ),
           ),
         ),
         const SizedBox(height: 12),
-        _Dots(count: specs.length, current: current),
+        if (showDots) _Dots(count: specs.length, current: current),
       ],
     );
   }
@@ -909,14 +1158,14 @@ class _LeaderboardPanel extends StatelessWidget {
                       Text(
                         'اللعبة الحالية: ${spec.gameId}',
                         style: TextStyle(
-                          color: Colors.white.withOpacity(0.6),
+                          color: Colors.white.withValues(alpha: 0.6),
                           fontSize: 12,
                         ),
                       ),
                       if (spec.owner != null)
                         Text(
                           'المالك: ${spec.owner}',
-                          style: TextStyle(color: Colors.white.withOpacity(0.6), fontSize: 12),
+                          style: TextStyle(color: Colors.white.withValues(alpha: 0.6), fontSize: 12),
                         ),
                     ],
                   ),
@@ -925,7 +1174,7 @@ class _LeaderboardPanel extends StatelessWidget {
                   Container(
                     padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                     decoration: BoxDecoration(
-                      color: Colors.white.withOpacity(0.08),
+                      color: Colors.white.withValues(alpha: 0.08),
                       borderRadius: BorderRadius.circular(14),
                     ),
                     child: Text(spec.badge!, style: const TextStyle(fontWeight: FontWeight.w700)),
@@ -935,9 +1184,9 @@ class _LeaderboardPanel extends StatelessWidget {
                   Container(
                     padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                     decoration: BoxDecoration(
-                      color: const Color(0xFF172133).withOpacity(0.85),
+                      color: const Color(0xFF172133).withValues(alpha: 0.85),
                       borderRadius: BorderRadius.circular(18),
-                      border: Border.all(color: Colors.white.withOpacity(0.12)),
+                      border: Border.all(color: Colors.white.withValues(alpha: 0.12)),
                     ),
                     child: Row(
                       mainAxisSize: MainAxisSize.min,
@@ -955,7 +1204,7 @@ class _LeaderboardPanel extends StatelessWidget {
                 padding: const EdgeInsets.only(top: 8.0),
                 child: Text(
                   'كل لاعب يبدأ بـ٥ لآلئ في هذه الديوانية. نفعّل الطلبات بعد المراجعة السريعة.',
-                  style: TextStyle(color: Colors.white.withOpacity(0.65), fontSize: 12),
+                  style: TextStyle(color: Colors.white.withValues(alpha: 0.65), fontSize: 12),
                 ),
               ),
             const SizedBox(height: 8),
@@ -989,7 +1238,7 @@ class _TabChip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final bg = selected ? const Color(0xFFE9F2FB) : Colors.transparent;
-    final border = selected ? Colors.transparent : Colors.white.withOpacity(0.25);
+    final border = selected ? Colors.transparent : Colors.white.withValues(alpha: 0.25);
     final textColor = selected ? const Color(0xFFE49A2C) : Colors.white;
     return InkWell(
       borderRadius: BorderRadius.circular(14),
@@ -1022,7 +1271,7 @@ class _SectionTitle extends StatelessWidget {
     final onSurface = Theme.of(context).colorScheme.onSurface;
     return Row(
       children: [
-        Icon(icon, color: onSurface.withOpacity(0.9)),
+        Icon(icon, color: onSurface.withValues(alpha: 0.9)),
         const SizedBox(width: 8),
         Text(
           title,
@@ -1054,14 +1303,43 @@ class _BoardCard extends StatelessWidget {
           final name = (it['displayName'] ?? it['name'] ?? '—').toString();
           final pearls = (it['pearls'] ?? 0);
           final streak = (it['streak'] ?? 0);
+          final isTop = i == 0;
 
           return ListTile(
-            leading: CircleAvatar(
-              backgroundColor: const Color(0xFF273347),
-              child: Text(
-                '${i + 1}',
-                style: const TextStyle(fontWeight: FontWeight.w900),
-              ),
+            leading: Stack(
+              clipBehavior: Clip.none,
+              children: [
+                CircleAvatar(
+                  backgroundColor: isTop ? const Color(0xFFFFC16B) : const Color(0xFF273347),
+                  child: Text(
+                    '${i + 1}',
+                    style: TextStyle(
+                      fontWeight: FontWeight.w900,
+                      color: isTop ? Colors.black : Colors.white,
+                    ),
+                  ),
+                ),
+                if (isTop)
+                  Positioned(
+                    top: -6,
+                    right: -10,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFFFA53A),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: const Text(
+                        'الأول',
+                        style: TextStyle(
+                          color: Colors.black,
+                          fontWeight: FontWeight.w800,
+                          fontSize: 10,
+                        ),
+                      ),
+                    ),
+                  ),
+              ],
             ),
             title: Row(
               children: [
@@ -1076,7 +1354,7 @@ class _BoardCard extends StatelessWidget {
               ],
             ),
             subtitle: showSponsorPearls
-                ? const Text('لآلئ السبونسر (لهاللعبة فقط)')
+                ? const Text('لآلئ السبونسر')
                 : const Text('اللآلئ العامة'),
             trailing: _PearlPill(value: pearls),
           );
@@ -1114,26 +1392,6 @@ class _PearlPill extends StatelessWidget {
   }
 }
 
-class _SponsorPlayCtas extends StatelessWidget {
-  final VoidCallback onPlay;
-  const _SponsorPlayCtas({required this.onPlay});
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      children: [
-        Expanded(
-          child: FilledButton.icon(
-            onPressed: onPlay,
-            icon: const Icon(Icons.sports_esports),
-            label: const Text('ابدأ / انضم مباراة السبونسر'),
-          ),
-        ),
-      ],
-    );
-  }
-}
-
 class _PrimaryCtaButton extends StatelessWidget {
   final String label;
   final VoidCallback onPressed;
@@ -1143,7 +1401,7 @@ class _PrimaryCtaButton extends StatelessWidget {
   Widget build(BuildContext context) {
     return Center(
       child: ConstrainedBox(
-        constraints: const BoxConstraints(minHeight: 60, maxWidth: 420),
+        constraints: const BoxConstraints(minHeight: 60, maxWidth: 260),
         child: DecoratedBox(
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(18),
@@ -1158,7 +1416,7 @@ class _PrimaryCtaButton extends StatelessWidget {
             ),
             boxShadow: [
               BoxShadow(
-                color: Colors.black.withOpacity(0.12),
+                color: Colors.black.withValues(alpha: 0.12),
                 blurRadius: 14,
                 offset: const Offset(0, 6),
               ),
@@ -1195,11 +1453,99 @@ class _Dots extends StatelessWidget {
           height: 8,
           margin: const EdgeInsets.symmetric(horizontal: 4),
           decoration: BoxDecoration(
-            color: Colors.white.withOpacity(active ? 0.9 : 0.4),
+            color: Colors.white.withValues(alpha: active ? 0.9 : 0.4),
             borderRadius: BorderRadius.circular(8),
           ),
         );
       }),
+    );
+  }
+}
+
+class _BoardDetailPage extends StatefulWidget {
+  final List<_BoardSpec> specs;
+  final int initialIndex;
+  const _BoardDetailPage({required this.specs, required this.initialIndex});
+
+  @override
+  State<_BoardDetailPage> createState() => _BoardDetailPageState();
+}
+
+class _BoardDetailPageState extends State<_BoardDetailPage> {
+  late PageController _ctrl;
+  late int _index;
+
+  @override
+  void initState() {
+    super.initState();
+    _index = widget.initialIndex;
+    _ctrl = PageController(initialPage: _index);
+  }
+
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final specs = widget.specs;
+    final currentSpec = specs[_index];
+
+    return Scaffold(
+      appBar: AppBar(
+        title: Text(currentSpec.title),
+      ),
+      body: Column(
+        children: [
+          if (currentSpec.prize != null)
+            Padding(
+              padding: const EdgeInsets.all(8.0),
+              child: Text('الجائزة: ${currentSpec.prize}', style: const TextStyle(fontWeight: FontWeight.w700)),
+            ),
+          Expanded(
+            child: PageView.builder(
+              controller: _ctrl,
+              itemCount: specs.length,
+              onPageChanged: (i) => setState(() => _index = i),
+              itemBuilder: (_, i) {
+                final spec = specs[i];
+                return Padding(
+                  padding: const EdgeInsets.all(12.0),
+                  child: FutureBuilder<List<Map<String, dynamic>>>(
+                    future: spec.loader?.call().catchError((_) => spec.fallback),
+                    builder: (context, snap) {
+                      if (snap.connectionState == ConnectionState.waiting && spec.loader != null) {
+                        return const Center(child: CircularProgressIndicator());
+                      }
+                      final list = snap.data ?? spec.fallback;
+                      return Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          Text(
+                            spec.title,
+                            style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 18),
+                          ),
+                          Text(
+                            'اللعبة: ${spec.gameId}',
+                            style: TextStyle(color: Colors.white.withValues(alpha: 0.7)),
+                          ),
+                          const SizedBox(height: 12),
+                          Expanded(child: _BoardCard(items: list, showSponsorPearls: spec.showSponsorPearls)),
+                        ],
+                      );
+                    },
+                  ),
+                );
+              },
+            ),
+          ),
+          const SizedBox(height: 8),
+          _Dots(count: specs.length, current: _index),
+          const SizedBox(height: 12),
+        ],
+      ),
     );
   }
 }
@@ -1219,25 +1565,12 @@ class _PlayerSearchBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (!expanded) {
-      return Card(
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-          child: Row(
-            children: [
-              IconButton.filledTonal(
-                onPressed: onToggle,
-                icon: const Icon(Icons.search),
-                tooltip: 'بحث اللاعب',
-              ),
-              const SizedBox(width: 8),
-              const Expanded(
-                child: Text(
-                  'بحث بالاسم وفتح ملف اللاعب',
-                  style: TextStyle(fontWeight: FontWeight.w700),
-                ),
-              ),
-            ],
-          ),
+      return Align(
+        alignment: Alignment.centerRight,
+        child: IconButton.filled(
+          onPressed: onToggle,
+          icon: const Icon(Icons.search),
+          tooltip: 'بحث اللاعب',
         ),
       );
     }
@@ -1277,36 +1610,4 @@ class _PlayerSearchBar extends StatelessWidget {
   }
 }
 
-class _DewanyahRulesCard extends StatelessWidget {
-  @override
-  Widget build(BuildContext context) {
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(12),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Icon(Icons.rule_folder_outlined),
-            const SizedBox(width: 10),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: const [
-                  Text(
-                    'قواعد الديوانية',
-                    style: TextStyle(fontWeight: FontWeight.w900),
-                  ),
-                  SizedBox(height: 4),
-                  Text(
-                    'الديوانية للمجتمع الصغير — نراجع الطلب، نفتح لك لوحة المراتب، وكل لعبة تبدأ بـ ٥ لآلئ. التزم بقواعد اللعب واحترام الجميع.',
-                    style: TextStyle(fontSize: 12),
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
+// تم إلغاء بطاقة القواعد استجابة لطلب إزالة النص

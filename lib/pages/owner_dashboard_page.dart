@@ -2,6 +2,15 @@
 import 'package:flutter/material.dart';
 import '../state.dart';
 
+String _hex(Color c) {
+  int channel(double v) => (v * 255.0).round().clamp(0, 255);
+  final a = channel(c.a).toRadixString(16).padLeft(2, '0');
+  final r = channel(c.r).toRadixString(16).padLeft(2, '0');
+  final g = channel(c.g).toRadixString(16).padLeft(2, '0');
+  final b = channel(c.b).toRadixString(16).padLeft(2, '0');
+  return '$a$r$g$b';
+}
+
 class OwnerDashboardPage extends StatefulWidget {
   final AppState app;
   const OwnerDashboardPage({super.key, required this.app});
@@ -43,8 +52,8 @@ class _OwnerDashboardPageState extends State<OwnerDashboardPage> {
       type: _type,
       sponsorCode: _type == 'sponsor' ? _sponsorCtrl.text.trim() : null,
       dewanyahName: _type == 'dewanyah' ? _dewNameCtrl.text.trim() : null,
-      primaryColor: _primary.value.toRadixString(16),
-      accentColor: _accent.value.toRadixString(16),
+      primaryColor: _hex(_primary),
+      accentColor: _hex(_accent),
       imageUrl: _imageCtrl.text.trim().isEmpty ? null : _imageCtrl.text.trim(),
     );
     _titleCtrl.clear();
@@ -245,7 +254,7 @@ class _BuildForm extends StatelessWidget {
               runSpacing: 8,
               children: swatches.map((c) => _ColorDot(
                 color: c,
-                selected: c.value == primary.value,
+                selected: c == primary,
                 onTap: () => onPrimaryChange(c),
               )).toList(),
             ),
@@ -257,7 +266,7 @@ class _BuildForm extends StatelessWidget {
               runSpacing: 8,
               children: swatches.map((c) => _ColorDot(
                 color: c,
-                selected: c.value == accent.value,
+                selected: c == accent,
                 onTap: () => onAccentChange(c),
               )).toList(),
             ),
@@ -368,7 +377,7 @@ class _BoardPreviewCard extends StatelessWidget {
                             errorBuilder: (_, __, ___) => const Icon(Icons.image_not_supported_outlined),
                           )
                         : Container(
-                            color: Colors.white.withOpacity(0.18),
+                            color: Colors.white.withValues(alpha: 0.18),
                             child: const Icon(Icons.image_outlined),
                           ),
                   ),
@@ -393,9 +402,9 @@ class _BoardPreviewCard extends StatelessWidget {
             const SizedBox(height: 8),
             Row(
               children: [
-                _ColorBadge(color: primary, label: '#${primary.value.toRadixString(16).padLeft(8, '0')}'),
+                _ColorBadge(color: primary, label: '#${_hex(primary)}'),
                 const SizedBox(width: 8),
-                _ColorBadge(color: accent, label: '#${accent.value.toRadixString(16).padLeft(8, '0')}'),
+                _ColorBadge(color: accent, label: '#${_hex(accent)}'),
                 const Spacer(),
                 if (owner.isNotEmpty)
                   Row(
@@ -411,7 +420,7 @@ class _BoardPreviewCard extends StatelessWidget {
             Container(
               padding: const EdgeInsets.all(10),
               decoration: BoxDecoration(
-                color: Colors.black.withOpacity(0.12),
+                color: Colors.black.withValues(alpha: 0.12),
                 borderRadius: BorderRadius.circular(12),
               ),
               child: Column(
@@ -440,7 +449,7 @@ class _ColorBadge extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
       decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.16),
+        color: Colors.white.withValues(alpha: 0.16),
         borderRadius: BorderRadius.circular(10),
         border: Border.all(color: Colors.white24),
       ),

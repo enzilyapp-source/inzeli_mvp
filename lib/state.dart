@@ -2,6 +2,8 @@
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'api_dewanyah.dart';
+import 'api_timeline.dart';
 
 /// ------------------------------
 /// AppState (single source of truth)
@@ -10,6 +12,7 @@ class AppState extends ChangeNotifier {
   // ---- Auth / user (from backend) ----
   String? token;
   String? userId;
+  String? publicId;
 
   String? displayName;
   String? email;
@@ -25,6 +28,11 @@ class AppState extends ChangeNotifier {
   // ---- Legacy / optional fields (some UI references them) ----
   String? name; // fallback name for older UI
   String? phone;
+  int? age;
+  String? avatarPath;
+  String? avatarBase64;
+  Map<String, Map<String, dynamic>> userStats = {};
+  Map<String, Map<String, dynamic>> userProfiles = {};
 
   // ---- App selections (used in leaderboard/profile pages) ----
   String? selectedCategory;
@@ -44,10 +52,13 @@ class AppState extends ChangeNotifier {
   String? language; // e.g. 'ar' / 'en'
   bool? soundMuted;
   bool? profilePrivate;
+  bool? rulesPromptSeen;
+  bool? tutorialSeen;
   // لآلئ شهرية لكل لعبة (تُعاد شهرياً إلى 5 لكل لعبة)
   Map<String, int> gamePearls = <String, int>{};
   String? pearlsResetMonth; // YYYY-MM
   List<Map<String, dynamic>> ownedDewanyahs = <Map<String, dynamic>>[];
+  Set<String> joinedDewanyahIds = <String>{};
   List<Map<String, dynamic>> managedBoards = <Map<String, dynamic>>[];
 
   // ---- Local demo data (used by old leaderboard/player profile/timeline) ----
@@ -137,6 +148,7 @@ class AppState extends ChangeNotifier {
 
       token = (m['token'] as String?)?.trim();
       userId = (m['userId'] as String?)?.trim();
+      publicId = (m['publicId'] as String?)?.trim();
 
       displayName = m['displayName'] as String?;
       email = m['email'] as String?;
@@ -147,6 +159,10 @@ class AppState extends ChangeNotifier {
 
       name = m['name'] as String?;
       phone = m['phone'] as String?;
+      final rawAge = m['age'];
+      if (rawAge is num) age = rawAge.toInt();
+      avatarPath = m['avatarPath'] as String?;
+      avatarBase64 = m['avatarBase64'] as String?;
 
       selectedCategory = m['selectedCategory'] as String?;
       selectedGame = m['selectedGame'] as String?;
@@ -160,20 +176,65 @@ class AppState extends ChangeNotifier {
       language = m['language'] as String?;
       soundMuted = m['soundMuted'] as bool?;
       profilePrivate = m['profilePrivate'] as bool?;
+      tutorialSeen = m['tutorialSeen'] as bool?;
       final rawGamePearls = m['gamePearls'];
-      if (rawGamePearls is Map) {
-        gamePearls = rawGamePearls.map((k, v) => MapEntry(k.toString(), (v as num?)?.toInt() ?? 0));
-      }
+    if (rawGamePearls is Map) {
+      gamePearls = rawGamePearls.map((k, v) => MapEntry(k.toString(), (v as num?)?.toInt() ?? 0));
+    }
+    rulesPromptSeen = m['rulesPromptSeen'] as bool?;
       pearlsResetMonth = m['pearlsResetMonth'] as String?;
       final rawDew = m['ownedDewanyahs'];
       if (rawDew is List) {
         ownedDewanyahs =
             rawDew.map((e) => Map<String, dynamic>.from(e as Map)).toList();
       }
+      final rawJoined = m['joinedDewanyahIds'];
+      if (rawJoined is List) {
+        joinedDewanyahIds = rawJoined.map((e) => e.toString()).toSet();
+      }
       final rawBoards = m['managedBoards'];
       if (rawBoards is List) {
         managedBoards =
             rawBoards.map((e) => Map<String, dynamic>.from(e as Map)).toList();
+      }
+      final rawStats = m['userStats'];
+      if (rawStats is Map) {
+        userStats = rawStats.map((k, v) => MapEntry(k.toString(), Map<String, dynamic>.from(v as Map)));
+      }
+      final rawProfiles = m['userProfiles'];
+      if (rawProfiles is Map) {
+        userProfiles = rawProfiles.map((k, v) => MapEntry(k.toString(), Map<String, dynamic>.from(v as Map)));
+      }
+      final rawTimeline = m['timeline'];
+      if (rawTimeline is List) {
+        timeline
+          ..clear()
+          ..addAll(rawTimeline.whereType<Map>().map((e) {
+            return TimelineEntry(
+              kind: (e['kind'] ?? 'match').toString(),
+              game: (e['game'] ?? '').toString(),
+              roomCode: (e['roomCode'] ?? '').toString(),
+              winner: (e['winner'] ?? '').toString(),
+              losers: (e['losers'] as List?)?.map((x) => x.toString()).toList() ?? const [],
+              ts: DateTime.tryParse((e['ts'] ?? '').toString()) ?? DateTime.now(),
+              meta: e['meta'] is Map ? Map<String, dynamic>.from(e['meta'] as Map) : null,
+            );
+          }));
+      }
+      final rawLocalStats = m['localStats'];
+      if (rawLocalStats is Map) {
+        _stats
+          ..clear()
+          ..addEntries(rawLocalStats.entries.map((e) {
+            final v = e.value;
+            final stats = _LocalStats();
+            if (v is Map) {
+              stats.points = (v['points'] as num?)?.toInt() ?? 0;
+              stats.wins = (v['wins'] as num?)?.toInt() ?? 0;
+              stats.losses = (v['losses'] as num?)?.toInt() ?? 0;
+            }
+            return MapEntry(e.key.toString(), stats);
+          }));
       }
     } catch (_) {
       // ignore bad local cache
@@ -194,6 +255,9 @@ class AppState extends ChangeNotifier {
       'permanentScore': permanentScore,
       'name': name,
       'phone': phone,
+      'age': age,
+      'avatarPath': avatarPath,
+      'avatarBase64': avatarBase64,
       'selectedCategory': selectedCategory,
       'selectedGame': selectedGame,
       'roomCode': roomCode,
@@ -205,16 +269,49 @@ class AppState extends ChangeNotifier {
       'language': language,
       'soundMuted': soundMuted,
       'profilePrivate': profilePrivate,
+      'tutorialSeen': tutorialSeen ?? false,
       'gamePearls': gamePearls,
+      'rulesPromptSeen': rulesPromptSeen ?? false,
       'pearlsResetMonth': pearlsResetMonth,
       'ownedDewanyahs': ownedDewanyahs,
+      'joinedDewanyahIds': joinedDewanyahIds.toList(),
       'managedBoards': managedBoards,
+      'userStats': userStats,
+      'userProfiles': userProfiles,
+      'timeline': timeline
+          .map((t) => {
+                'kind': t.kind,
+                'game': t.game,
+                'roomCode': t.roomCode,
+                'winner': t.winner,
+                'losers': t.losers,
+                'ts': t.ts.toIso8601String(),
+                if (t.meta != null) 'meta': t.meta,
+              })
+          .toList(),
+      'localStats': _stats.map((k, v) => MapEntry(k, {
+            'points': v.points,
+            'wins': v.wins,
+            'losses': v.losses,
+          })),
     };
     await sp.setString(_kAuthKey, jsonEncode(data));
   }
 
   // جعل الحفظ متاحاً للصفحات الأخرى بشكل آمن
   Future<void> saveState() => _save();
+
+  void upsertUserStats(String key, Map<String, dynamic> stats) {
+    userStats[key] = stats;
+    _save();
+    notifyListeners();
+  }
+
+  void upsertUserProfile(String key, Map<String, dynamic> profile) {
+    userProfiles[key] = profile;
+    _save();
+    notifyListeners();
+  }
 
   /// Called after login/register:
   /// expects response shape:
@@ -223,10 +320,12 @@ class AppState extends ChangeNotifier {
     required String token,
     required Map<String, dynamic> user,
   }) async {
+    final previousUserId = userId;
     this.token = token;
 
     // support both `id` and `userId` keys
     userId = (user['id'] ?? user['userId'] ?? '').toString();
+    publicId = (user['publicId'] ?? '').toString();
 
     displayName = (user['displayName'] ?? user['name'])?.toString();
     email = (user['email'])?.toString();
@@ -237,7 +336,31 @@ class AppState extends ChangeNotifier {
     // optional fallbacks
     name = displayName ?? name;
     phone = user['phone']?.toString() ?? phone;
+    age = (user['age'] as num?)?.toInt() ?? age;
 
+    // لو المستخدم تبدل، نرجّع لآلئ كل الألعاب إلى الرصيد الافتراضي لهذا الشهر
+    if (previousUserId != null && previousUserId != userId) {
+      gamePearls = {};
+      pearlsResetMonth = null;
+      await _resetPearlsIfNeeded();
+    }
+
+    // fetch timeline from server (best-effort)
+    syncTimelineFromServer();
+
+    await _save();
+    notifyListeners();
+  }
+
+  Future<void> setAvatarPath(String path) async {
+    avatarPath = path;
+    await _save();
+    notifyListeners();
+  }
+
+  Future<void> setAvatarBytes(Uint8List bytes, {String? fallbackPath}) async {
+    avatarBase64 = base64Encode(bytes);
+    if (fallbackPath != null) avatarPath = fallbackPath;
     await _save();
     notifyListeners();
   }
@@ -245,16 +368,30 @@ class AppState extends ChangeNotifier {
   Future<void> clearAuth() async {
     token = null;
     userId = null;
+    publicId = null;
     displayName = null;
     email = null;
     creditPoints = null;
+    creditBalance = null;
     permanentScore = null;
 
     roomCode = null;
     selectedCategory = null;
     selectedGame = null;
-    ownedDewanyahs = <Map<String, dynamic>>[];
-    managedBoards = <Map<String, dynamic>>[];
+    // Keep dewanyah ownership/managed boards so they remain visible after logout
+    // ownedDewanyahs = <Map<String, dynamic>>[];
+    // managedBoards = <Map<String, dynamic>>[];
+    gamePearls = <String, int>{};
+    pearlsResetMonth = null;
+    rulesPromptSeen = false;
+    tutorialSeen = false;
+    soundMuted = null;
+    profilePrivate = null;
+    timeline.clear();
+    userStats.clear();
+    userProfiles.clear();
+    _stats.clear();
+    joinedDewanyahIds.clear();
 
     await _save();
     notifyListeners();
@@ -283,6 +420,18 @@ class AppState extends ChangeNotifier {
 
   void setSoundMuted(bool muted) {
     soundMuted = muted;
+    _save();
+    notifyListeners();
+  }
+
+  void markRulesPromptSeen() {
+    rulesPromptSeen = true;
+    _save();
+    notifyListeners();
+  }
+
+  void markTutorialSeen() {
+    tutorialSeen = true;
     _save();
     notifyListeners();
   }
@@ -396,8 +545,28 @@ class AppState extends ChangeNotifier {
     required String contact,
     String? gameId,
     String? note,
+    bool? requireApproval,
+    bool? locationLock,
+    int? radiusMeters,
   }) async {
-    ownedDewanyahs.add({
+    try {
+      if (token != null && token!.isNotEmpty) {
+        await ApiDewanyah.createRequest(
+          name: name,
+          contact: contact,
+          gameId: gameId,
+          note: note,
+          requireApproval: requireApproval,
+          locationLock: locationLock,
+          radiusMeters: radiusMeters,
+          token: token,
+        );
+      }
+    } catch (_) {
+      // fallback to local-only storing
+    }
+
+    ownedDewanyahs.insert(0, {
       'name': name,
       'contact': contact,
       'gameId': gameId,
@@ -437,6 +606,13 @@ class AppState extends ChangeNotifier {
     notifyListeners();
   }
 
+  void addJoinedDewanyah(String dewanyahId) {
+    if (dewanyahId.isEmpty) return;
+    joinedDewanyahIds.add(dewanyahId);
+    _save();
+    notifyListeners();
+  }
+
   Future<void> updateManagedBoardTheme({
     required String id,
     String? primaryColor,
@@ -463,6 +639,15 @@ class AppState extends ChangeNotifier {
   int pointsOf(String playerName, String game) => _stats[_key(playerName, game)]?.points ?? 0;
   int winsOf(String playerName, String game) => _stats[_key(playerName, game)]?.wins ?? 0;
   int lossesOf(String playerName, String game) => _stats[_key(playerName, game)]?.losses ?? 0;
+  int totalGamesPlayed(String playerName) {
+    var total = 0;
+    _stats.forEach((k, v) {
+      if (k.startsWith('$playerName|')) {
+        total += v.wins + v.losses;
+      }
+    });
+    return total;
+  }
 
   List<TimelineEntry> userMatches(String playerName) =>
       timeline.where((t) => t.winner == playerName || t.losers.contains(playerName)).toList();
@@ -500,15 +685,18 @@ class AppState extends ChangeNotifier {
   }
 
   /// Call this if you want to record a match locally (optional).
-  void addLocalMatch({
+  Future<void> addLocalMatch({
     required String game,
     required String roomCode,
     required String winner,
     required List<String> losers,
     DateTime? ts,
-  }) {
+  }) async {
     final when = ts ?? DateTime.now();
+    final beforeLevel = levelForGame(winner, game);
+
     timeline.add(TimelineEntry(
+      kind: 'match',
       game: game,
       roomCode: roomCode,
       winner: winner,
@@ -529,7 +717,46 @@ class AppState extends ChangeNotifier {
         ..points -= 1;
     }
 
+    final afterLevel = levelForGame(winner, game);
+    if (afterLevel.name != beforeLevel.name) {
+      timeline.add(TimelineEntry(
+        kind: 'level_up',
+        game: game,
+        roomCode: roomCode,
+        winner: winner,
+        losers: losers,
+        ts: when,
+        meta: {'from': beforeLevel.name, 'to': afterLevel.name},
+      ));
+    }
+
+    await _save();
     notifyListeners();
+  }
+
+  /// Fetch timeline from server and store locally (requires auth token).
+  Future<void> syncTimelineFromServer() async {
+    if (token == null || token!.isEmpty) return;
+    try {
+      final list = await ApiTimeline.list(token: token);
+      timeline
+        ..clear()
+        ..addAll(list.map((e) {
+          return TimelineEntry(
+            kind: (e['kind'] ?? 'match').toString(),
+            game: (e['gameId'] ?? '').toString(),
+            roomCode: (e['roomCode'] ?? '').toString(),
+            winner: (e['winner'] ?? '').toString(),
+            losers: (e['losers'] as List?)?.map((x) => x.toString()).toList() ?? const [],
+            ts: DateTime.tryParse((e['ts'] ?? '').toString()) ?? DateTime.now(),
+            meta: e['meta'] is Map ? Map<String, dynamic>.from(e['meta'] as Map) : null,
+          );
+        }));
+      await _save();
+      notifyListeners();
+    } catch (_) {
+      // ignore failures
+    }
   }
 
   /// Used by ProfilePage for ring label
@@ -565,18 +792,22 @@ class LBRow {
 }
 
 class TimelineEntry {
+  final String kind; // match | level_up | other
   final String game;
   final String roomCode;
   final String winner;
   final List<String> losers;
   final DateTime ts;
+  final Map<String, dynamic>? meta;
 
   const TimelineEntry({
+    this.kind = 'match',
     required this.game,
     required this.roomCode,
     required this.winner,
     required this.losers,
     required this.ts,
+    this.meta,
   });
 }
 

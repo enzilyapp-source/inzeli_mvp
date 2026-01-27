@@ -6,6 +6,7 @@ import '../state.dart';
 import '../api_sponsor.dart';
 import '../api_room.dart';
 import 'match_page.dart';
+import 'package:geolocator/geolocator.dart';
 
 class SponsorGameScreen extends StatefulWidget {
   final AppState app;
@@ -47,6 +48,23 @@ class _SponsorGameScreenState extends State<SponsorGameScreen> {
 
   void _msg(String m) =>
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(m)));
+
+  Future<Position?> _getLocation() async {
+    try {
+      bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
+      if (!serviceEnabled) return null;
+      LocationPermission permission = await Geolocator.checkPermission();
+      if (permission == LocationPermission.denied || permission == LocationPermission.deniedForever) {
+        permission = await Geolocator.requestPermission();
+        if (permission == LocationPermission.denied || permission == LocationPermission.deniedForever) {
+          return null;
+        }
+      }
+      return await Geolocator.getCurrentPosition(desiredAccuracy: LocationAccuracy.best);
+    } catch (_) {
+      return null;
+    }
+  }
 
   Future<void> _load() async {
     setState(() => _loading = true);
@@ -93,10 +111,13 @@ class _SponsorGameScreenState extends State<SponsorGameScreen> {
     }
 
     try {
+      final pos = await _getLocation();
       final room = await ApiRoom.createRoom(
         gameId: gameId,
         sponsorCode: widget.sponsorCode,
         token: widget.app.token,
+        lat: pos?.latitude,
+        lng: pos?.longitude,
       );
 
       _msg('تم إنشاء روم للمباراة ✅');

@@ -51,11 +51,17 @@ class ApiRoom {
     required String gameId,
     String? sponsorCode,
     required String? token,
+    double? lat,
+    double? lng,
+    int? radiusMeters,
   }) async {
     final body = <String, dynamic>{
       'gameId': gameId,
       if (sponsorCode != null && sponsorCode.trim().isNotEmpty)
         'sponsorCode': sponsorCode.trim(),
+      if (lat != null) 'lat': lat,
+      if (lng != null) 'lng': lng,
+      if (radiusMeters != null) 'radiusMeters': radiusMeters,
     };
 
     final res = await http
@@ -69,16 +75,22 @@ class ApiRoom {
     return _dataOrThrow(res, fallback: 'Failed to create room');
   }
 
-  /// الانضمام لروم بالكود (userId من التوكن)
+  /// الشّرف لروم بالكود (userId من التوكن)
   static Future<void> joinByCode({
     required String code,
     required String? token,
+    double? lat,
+    double? lng,
   }) async {
     final res = await http
         .post(
       Uri.parse('$apiBase/rooms/join'),
       headers: _headers(token: token),
-      body: jsonEncode({'code': code}),
+      body: jsonEncode({
+        'code': code,
+        if (lat != null) 'lat': lat,
+        if (lng != null) 'lng': lng,
+      }),
     )
         .timeout(_timeout);
 

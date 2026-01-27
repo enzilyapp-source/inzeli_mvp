@@ -5,8 +5,10 @@ import '../state.dart';
 import '../api_room.dart';
 // لو حبيتي تستخدمين القواعد لاحقًا
 import '../widgets/room_timer_banner.dart';
+import '../widgets/primary_pill_button.dart';
 import 'match_page.dart';
 import 'scan_page.dart';
+import 'package:geolocator/geolocator.dart';
 
 class GamesPage extends StatefulWidget {
   final AppState app;
@@ -38,6 +40,9 @@ class _GamesPageState extends State<GamesPage> {
       final g = app.games[app.selectedCategory]!.first;
       app.setSelectedGame(g, category: app.selectedCategory);
     }
+
+    // لو في روم قديم بعد الحسم، نتأكد من حالته ونمسحه لو منتهي
+    Future.microtask(_checkCurrentRoomStatus);
   }
 
   @override
@@ -56,19 +61,38 @@ class _GamesPageState extends State<GamesPage> {
   String? get _selectedGame => app.selectedGame;
 
   // ------------ Actions: Create / Join ------------
+  Future<void> _checkCurrentRoomStatus() async {
+    final code = app.roomCode;
+    if (code == null || code.isEmpty) return;
+    try {
+      final room = await ApiRoom.getRoomByCode(
+        code,
+        token: app.token,
+      );
+      final status = room['status']?.toString();
+      if (status != null && status != 'waiting' && status != 'running') {
+        app.setRoomCode(null);
+        if (mounted) {
+          setState(() {});
+          _msg('الروم السابق انتهى');
+        }
+      }
+    } catch (_) {
+      app.setRoomCode(null);
+      if (mounted) setState(() {});
+    }
+  }
 
   Future<void> _createRoomForSelectedGame() async {
     if (!app.isSignedIn) {
       _msg('سجّل الدخول أولًا');
       return;
     }
+    final proceed = await _ensureRulesPrompt();
+    if (!proceed) return;
     final game = _selectedGame;
     if (game == null || game.isEmpty) {
       _msg('اختَر اللعبة أولًا');
-      return;
-    }
-    if (!app.spendPearlForGame(game)) {
-      _msg('رصيد لآلئ هذه اللعبة انتهى لهذا الشهر');
       return;
     }
     if (app.token == null || app.token!.isEmpty) {
@@ -77,9 +101,12 @@ class _GamesPageState extends State<GamesPage> {
     }
 
     try {
+      final pos = await _getLocation();
       final room = await ApiRoom.createRoom(
         gameId: game,
         token: app.token,
+        lat: pos?.latitude,
+        lng: pos?.longitude,
       );
       final code = room['code']?.toString();
       app.setRoomCode(code);
@@ -105,6 +132,8 @@ class _GamesPageState extends State<GamesPage> {
       _msg('سجّل الدخول أولًا');
       return;
     }
+    final proceed = await _ensureRulesPrompt();
+    if (!proceed) return;
     final code = _joinCtrl.text.trim();
     if (code.isEmpty) {
       _msg('اكتب كود الروم');
@@ -115,19 +144,18 @@ class _GamesPageState extends State<GamesPage> {
       _msg('اختَر اللعبة أولًا');
       return;
     }
-    if (!app.spendPearlForGame(game)) {
-      _msg('رصيد لآلئ هذه اللعبة انتهى لهذا الشهر');
-      return;
-    }
     if (app.token == null || app.token!.isEmpty) {
       _msg('التوكن غير موجود — سجّل دخول مرة ثانية');
       return;
     }
 
     try {
+      final pos = await _getLocation();
       await ApiRoom.joinByCode(
         code: code,
         token: app.token,
+        lat: pos?.latitude,
+        lng: pos?.longitude,
       );
       final room = await ApiRoom.getRoomByCode(
         code,
@@ -147,7 +175,7 @@ class _GamesPageState extends State<GamesPage> {
       );
       setState(() {});
     } catch (e) {
-      _msg('تعذّر الانضمام: $e');
+      _msg('تعذّر الشّرف: $e');
     }
   }
 
@@ -167,11 +195,22 @@ class _GamesPageState extends State<GamesPage> {
       _msg('ما عندك روم شغّال حاليًا');
       return;
     }
+    final proceed = await _ensureRulesPrompt();
+    if (!proceed) return;
     try {
       final room = await ApiRoom.getRoomByCode(
         code,
         token: app.token,
       );
+      final status = room['status']?.toString();
+      if (status != null && status != 'waiting' && status != 'running') {
+        app.setRoomCode(null);
+        if (mounted) {
+          setState(() {});
+          _msg('الروم انتهى، افتح روم جديد');
+        }
+        return;
+      }
       if (!mounted) return;
       await Navigator.push(
         context,
@@ -188,6 +227,55 @@ class _GamesPageState extends State<GamesPage> {
     }
   }
 
+  Future<Position?> _getLocation({bool force = false}) async {
+    try {
+      bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
+      if (!serviceEnabled) return null;
+      LocationPermission permission = await Geolocator.checkPermission();
+      if (permission == LocationPermission.denied || permission == LocationPermission.deniedForever) {
+        permission = await Geolocator.requestPermission();
+        if (permission == LocationPermission.denied || permission == LocationPermission.deniedForever) return null;
+      }
+      return await Geolocator.getCurrentPosition(desiredAccuracy: LocationAccuracy.best);
+    } catch (_) {
+      if (force) rethrow;
+      return null;
+    }
+  }
+
+  Future<bool> _ensureRulesPrompt() async {
+    if (app.rulesPromptSeen == true) return true;
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('تذكير سريع'),
+        content: const Text(
+          '• الدخول من نفس المكان: امسح QR أو استخدم اتصال قريب.\n'
+          '• لكل لعبة ٥ لآلئ لهذا الشهر.\n'
+          '• الفوز ينقل لؤلؤة من الخاسر إذا كان لديه لؤلؤ.\n'
+          '• إذا كان رصيدك ٠ لن تُخصم منك.',
+          textDirection: TextDirection.rtl,
+          textAlign: TextAlign.right,
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('إلغاء'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('حسناً'),
+          ),
+        ],
+      ),
+    );
+    if (ok == true) {
+      app.markRulesPromptSeen();
+      return true;
+    }
+    return false;
+  }
+
   // ------------ UI builders ------------
 
   Widget _buildUserCard() {
@@ -195,6 +283,8 @@ class _GamesPageState extends State<GamesPage> {
     final email = app.email ?? '';
     final pearls = app.pearls;
     final permanent = app.permanentScore ?? 0;
+    final currentGame = _selectedGame;
+    final pearlsForGame = currentGame == null ? null : app.pearlsForGame(currentGame);
 
     return Card(
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
@@ -243,6 +333,13 @@ class _GamesPageState extends State<GamesPage> {
                       Text('نقاط اللعبة: $permanent'),
                     ],
                   ),
+                  if (pearlsForGame != null && pearlsForGame <= 0) ...[
+                    const SizedBox(height: 6),
+                    Text(
+                      'رصيد اللعبة الحالي صفر — يمكنك اللعب لكن لن تُخصم ولن يكسب الخصم منك.',
+                      style: TextStyle(color: Colors.redAccent.shade100, fontSize: 12),
+                    ),
+                  ],
                 ],
               ),
             ),
@@ -293,7 +390,7 @@ class _GamesPageState extends State<GamesPage> {
               height: 8,
               margin: const EdgeInsets.symmetric(horizontal: 4),
               decoration: BoxDecoration(
-                color: Colors.white.withOpacity(active ? 0.9 : 0.4),
+                color: Colors.white.withValues(alpha: active ? 0.9 : 0.4),
                 borderRadius: BorderRadius.circular(8),
               ),
             );
@@ -341,10 +438,11 @@ class _GamesPageState extends State<GamesPage> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        FilledButton.icon(
+        PrimaryPillButton(
           onPressed: _createRoomForSelectedGame,
-          icon: const Icon(Icons.add_box_outlined),
-          label: const Text('انزلي'),
+          icon: Icons.add_box_outlined,
+          label: app.tr(ar: 'انــزلـي', en: 'Start'),
+          maxWidth: 240,
         ),
         const SizedBox(height: 12),
         Row(
@@ -458,12 +556,43 @@ class _GamesPageState extends State<GamesPage> {
 
                 _buildGamesGrid(),
                 const SizedBox(height: 24),
+                const _ProximityHint(),
+                const SizedBox(height: 12),
                 _buildCreateJoinRow(),
                 const SizedBox(height: 32),
               ],
             ),
           ),
         ),
+      ),
+    );
+  }
+}
+
+class _ProximityHint extends StatelessWidget {
+  const _ProximityHint();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Row(
+        children: [
+          const Icon(Icons.qr_code_scanner, color: Colors.white),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              'الانضمام يتم عن قرب: امسح QR أو استخدم الاتصال القريب (بلوتوث/واي‑فاي مباشر) وأنت بنفس المكان مع اللاعبين.',
+              style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 12),
+              textDirection: TextDirection.rtl,
+              textAlign: TextAlign.right,
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -485,7 +614,7 @@ class _GameCardImage extends StatelessWidget {
         boxShadow: isSelected
             ? [
                 BoxShadow(
-                  color: Colors.black.withOpacity(0.25),
+                  color: Colors.black.withValues(alpha: 0.25),
                   blurRadius: 14,
                   offset: const Offset(0, 6),
                 )
@@ -538,7 +667,7 @@ class _CategoryCard extends StatelessWidget {
         boxShadow: isSelected
             ? [
                 BoxShadow(
-                  color: Colors.black.withOpacity(0.18),
+                  color: Colors.black.withValues(alpha: 0.18),
                   blurRadius: 10,
                   offset: const Offset(0, 4),
                 ),
@@ -562,60 +691,10 @@ class _CategoryCard extends StatelessWidget {
               style: TextStyle(
                 fontSize: 18,
                 fontWeight: FontWeight.w900,
-                color: Colors.white.withOpacity(isSelected ? 1 : 0.8),
+                color: Colors.white.withValues(alpha: isSelected ? 1 : 0.8),
                 shadows: const [Shadow(color: Colors.black45, blurRadius: 4)],
               ),
             ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _SideFade extends StatelessWidget {
-  final bool isLeft;
-  const _SideFade({required this.isLeft});
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: 40,
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          begin: isLeft ? Alignment.centerLeft : Alignment.centerRight,
-          end: isLeft ? Alignment.centerRight : Alignment.centerLeft,
-          colors: [
-            Colors.black.withOpacity(0.25),
-            Colors.black.withOpacity(0.0),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _ArrowHint extends StatelessWidget {
-  final bool isLeft;
-  const _ArrowHint({required this.isLeft});
-
-  @override
-  Widget build(BuildContext context) {
-    return Align(
-      alignment: Alignment.center,
-      child: FractionallySizedBox(
-        widthFactor: 1,
-        child: Padding(
-          padding: EdgeInsets.symmetric(horizontal: isLeft ? 8 : 8),
-          child: Row(
-            mainAxisAlignment: isLeft ? MainAxisAlignment.start : MainAxisAlignment.end,
-            children: [
-              Icon(
-                isLeft ? Icons.arrow_back_ios_new : Icons.arrow_forward_ios,
-                size: 16,
-                color: Colors.white.withOpacity(0.6),
-              ),
-            ],
           ),
         ),
       ),

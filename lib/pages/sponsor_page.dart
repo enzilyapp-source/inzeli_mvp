@@ -47,11 +47,6 @@ class _SponsorPageState extends State<SponsorPage> {
     _sponsorsFuture = _loadSponsors();
   }
 
-  void _msg(String m) =>
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(m)),
-      );
-
   Future<List<Map<String, dynamic>>> _loadSponsors() async {
     try {
       final list = await ApiSponsors.listSponsors();
@@ -76,32 +71,6 @@ class _SponsorPageState extends State<SponsorPage> {
     });
   }
 
-  Future<void> _joinSponsor() async {
-    if (!widget.app.isSignedIn || widget.app.token == null) {
-      _msg('سجّل دخول أولًا');
-      return;
-    }
-    if (_openSponsorCode == null) {
-      _msg('اختَر راعي أولًا');
-      return;
-    }
-    try {
-      await ApiSponsors.joinSponsor(
-        sponsorCode: _openSponsorCode!,
-        token: widget.app.token!,
-      );
-      _msg('تم الانضمام للسبونسر ✅');
-      setState(() {
-        _walletsFuture = ApiSponsors.getMyWallets(
-          sponsorCode: _openSponsorCode!,
-          token: widget.app.token!,
-        );
-      });
-    } catch (e) {
-      _msg('فشل الانضمام: $e');
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
     final app = widget.app;
@@ -109,7 +78,7 @@ class _SponsorPageState extends State<SponsorPage> {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('الرعاة'),
+        title: const Text('سبونسر'),
       ),
       body: FutureBuilder<List<Map<String, dynamic>>>(
         future: _sponsorsFuture,
@@ -140,23 +109,12 @@ class _SponsorPageState extends State<SponsorPage> {
           return ListView(
             padding: const EdgeInsets.all(12),
             children: [
-              Text('الرعاة', style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w900)),
-              const SizedBox(height: 8),
-              Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                children: sponsors.map((s) {
-                  final code = (s['code'] ?? '').toString();
-                  final name = (s['name'] ?? code).toString();
-                  final selected = code == _openSponsorCode;
-                  return ChoiceChip(
-                    selected: selected,
-                    label: Text(name),
-                    onSelected: (_) => _openSponsor(code),
-                  );
-                }).toList(),
+              _SponsorPickerGrid(
+                sponsors: sponsors,
+                openCode: _openSponsorCode,
+                onPick: _openSponsor,
               ),
-              const SizedBox(height: 16),
+              const SizedBox(height: 12),
               _openSponsorCode == null
                   ? const Text('اختر راعي لعرض الألعاب')
                   : _SponsorDetailSection(
@@ -165,7 +123,6 @@ class _SponsorPageState extends State<SponsorPage> {
                       sponsorCode: _openSponsorCode!,
                       sponsorDetailFuture: _sponsorDetailFuture!,
                       walletsFuture: _walletsFuture,
-                      onJoinSponsor: _joinSponsor,
                     ),
             ],
           );
@@ -181,7 +138,6 @@ class _SponsorDetailSection extends StatelessWidget {
   final String sponsorCode;
   final Future<Map<String, dynamic>> sponsorDetailFuture;
   final Future<List<Map<String, dynamic>>>? walletsFuture;
-  final VoidCallback onJoinSponsor;
 
   const _SponsorDetailSection({
     required this.app,
@@ -189,7 +145,6 @@ class _SponsorDetailSection extends StatelessWidget {
     required this.sponsorCode,
     required this.sponsorDetailFuture,
     required this.walletsFuture,
-    required this.onJoinSponsor,
   });
 
   List<Map<String, dynamic>> _mockBoard() => [
@@ -217,38 +172,26 @@ class _SponsorDetailSection extends StatelessWidget {
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(
-              '$name — كود: $sponsorCode',
-              style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w900),
-            ),
-            const SizedBox(height: 8),
-            Row(
-              children: [
-                FilledButton.icon(
-                  onPressed: onJoinSponsor,
-                  icon: const Icon(Icons.favorite_outline),
-                  label: const Text('انضم'),
-                ),
-                const SizedBox(width: 8),
-                if (app.isSignedIn)
-                  OutlinedButton.icon(
-                    onPressed: () {
+            _SponsorHeroCard(
+              sponsorName: name,
+              sponsorCode: sponsorCode,
+              onPlay: app.isSignedIn
+                  ? () {
                       Navigator.of(context).push(
                         MaterialPageRoute(
                           builder: (_) => SponsorGameScreen(
                             app: app,
                             sponsorCode: sponsorCode,
+                            initialGameId:
+                                games.isNotEmpty ? (games.first['gameId'] ?? '').toString() : null,
                           ),
                         ),
                       );
-                    },
-                    icon: const Icon(Icons.sports_esports_outlined),
-                    label: const Text('ابدأ'),
-                  ),
-              ],
+                    }
+                  : null,
             ),
             const SizedBox(height: 16),
-            Text('ألعاب الراعي', style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800)),
+            Text('ألعاب السبونسر', style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800)),
             const SizedBox(height: 8),
             if (games.isEmpty)
               const Text('لا توجد ألعاب حالياً')
@@ -276,7 +219,7 @@ class _SponsorDetailSection extends StatelessWidget {
                             Container(
                               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                               decoration: BoxDecoration(
-                                color: const Color(0xFF172133).withOpacity(0.85),
+                                color: const Color(0xFF172133).withValues(alpha: 0.85),
                                 borderRadius: BorderRadius.circular(18),
                               ),
                               child: Row(
@@ -339,7 +282,7 @@ class _SponsorDetailSection extends StatelessWidget {
                         return Text('خطأ في تحميل محافظك: ${snap.error}');
                       }
                       final wallets = snap.data ?? [];
-                      if (wallets.isEmpty) return const Text('انضم للراعي لتحصل على لآلئ لكل لعبة');
+                      if (wallets.isEmpty) return const Text('انضم مع الراعي لتحصل على لآلئ لكل لعبة');
                       return Column(
                         children: wallets.map((w) {
                           final game = (w['game'] as Map?) ?? {};
@@ -368,6 +311,124 @@ class _SponsorDetailSection extends StatelessWidget {
           ],
         );
       },
+    );
+  }
+}
+
+class _SponsorHeroCard extends StatelessWidget {
+  final String sponsorName;
+  final String sponsorCode;
+  final VoidCallback? onPlay;
+  const _SponsorHeroCard({
+    required this.sponsorName,
+    required this.sponsorCode,
+    this.onPlay,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        sponsorName,
+                        style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 16),
+                      ),
+                      const SizedBox(height: 4),
+                      Text('كود: $sponsorCode', style: const TextStyle(color: Colors.white70)),
+                    ],
+                  ),
+                ),
+                if (onPlay != null)
+                  FilledButton.icon(
+                    onPressed: onPlay,
+                    icon: const Icon(Icons.sports_esports_outlined),
+                    label: const Text('ابدأ'),
+                  ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _SponsorPickerGrid extends StatelessWidget {
+  final List<Map<String, dynamic>> sponsors;
+  final String? openCode;
+  final ValueChanged<String> onPick;
+  const _SponsorPickerGrid({
+    required this.sponsors,
+    required this.openCode,
+    required this.onPick,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return GridView.count(
+      crossAxisCount: 2,
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
+      mainAxisSpacing: 8,
+      crossAxisSpacing: 8,
+      childAspectRatio: 2.7,
+      children: sponsors.map((s) {
+        final code = (s['code'] ?? '').toString();
+        final name = (s['name'] ?? code).toString();
+        final selected = code == openCode;
+        return GestureDetector(
+          onTap: () => onPick(code),
+          child: Container(
+            decoration: BoxDecoration(
+              gradient: const LinearGradient(
+                colors: [Color(0xFF2D6A7A), Color(0xFF23344A)],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+              ),
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(
+                color: selected ? const Color(0xFFF1A949) : Colors.white24,
+                width: selected ? 2 : 1,
+              ),
+              boxShadow: selected
+                  ? [
+                      BoxShadow(
+                        color: Colors.black.withValues(alpha: 0.15),
+                        blurRadius: 10,
+                        offset: const Offset(0, 4),
+                      ),
+                    ]
+                  : null,
+            ),
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+            child: Row(
+              children: [
+                const Icon(Icons.workspace_premium, color: Colors.white),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    name,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.w900,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      }).toList(),
     );
   }
 }

@@ -144,7 +144,7 @@ class _LeaderboardLandingPageState extends State<LeaderboardLandingPage> {
                 selected: {tab},
                 onSelectionChanged: (s) => setState(() => tab = s.first),
                 style: ButtonStyle(
-                  backgroundColor: WidgetStatePropertyAll(Colors.white.withOpacity(0.08)),
+                  backgroundColor: WidgetStatePropertyAll(Colors.white.withValues(alpha: 0.08)),
                   foregroundColor: const WidgetStatePropertyAll(Colors.white),
                 ),
               ),
@@ -301,9 +301,9 @@ class _LeaderboardTile extends StatelessWidget {
       margin: const EdgeInsets.only(bottom: 10),
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
       decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.10),
+        color: Colors.white.withValues(alpha: 0.10),
         borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: Colors.white.withOpacity(0.12)),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.12)),
       ),
       child: Row(
         children: [
@@ -311,7 +311,7 @@ class _LeaderboardTile extends StatelessWidget {
           const SizedBox(width: 10),
           CircleAvatar(
             radius: 18,
-            backgroundColor: Colors.white.withOpacity(0.10),
+            backgroundColor: Colors.white.withValues(alpha: 0.10),
             child: Text(_initials(row.name), style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w900)),
           ),
           const SizedBox(width: 10),
@@ -335,7 +335,7 @@ class _LeaderboardTile extends StatelessWidget {
                   ],
                 ]),
                 const SizedBox(height: 4),
-                Text('ف:${row.wins} • خ:${row.losses}', style: TextStyle(color: Colors.white.withOpacity(0.75), fontSize: 12)),
+                Text('ف:${row.wins} • خ:${row.losses}', style: TextStyle(color: Colors.white.withValues(alpha: 0.75), fontSize: 12)),
 
                 if (row.games.isNotEmpty) ...[
                   const SizedBox(height: 6),
@@ -346,16 +346,16 @@ class _LeaderboardTile extends StatelessWidget {
                       return Container(
                         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
                         decoration: BoxDecoration(
-                          color: Colors.white.withOpacity(0.08),
+                          color: Colors.white.withValues(alpha: 0.08),
                           borderRadius: BorderRadius.circular(999),
-                          border: Border.all(color: Colors.white.withOpacity(0.10)),
+                          border: Border.all(color: Colors.white.withValues(alpha: 0.10)),
                         ),
                         child: Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            Icon(gameIcon(g), size: 14, color: Colors.white.withOpacity(0.9)),
+                            Icon(gameIcon(g), size: 14, color: Colors.white.withValues(alpha: 0.9)),
                             const SizedBox(width: 6),
-                            Text(g, style: TextStyle(color: Colors.white.withOpacity(0.85), fontSize: 12)),
+                            Text(g, style: TextStyle(color: Colors.white.withValues(alpha: 0.85), fontSize: 12)),
                           ],
                         ),
                       );
@@ -385,7 +385,7 @@ class _RankBox extends StatelessWidget {
       height: 34,
       alignment: Alignment.center,
       decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.10),
+        color: Colors.white.withValues(alpha: 0.10),
         borderRadius: BorderRadius.circular(10),
       ),
       child: Text('$rank', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w900)),
@@ -403,9 +403,9 @@ class _PearlPill extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
       decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.10),
+        color: Colors.white.withValues(alpha: 0.10),
         borderRadius: BorderRadius.circular(999),
-        border: Border.all(color: Colors.white.withOpacity(0.12)),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.12)),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
@@ -418,7 +418,7 @@ class _PearlPill extends StatelessWidget {
           const SizedBox(width: 6),
           Text('$value', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w900)),
           const SizedBox(width: 6),
-          Text(label, style: TextStyle(color: Colors.white.withOpacity(0.75), fontSize: 12)),
+          Text(label, style: TextStyle(color: Colors.white.withValues(alpha: 0.75), fontSize: 12)),
         ],
       ),
     );
@@ -447,10 +447,10 @@ class _SponsorPicker extends StatelessWidget {
           selected: selected,
           label: Text(s.name),
           onSelected: (_) => onPick(s.code),
-          selectedColor: Colors.white.withOpacity(0.22),
-          backgroundColor: Colors.white.withOpacity(0.08),
+          selectedColor: Colors.white.withValues(alpha: 0.22),
+          backgroundColor: Colors.white.withValues(alpha: 0.08),
           labelStyle: TextStyle(color: Colors.white, fontWeight: selected ? FontWeight.w900 : FontWeight.w700),
-          side: BorderSide(color: Colors.white.withOpacity(0.12)),
+          side: BorderSide(color: Colors.white.withValues(alpha: 0.12)),
         );
       }).toList(),
     );
@@ -479,10 +479,10 @@ class _GamePicker extends StatelessWidget {
           selected: selected,
           label: Text('${g.gameId} • جائزة ${g.prize}'),
           onSelected: (_) => onPick(g.gameId),
-          selectedColor: Colors.white.withOpacity(0.22),
-          backgroundColor: Colors.white.withOpacity(0.08),
+          selectedColor: Colors.white.withValues(alpha: 0.22),
+          backgroundColor: Colors.white.withValues(alpha: 0.08),
           labelStyle: TextStyle(color: Colors.white, fontWeight: selected ? FontWeight.w900 : FontWeight.w700),
-          side: BorderSide(color: Colors.white.withOpacity(0.12)),
+          side: BorderSide(color: Colors.white.withValues(alpha: 0.12)),
         );
       }).toList(),
     );
@@ -505,9 +505,9 @@ class _PrizeBanner extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: Colors.black.withOpacity(0.18),
+        color: Colors.black.withValues(alpha: 0.18),
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: Colors.white.withOpacity(0.12)),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.12)),
       ),
       child: Row(
         children: [
@@ -518,7 +518,7 @@ class _PrizeBanner extends StatelessWidget {
           ),
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-            decoration: BoxDecoration(color: Colors.white.withOpacity(0.14), borderRadius: BorderRadius.circular(999)),
+            decoration: BoxDecoration(color: Colors.white.withValues(alpha: 0.14), borderRadius: BorderRadius.circular(999)),
             child: Text('الجائزة: $prize', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w900)),
           ),
         ],
@@ -536,11 +536,11 @@ class _HintCard extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.08),
+        color: Colors.white.withValues(alpha: 0.08),
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: Colors.white.withOpacity(0.10)),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.10)),
       ),
-      child: Text(text, style: TextStyle(color: Colors.white.withOpacity(0.85))),
+      child: Text(text, style: TextStyle(color: Colors.white.withValues(alpha: 0.85))),
     );
   }
 }

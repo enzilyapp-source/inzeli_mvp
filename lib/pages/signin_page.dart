@@ -21,12 +21,16 @@ class _SignInPageState extends State<SignInPage> {
   final _email = TextEditingController();
   final _pass  = TextEditingController();
   final _name  = TextEditingController();
+  final _phone = TextEditingController();
+  final _age   = TextEditingController();
 
   @override
   void dispose() {
     _email.dispose();
     _pass.dispose();
     _name.dispose();
+    _phone.dispose();
+    _age.dispose();
     super.dispose();
   }
 
@@ -60,6 +64,7 @@ class _SignInPageState extends State<SignInPage> {
       final token = r.data!['token'] as String;
       final user  = r.data!['user']  as Map<String, dynamic>;
       await widget.app.setAuthFromBackend(token: token, user: user);
+      // Phone/age are optional UI fields only; backend no longer receives them.
 
       _msg(_isLogin ? 'تم تسجيل الدخول ✅' : 'تم إنشاء الحساب 🎉');
 
@@ -111,7 +116,11 @@ class _SignInPageState extends State<SignInPage> {
                       child: Column(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          const Icon(Icons.sports_esports, size: 72, color: Colors.white),
+                          Image.asset(
+                            'lib/assets/enzeli_logo.png',
+                            width: 96,
+                            height: 96,
+                          ),
                           const SizedBox(height: 12),
 
                           TextFormField(
@@ -144,6 +153,24 @@ class _SignInPageState extends State<SignInPage> {
                               decoration: const InputDecoration(labelText: 'الاسم'),
                               validator: (v) =>
                                   (v == null || v.trim().isEmpty) ? 'الاسم مطلوب' : null,
+                            ),
+                            const SizedBox(height: 10),
+                            TextFormField(
+                              controller: _phone,
+                              decoration: const InputDecoration(labelText: 'رقم الجوال'),
+                              keyboardType: TextInputType.phone,
+                            ),
+                            const SizedBox(height: 10),
+                            TextFormField(
+                              controller: _age,
+                              decoration: const InputDecoration(labelText: 'العمر'),
+                              keyboardType: TextInputType.number,
+                              validator: (v) {
+                                if (v == null || v.trim().isEmpty) return null;
+                                final n = int.tryParse(v);
+                                if (n == null || n <= 0) return 'أدخل عمر صحيح';
+                                return null;
+                              },
                             ),
                           ],
 

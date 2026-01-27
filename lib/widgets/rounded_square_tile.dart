@@ -38,7 +38,7 @@ class _RoundedSquareTileState extends State<RoundedSquareTile> {
             height: 112,
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(26),
-              color: active ? cs.primaryContainer : cs.surfaceContainerHighest.withOpacity(.5),
+              color: active ? cs.primaryContainer : cs.surfaceContainerHighest.withValues(alpha: .5),
             ),
             alignment: Alignment.center,
             child: Icon(
@@ -52,7 +52,7 @@ class _RoundedSquareTileState extends State<RoundedSquareTile> {
             widget.label,
             style: TextStyle(
               fontWeight: FontWeight.w800,
-              color: Theme.of(context).colorScheme.onSurface.withOpacity(.9),
+              color: Theme.of(context).colorScheme.onSurface.withValues(alpha: .9),
             ),
           ),
         ],

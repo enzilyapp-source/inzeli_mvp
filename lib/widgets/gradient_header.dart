@@ -22,8 +22,8 @@ class GradientHeader extends StatelessWidget {
           end: Alignment.bottomLeft,
           colors: colors ??
               [
-                cs.primaryContainer.withOpacity(.7),
-                cs.secondaryContainer.withOpacity(.6),
+                cs.primaryContainer.withValues(alpha: .7),
+                cs.secondaryContainer.withValues(alpha: .6),
               ],
         ),
         borderRadius: BorderRadius.circular(16),

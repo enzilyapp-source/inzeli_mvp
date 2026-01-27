@@ -10,7 +10,7 @@ class PearlBadge extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final c = Theme.of(context).colorScheme;
-    final bg = emphasized ? c.primary.withOpacity(.12) : c.surfaceContainerHighest.withOpacity(.5);
+    final bg = emphasized ? c.primary.withValues(alpha: .12) : c.surfaceContainerHighest.withValues(alpha: .5);
     final border = emphasized ? c.primary : c.outlineVariant;
     final text = emphasized ? c.primary : c.onSurface;
 
@@ -32,7 +32,7 @@ class PearlBadge extends StatelessWidget {
           const SizedBox(width: 6),
           Text('$pearls', style: TextStyle(fontWeight: FontWeight.w900, color: text)),
           const SizedBox(width: 6),
-          Text('لآلئ', style: TextStyle(color: text.withOpacity(.75))),
+          Text('لآلئ', style: TextStyle(color: text.withValues(alpha: .75))),
         ],
       ),
     );

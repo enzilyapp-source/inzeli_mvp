@@ -33,8 +33,15 @@ Future<ApiResponse<Map<String, dynamic>>> _post(String path, Map<String, dynamic
 }
 
 Future<ApiResponse<Map<String, dynamic>>> register({
-  required String email, required String password, required String displayName,
-}) => _post('/auth/register', {'email': email, 'password': password, 'displayName': displayName});
+  required String email,
+  required String password,
+  required String displayName,
+}) =>
+    _post('/auth/register', {
+      'email': email,
+      'password': password,
+      'displayName': displayName,
+    });
 
 Future<ApiResponse<Map<String, dynamic>>> login({
   required String email, required String password,

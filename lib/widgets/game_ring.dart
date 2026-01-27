@@ -53,7 +53,7 @@ class _RingPainter extends CustomPainter {
     final bg = Paint()
       ..style = PaintingStyle.stroke
       ..strokeWidth = stroke
-      ..color = const Color(0xFF3A2A22).withOpacity(0.20);
+      ..color = const Color(0xFF3A2A22).withValues(alpha: 0.20);
     canvas.drawCircle(center, r, bg);
 
     final arc = Paint()

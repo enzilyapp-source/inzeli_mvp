@@ -16,8 +16,8 @@ class AnwatRow extends StatelessWidget {
         children: List.generate(_thresholds.length, (i) {
           final t = _thresholds[i];
           final achieved = wins >= t;
-          final fill = achieved ? cs.primary : cs.surfaceContainerHighest.withOpacity(.6);
-          final border = achieved ? cs.primary : cs.outline.withOpacity(.4);
+          final fill = achieved ? cs.primary : cs.surfaceContainerHighest.withValues(alpha: .6);
+          final border = achieved ? cs.primary : cs.outline.withValues(alpha: .4);
           return Padding(
             padding: EdgeInsetsDirectional.only(end: i == _thresholds.length - 1 ? 0 : 8),
             child: Column(
@@ -27,14 +27,14 @@ class AnwatRow extends StatelessWidget {
                   height: 46,
                   decoration: BoxDecoration(
                     shape: BoxShape.circle,
-                    color: fill.withOpacity(.12),
+                    color: fill.withValues(alpha: .12),
                     border: Border.all(color: border, width: 2),
                   ),
                   alignment: Alignment.center,
                   child: Text('$t', style: TextStyle(color: fill, fontWeight: FontWeight.bold)),
                 ),
                 const SizedBox(height: 4),
-                Text(_labels[i], style: TextStyle(fontSize: 11, color: cs.onSurface.withOpacity(.7))),
+                Text(_labels[i], style: TextStyle(fontSize: 11, color: cs.onSurface.withValues(alpha: .7))),
               ],
             ),
           );

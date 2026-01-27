@@ -9,17 +9,30 @@ class PlayerProfilePage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final me = (app.displayName ?? app.name ?? '').trim().toLowerCase();
-    final isMe = playerName.trim().toLowerCase() == me;
+    String norm(String? s) => (s ?? '').trim().toLowerCase();
+    final isMe = norm(playerName) == norm(app.displayName) ||
+        norm(playerName) == norm(app.name) ||
+        norm(playerName) == norm(app.email) ||
+        norm(playerName) == norm(app.userId) ||
+        norm(playerName) == norm(app.publicId);
     final isPrivate = (app.profilePrivate ?? false) && !isMe;
-    final p = app.profile(playerName);
+    final profileKey = isMe ? (app.displayName ?? playerName) : playerName;
+    Map<String, dynamic>? backendProfile;
+    if (app.userProfiles.containsKey(profileKey)) {
+      backendProfile = app.userProfiles[profileKey];
+    }
+    final p = app.profile(profileKey) ??
+        (backendProfile != null ? PlayerProfile(phone: backendProfile['phone']?.toString()) : null) ??
+        (isMe ? PlayerProfile(phone: app.phone) : null);
+    final stats = app.userStats[profileKey];
     final game = app.selectedGame ?? '';
-    final pts = app.pointsOf(playerName, game);
-    final w   = app.winsOf(playerName, game);
-    final l   = app.lossesOf(playerName, game);
-    final matches = app.userMatches(playerName);
-    final bestGame = game.isNotEmpty ? app.gameLabel(game) : '—';
-    final themeName = app.themeId ?? 'افتراضي';
+    final pts = stats?['points'] ?? (p == null ? 0 : app.pointsOf(profileKey, game));
+    final w = stats?['wins'] ?? (p == null ? 0 : app.winsOf(profileKey, game));
+    final l = stats?['losses'] ?? (p == null ? 0 : app.lossesOf(profileKey, game));
+    final matches = app.userMatches(profileKey);
+    final bestGame = stats?['bestGame'] ?? (game.isNotEmpty ? app.gameLabel(game) : '—');
+    final themeName = stats?['theme'] ?? app.themeId ?? 'افتراضي';
+    final notFound = p == null && stats == null && backendProfile == null && !isMe;
 
     return Scaffold(
       appBar: AppBar(title: Text('ملف: $playerName')),
@@ -30,7 +43,9 @@ class PlayerProfilePage extends StatelessWidget {
             child: ListTile(
               leading: CircleAvatar(child: Text(_initials(playerName))),
               title: Text(playerName, style: const TextStyle(fontWeight: FontWeight.w900)),
-              subtitle: isPrivate ? const Text('الملف خاص') : Text(p?.phone ?? '—'),
+              subtitle: notFound
+                  ? const Text('لا يوجد لاعب بهذا الاسم')
+                  : (isPrivate ? const Text('الملف خاص') : Text(p?.phone ?? app.email ?? '—')),
               trailing: Text('اللعبة: $game'),
             ),
           ),
@@ -74,7 +89,7 @@ class PlayerProfilePage extends StatelessWidget {
               ),
             ),
           ),
-          if (!isPrivate) ...[
+          if (!isPrivate && !notFound) ...[
             const SizedBox(height: 8),
             const Text('آخر المباريات', style: TextStyle(fontWeight: FontWeight.w900)),
             const SizedBox(height: 6),
