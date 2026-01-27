@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'dart:convert';
 import 'package:image_picker/image_picker.dart';
 import 'package:flutter/foundation.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../state.dart';
 import '../widgets/pearl_chip.dart';   // uses: PearlChip(count: ..., selected: ...)
@@ -23,6 +24,7 @@ class ProfilePage extends StatefulWidget {
 }
 
 class _ProfilePageState extends State<ProfilePage> {
+  static const _deleteUrl = 'https://web.enzily.app/delete-account.html';
   // thresholds and labels for “الأنواط”
   static const List<int> _milestones = [5, 10, 15, 20, 30];
   List<String> _labels(AppState app) => [
@@ -63,6 +65,13 @@ class _ProfilePageState extends State<ProfilePage> {
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(text)));
   }
 
+  Future<void> _openDeleteWeb() async {
+    final app = widget.app;
+    final uri = Uri.parse(_deleteUrl);
+    final ok = await launchUrl(uri, mode: LaunchMode.externalApplication);
+    if (!ok) _msg(app.tr(ar: 'تعذّر فتح رابط الحذف', en: 'Could not open delete link'));
+  }
+
   Future<void> _confirmDelete(AppState app) async {
     if (app.token == null || app.token!.isEmpty) {
       _msg('سجّل الدخول أولاً');
@@ -94,6 +103,18 @@ class _ProfilePageState extends State<ProfilePage> {
                     en: 'I understand and agree to delete my account',
                   )),
                   onChanged: (v) => setDialog(() => confirmed = v ?? false),
+                ),
+                const SizedBox(height: 6),
+                TextButton(
+                  style: TextButton.styleFrom(padding: EdgeInsets.zero, alignment: Alignment.centerLeft),
+                  onPressed: () => _openDeleteWeb(),
+                  child: Text(
+                    app.tr(
+                      ar: 'بدلاً من ذلك، احذف الحساب عبر الويب',
+                      en: 'Alternatively, delete your account on the web',
+                    ),
+                    style: TextStyle(color: Theme.of(context).colorScheme.primary),
+                  ),
                 ),
               ],
             ),

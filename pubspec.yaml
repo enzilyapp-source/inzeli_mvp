@@ -20,6 +20,7 @@ dependencies:
   win32: ^5.0.0
   image_picker: ^1.0.7
   geolocator: ^10.1.0
+  url_launcher: ^6.2.5
 
 dev_dependencies:
   flutter_test:
