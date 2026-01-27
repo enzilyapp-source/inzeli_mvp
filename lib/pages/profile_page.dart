@@ -71,26 +71,48 @@ class _ProfilePageState extends State<ProfilePage> {
 
     final sure = await showDialog<bool>(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text(app.tr(ar: 'تأكيد حذف الحساب', en: 'Confirm account deletion')),
-        content: Text(app.tr(
-          ar: 'سيتم حذف حسابك وجميع بياناتك نهائياً ولا يمكن التراجع. هل أنت متأكد؟',
-          en: 'This will permanently delete your account and data. This action cannot be undone.',
-        )),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(false),
-            child: Text(app.tr(ar: 'إلغاء', en: 'Cancel')),
-          ),
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(true),
-            child: Text(
-              app.tr(ar: 'حذف نهائياً', en: 'Delete'),
-              style: const TextStyle(color: Colors.red, fontWeight: FontWeight.bold),
+      builder: (ctx) {
+        bool confirmed = false;
+        return StatefulBuilder(
+          builder: (ctx, setDialog) => AlertDialog(
+            title: Text(app.tr(ar: 'تأكيد حذف الحساب', en: 'Confirm account deletion')),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(app.tr(
+                  ar: 'سيتم حذف حسابك وجميع بياناتك نهائياً ولا يمكن التراجع.',
+                  en: 'Your account and data will be permanently deleted and cannot be restored.',
+                )),
+                const SizedBox(height: 12),
+                CheckboxListTile(
+                  value: confirmed,
+                  contentPadding: EdgeInsets.zero,
+                  controlAffinity: ListTileControlAffinity.leading,
+                  title: Text(app.tr(
+                    ar: 'أوافق على حذف الحساب نهائياً',
+                    en: 'I understand and agree to delete my account',
+                  )),
+                  onChanged: (v) => setDialog(() => confirmed = v ?? false),
+                ),
+              ],
             ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(ctx).pop(false),
+                child: Text(app.tr(ar: 'إلغاء', en: 'Cancel')),
+              ),
+              TextButton(
+                onPressed: confirmed ? () => Navigator.of(ctx).pop(true) : null,
+                child: Text(
+                  app.tr(ar: 'حذف نهائياً', en: 'Delete'),
+                  style: const TextStyle(fontWeight: FontWeight.bold),
+                ),
+              ),
+            ],
           ),
-        ],
-      ),
+        );
+      },
     );
 
     if (sure != true) return;
