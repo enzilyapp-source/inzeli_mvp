@@ -157,8 +157,10 @@ class _ProfilePageState extends State<ProfilePage> {
         MaterialPageRoute(builder: (_) => SignInPage(app: app)),
         (route) => false,
       );
+      if (!mounted) return;
       _msg(app.tr(ar: 'تم حذف الحساب', en: 'Account deleted'));
     } else {
+      if (!mounted) return;
       _msg(res['message']?.toString() ?? app.tr(ar: 'فشل الحذف', en: 'Deletion failed'));
     }
   }
