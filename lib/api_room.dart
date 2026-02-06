@@ -204,4 +204,54 @@ class ApiRoom {
       _throwApiErr(m, res, 'Failed to set leader');
     }
   }
+
+  /// حسم النتيجة (يرسله المضيف فقط) → تتحول الحالة إلى pending للموافقات
+  static Future<Map<String, dynamic>> submitResult({
+    required String code,
+    required List<String> winners,
+    required List<String> losers,
+    required String? token,
+  }) async {
+    final res = await http
+        .post(
+      Uri.parse('$apiBase/rooms/$code/result'),
+      headers: _headers(token: token),
+      body: jsonEncode({
+        'winners': winners,
+        'losers': losers,
+      }),
+    )
+        .timeout(_timeout);
+    return _dataOrThrow(res, fallback: 'Failed to submit result');
+  }
+
+  /// تصويت لاعب على النتيجة (موافقة/رفض)
+  static Future<Map<String, dynamic>> voteResult({
+    required String code,
+    required bool approve,
+    required String? token,
+  }) async {
+    final res = await http
+        .post(
+      Uri.parse('$apiBase/rooms/$code/result/vote'),
+      headers: _headers(token: token),
+      body: jsonEncode({'approve': approve}),
+    )
+        .timeout(_timeout);
+    return _dataOrThrow(res, fallback: 'Failed to vote on result');
+  }
+
+  /// حالة النتيجة والأصوات (للاستطلاع)
+  static Future<Map<String, dynamic>> getState({
+    required String code,
+    required String? token,
+  }) async {
+    final res = await http
+        .get(
+      Uri.parse('$apiBase/rooms/$code/state'),
+      headers: _headers(token: token),
+    )
+        .timeout(_timeout);
+    return _dataOrThrow(res, fallback: 'Failed to fetch room state');
+  }
 }

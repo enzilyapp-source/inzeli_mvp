@@ -5,10 +5,10 @@ import 'package:qr_flutter/qr_flutter.dart';
 
 import '../state.dart';
 import '../api_room.dart';
-import '../api_matches.dart';
 import '../sfx.dart';
 import 'scan_page.dart';
 import 'package:geolocator/geolocator.dart';
+import 'package:flutter/services.dart';
 
 class MatchPage extends StatefulWidget {
   final AppState app;
@@ -36,6 +36,7 @@ class _MatchPageState extends State<MatchPage> {
   final Map<String, String?> _teamOf = {};
   final Map<String, bool> _isLeader = {};
   Map<String, dynamic>? _teamQuorum;
+  final Set<String> _knownPlayerIds = {};
 
   String? _winnerUserId;
   String? _winnerTeam; // A/B if team mode
@@ -47,6 +48,14 @@ class _MatchPageState extends State<MatchPage> {
   DateTime? _startedAt;
   int? _timerSec;
   bool _closedNotified = false;
+
+  // حالة النتيجة والموافقات
+  String? _resultStatus; // waiting | pending | approved | rejected
+  Map<String, dynamic>? _resultPayload;
+  List<Map<String, dynamic>> _resultVotes = const [];
+  int _totalPlayers = 0;
+  bool _approvalDialogOpen = false;
+  bool _resultNotified = false;
 
   @override
   void initState() {
@@ -141,6 +150,125 @@ class _MatchPageState extends State<MatchPage> {
     _ticker = Timer.periodic(const Duration(seconds: 1), (_) => tick());
   }
 
+  void _detectNewPlayers(List<Map<String, dynamic>> incoming) {
+    final currentIds = incoming.map((e) => (e['userId'] ?? '').toString()).where((id) => id.isNotEmpty).toSet();
+    final newIds = currentIds.difference(_knownPlayerIds);
+    if (newIds.isNotEmpty) {
+      for (final id in newIds) {
+        final name = _nameForMap(incoming.firstWhere(
+          (p) => (p['userId'] ?? '').toString() == id,
+          orElse: () => const <String, dynamic>{},
+        ));
+        _msg('انضم $name');
+      }
+      Sfx.tap(mute: widget.app.soundMuted == true);
+      HapticFeedback.lightImpact();
+    }
+    _knownPlayerIds
+      ..clear()
+      ..addAll(currentIds);
+  }
+
+  String _nameForMap(Map<String, dynamic> p) {
+    final uid = (p['userId'] ?? '').toString();
+    final user = p['user'] as Map<String, dynamic>? ?? const {};
+    return (user['displayName'] ?? user['name'] ?? user['email'] ?? user['phone'] ?? uid).toString();
+  }
+
+  Future<void> _refreshResultState(String code) async {
+    try {
+      final state = await ApiRoom.getState(code: code, token: widget.app.token);
+      final prevStatus = _resultStatus;
+      _resultStatus = state['status']?.toString();
+      _resultPayload = state['payload'] as Map<String, dynamic>?;
+      _resultVotes = (state['votes'] as List?)?.cast<Map<String, dynamic>>() ?? const [];
+      _totalPlayers = (state['totalPlayers'] as num?)?.toInt() ?? 0;
+      if (prevStatus != _resultStatus) {
+        _resultNotified = false;
+      }
+      if (!_approvalDialogOpen) _maybeShowApprovalDialog();
+    } catch (_) {
+      // ignore state fetch errors to avoid spamming UI
+    }
+  }
+
+  void _maybeShowApprovalDialog() {
+    if (_resultStatus == null) return;
+    final myId = widget.app.userId ?? '';
+    final isHost = (_room?['hostUserId'] ?? widget.room?['hostUserId'])?.toString() == myId;
+
+    if (_resultStatus == 'approved') {
+      if (!_resultNotified) {
+        _resultNotified = true;
+        _msg('تم اعتماد النتيجة 🎉');
+        Sfx.success(mute: widget.app.soundMuted == true);
+      }
+      return;
+    }
+
+    if (_resultStatus == 'rejected' && isHost && !_resultNotified) {
+      _resultNotified = true;
+      _msg('رُفضت النتيجة. حدّد الفائز مرة أخرى.');
+      Sfx.error(mute: widget.app.soundMuted == true);
+      return;
+    }
+
+    if (_resultStatus == 'pending' && !isHost) {
+      final alreadyVoted = _resultVotes.any((v) => (v['userId'] ?? '').toString() == myId);
+      if (alreadyVoted) return;
+      final payload = _resultPayload ?? const {};
+      final winners = (payload['winners'] as List?)?.cast<String>() ?? const [];
+      final losers = (payload['losers'] as List?)?.cast<String>() ?? const [];
+      final winnerNames = winners.map(_nameForUser).join('، ');
+      final loserNames = losers.map(_nameForUser).join('، ');
+
+      _approvalDialogOpen = true;
+      showDialog<bool>(
+        context: context,
+        barrierDismissible: false,
+        builder: (ctx) => AlertDialog(
+          title: const Text('تأكيد النتيجة'),
+          content: Text([
+            if (winnerNames.isNotEmpty) 'الفائزون: $winnerNames',
+            if (loserNames.isNotEmpty) 'الخاسرون: $loserNames',
+            'وافق على النتيجة أو ارفض ليعيد المضيف اختيار الفائز.',
+          ].join('\n')),
+          actions: [
+            TextButton(
+              onPressed: () async {
+                Navigator.pop(ctx, false);
+                try {
+                  await ApiRoom.voteResult(code: _room?['code'] ?? widget.room?['code'] ?? '', approve: false, token: widget.app.token);
+                  _msg('تم الرفض، سيُعاد تحديد النتيجة');
+                  Sfx.error(mute: widget.app.soundMuted == true);
+                  _refreshResultState(_room?['code'] ?? widget.room?['code'] ?? '');
+                } finally {
+                  _approvalDialogOpen = false;
+                  _resultNotified = false;
+                }
+              },
+              child: const Text('رفض'),
+            ),
+            FilledButton(
+              onPressed: () async {
+                Navigator.pop(ctx, true);
+                try {
+                  await ApiRoom.voteResult(code: _room?['code'] ?? widget.room?['code'] ?? '', approve: true, token: widget.app.token);
+                  _msg('تمت الموافقة على النتيجة');
+                  Sfx.tap(mute: widget.app.soundMuted == true);
+                  _refreshResultState(_room?['code'] ?? widget.room?['code'] ?? '');
+                } finally {
+                  _approvalDialogOpen = false;
+                }
+              },
+              child: const Text('موافقة'),
+            ),
+          ],
+        ),
+      );
+    }
+  }
+
   Future<void> _refresh(String code) async {
     try {
       final room = await ApiRoom.getRoomByCode(code, token: widget.app.token);
@@ -165,7 +293,11 @@ class _MatchPageState extends State<MatchPage> {
       }
 
       final p = room['players'];
-      if (p is List) players = p.cast<Map<String, dynamic>>();
+      if (p is List) {
+        final incoming = p.cast<Map<String, dynamic>>();
+        _detectNewPlayers(incoming);
+        players = incoming;
+      }
 
       _pearlsByUser.clear();
       _teamOf.clear();
@@ -221,6 +353,8 @@ class _MatchPageState extends State<MatchPage> {
       final s = room['startedAt'] as String?;
       _startedAt = s != null ? DateTime.tryParse(s) : null;
       _startTickerIfNeeded();
+
+      await _refreshResultState(code);
 
       setState(() {});
     } catch (e) {
@@ -322,6 +456,34 @@ class _MatchPageState extends State<MatchPage> {
               ),
               const SizedBox(height: 8),
             ],
+
+            if (_resultStatus == 'pending')
+              Card(
+                color: Colors.orange.withOpacity(0.12),
+                child: Padding(
+                  padding: const EdgeInsets.all(12),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.flag, color: Colors.orange),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          'النتيجة قيد الموافقة (${_resultVotes.where((v) => v['approve'] == true).length}/$_totalPlayers وافقوا)',
+                          style: const TextStyle(fontWeight: FontWeight.w700),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            if (_resultStatus == 'rejected' && isHost)
+              Card(
+                color: Colors.red.withOpacity(0.12),
+                child: const Padding(
+                  padding: EdgeInsets.all(12),
+                  child: Text('تم رفض النتيجة من أحد اللاعبين. حدّد الفائز من جديد.', style: TextStyle(color: Colors.red)),
+                ),
+              ),
 
             if (isHost) ...[
               Card(
@@ -491,155 +653,109 @@ class _MatchPageState extends State<MatchPage> {
 
             const SizedBox(height: 12),
 
-            FilledButton.icon(
-              icon: const Icon(Icons.flag),
-              style: FilledButton.styleFrom(
-                padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 18),
-                minimumSize: const Size.fromHeight(62),
-                textStyle: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
-              ),
-              label: const Text('حسم النتيجة'),
-              onPressed: _locked || !isHost
-                  ? () => _msg('الحسم للمضيف فقط')
-                  : () async {
-                      final codeSafe = code;
-                      if (_startedAt == null) {
-                        Sfx.error(mute: widget.app.soundMuted == true);
-                        _msg('ابدأ العداد أولاً');
-                        return;
-                      }
-                      if (_remaining > 0) {
-                        _msg('انتظر انتهاء العدّاد أولاً');
-                        return;
-                      }
-                      if (players.length < 2) {
-                        Sfx.error(mute: widget.app.soundMuted == true);
-                        _msg('لا يمكن حسم النتيجة بلاعب واحد');
-                        return;
-                      }
-
-                    try {
-                      List<String> losers = [];
-                      List<String> winners = [];
-                      String winnerName;
-                      if (_teamMode) {
-                        if (_winnerTeam == null) {
-                          _msg('اختر الفريق الفائز');
+            if (isHost)
+              FilledButton.icon(
+                icon: const Icon(Icons.flag),
+                style: FilledButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 18),
+                  minimumSize: const Size.fromHeight(62),
+                  textStyle: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
+                ),
+                label: Text(_resultStatus == 'pending' ? 'النتيجة قيد الموافقة' : 'حسم النتيجة'),
+                onPressed: _locked
+                    ? () => _msg('انتظر انتهاء العداد')
+                    : () async {
+                        final codeSafe = code;
+                        if (_startedAt == null) {
+                          Sfx.error(mute: widget.app.soundMuted == true);
+                          _msg('ابدأ العداد أولاً');
                           return;
                         }
-                        winners = players
-                            .map((p) => p['userId']?.toString() ?? '')
-                            .where((uid) => uid.isNotEmpty && (_teamOf[uid] ?? '') == _winnerTeam)
-                            .toList();
-                        losers = players
-                            .map((p) => p['userId']?.toString() ?? '')
-                            .where((uid) => uid.isNotEmpty && (_teamOf[uid] ?? '') != _winnerTeam)
-                            .toList();
-                        winnerName = 'الفريق ${_winnerTeam!}';
-                      } else {
-                        if (_winnerUserId == null) {
-                          _msg('اختَر الفائز أولًا');
+                        if (_remaining > 0) {
+                          _msg('انتظر انتهاء العدّاد أولاً');
                           return;
                         }
-                        winners = [_winnerUserId!];
-                        losers = players
-                            .map((p) => p['userId']?.toString() ?? '')
-                            .where((uid) => uid.isNotEmpty && uid != _winnerUserId)
-                            .toList();
-                        winnerName = _nameForUser(_winnerUserId!);
-                      }
-
-                      final zeroPearlPlayers = losers
-                          .where((uid) => (_pearlsByUser[uid] ?? 0) <= 0)
-                          .map(_nameForUser)
-                          .toList();
-
-                      final loserNames = losers.map(_nameForUser).join('، ');
-
-                      final confirm = await showDialog<bool>(
-                        context: context,
-                        builder: (ctx) => AlertDialog(
-                          title: const Text('تأكيد النتيجة'),
-                          content: Text([
-                            'الفائز: $winnerName',
-                            if (loserNames.isNotEmpty) 'الخاسرون: $loserNames',
-                            if (zeroPearlPlayers.isNotEmpty)
-                              'تنبيه: ${zeroPearlPlayers.join("، ")} رصيده 0 لؤلؤة — لن يُخصم منه شيء إن خسر.'
-                          ].join('\n')),
-                          actions: [
-                            TextButton(
-                              onPressed: () => Navigator.pop(ctx, false),
-                              child: const Text('إلغاء'),
-                            ),
-                            FilledButton(
-                              onPressed: () => Navigator.pop(ctx, true),
-                              child: const Text('تأكيد'),
-                            ),
-                          ],
-                        ),
-                      );
-                      if (confirm != true) return;
-
-                      await ApiMatches.createMatch(
-                        roomCode: codeSafe.isEmpty ? null : codeSafe,
-                        gameId: game,
-                        winners: winners,
-                        losers: losers,
-                        token: widget.app.token,
-                        sponsorCode: sponsorCode,
-                      );
-
-                      await widget.app.addLocalMatch(
-                        game: game,
-                        roomCode: codeSafe,
-                        winner: winnerName,
-                        losers: losers.map(_nameForUser).toList(),
-                      );
-                      await widget.app.syncTimelineFromServer();
-                      widget.app.setRoomCode(null);
-                      Sfx.success(mute: widget.app.soundMuted == true);
-
-                      // حدّث اللآلئ لجميع اللاعبين محليًا (عرض)
-                      if (winners.isNotEmpty) {
-                        final gain = losers.where((uid) => (_pearlsByUser[uid] ?? 0) > 0).length;
-                        for (final w in winners) {
-                          _pearlsByUser[w] = (_pearlsByUser[w] ?? 0) + gain;
+                        if (players.length < 2) {
+                          Sfx.error(mute: widget.app.soundMuted == true);
+                          _msg('لا يمكن حسم النتيجة بلاعب واحد');
+                          return;
                         }
-                        for (final uid in losers) {
-                          final cur = _pearlsByUser[uid] ?? 0;
-                          if (cur > 0) _pearlsByUser[uid] = cur - 1;
-                        }
-                      }
 
-                      // تحديث رصيد اللآلئ المحلي لصاحب الحساب فقط
-                      final myId = widget.app.userId;
-                      if (myId != null && myId.isNotEmpty) {
-                        final iWon = winners.contains(myId);
-                        if (iWon) {
-                          final gain = losers.where((uid) => (_pearlsByUser[uid] ?? 0) > 0).length;
-                          if (gain > 0) widget.app.grantPearlsForGame(game, gain);
-                        } else if (losers.contains(myId)) {
-                          if ((widget.app.pearlsForGame(game)) > 0) {
-                            widget.app.spendPearlForGame(game);
+                        try {
+                          List<String> losers = [];
+                          List<String> winners = [];
+                          String winnerName;
+                          if (_teamMode) {
+                            if (_winnerTeam == null) {
+                              _msg('اختر الفريق الفائز');
+                              return;
+                            }
+                            winners = players
+                                .map((p) => p['userId']?.toString() ?? '')
+                                .where((uid) => uid.isNotEmpty && (_teamOf[uid] ?? '') == _winnerTeam)
+                                .toList();
+                            losers = players
+                                .map((p) => p['userId']?.toString() ?? '')
+                                .where((uid) => uid.isNotEmpty && (_teamOf[uid] ?? '') != _winnerTeam)
+                                .toList();
+                            winnerName = 'الفريق ${_winnerTeam!}';
+                          } else {
+                            if (_winnerUserId == null) {
+                              _msg('اختَر الفائز أولًا');
+                              return;
+                            }
+                            winners = [_winnerUserId!];
+                            losers = players
+                                .map((p) => p['userId']?.toString() ?? '')
+                                .where((uid) => uid.isNotEmpty && uid != _winnerUserId)
+                                .toList();
+                            winnerName = _nameForUser(_winnerUserId!);
                           }
+
+                          final loserNames = losers.map(_nameForUser).join('، ');
+                          final confirm = await showDialog<bool>(
+                            context: context,
+                            builder: (ctx) => AlertDialog(
+                              title: const Text('تأكيد النتيجة'),
+                              content: Text([
+                                'الفائز: $winnerName',
+                                if (loserNames.isNotEmpty) 'الخاسرون: $loserNames',
+                                'سيتم انتظار موافقة كل اللاعبين.',
+                              ].join('\n')),
+                              actions: [
+                                TextButton(
+                                  onPressed: () => Navigator.pop(ctx, false),
+                                  child: const Text('إلغاء'),
+                                ),
+                                FilledButton(
+                                  onPressed: () => Navigator.pop(ctx, true),
+                                  child: const Text('إرسال للموافقة'),
+                                ),
+                              ],
+                            ),
+                          );
+                          if (confirm != true) return;
+
+                          await ApiRoom.submitResult(
+                            code: codeSafe,
+                            winners: winners,
+                            losers: losers,
+                            token: widget.app.token,
+                          );
+
+                          _msg('أُرسلت النتيجة — بانتظار موافقة الجميع');
+                          setState(() {
+                            _resultStatus = 'pending';
+                            _resultPayload = {'winners': winners, 'losers': losers};
+                            _winnerUserId = null;
+                            _winnerTeam = null;
+                          });
+                          _refreshResultState(codeSafe);
+                        } catch (e) {
+                          _msg(e.toString());
                         }
-                      }
-
-                      _msg('تم الحسم: كل خاسر -1 لؤلؤة (إن وجد)، توزيعها على الفائزين');
-                      setState(() {
-                        _winnerUserId = null;
-                        _winnerTeam = null;
-                      });
-                      if (codeSafe.isNotEmpty) _refresh(codeSafe);
-
-                      await Future.delayed(const Duration(milliseconds: 400));
-                      if (!mounted || !context.mounted) return;
-                      Navigator.pop(context);
-                    } catch (e) {
-                      _msg(e.toString());
-                    }
-                  },
-            ),
+                      },
+              ),
 
             const SizedBox(height: 16),
             const Text('انضم بالكود (اختبار سريع)'),
