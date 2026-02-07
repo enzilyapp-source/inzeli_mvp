@@ -36,11 +36,13 @@ Future<ApiResponse<Map<String, dynamic>>> register({
   required String email,
   required String password,
   required String displayName,
+  String? birthDate,
 }) =>
     _post('/auth/register', {
       'email': email,
       'password': password,
       'displayName': displayName,
+      if (birthDate != null) 'birthDate': birthDate,
     });
 
 Future<ApiResponse<Map<String, dynamic>>> login({

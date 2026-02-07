@@ -4,6 +4,7 @@ import '../state.dart';
 import '../api_auth.dart';
 import '../main.dart' show AuthGate; // ✅ to re-enter the gate after success
 import '../widgets/primary_pill_button.dart';
+import 'package:flutter/cupertino.dart';
 
 class SignInPage extends StatefulWidget {
   final AppState app;
@@ -23,6 +24,7 @@ class _SignInPageState extends State<SignInPage> {
   final _name  = TextEditingController();
   final _phone = TextEditingController();
   final _age   = TextEditingController();
+  DateTime? _birthDate;
 
   @override
   void dispose() {
@@ -53,6 +55,7 @@ class _SignInPageState extends State<SignInPage> {
           email: _email.text.trim(),
           password: _pass.text,
           displayName: _name.text.trim(),
+          birthDate: _birthDate?.toIso8601String(),
         );
       }
 
@@ -161,18 +164,24 @@ class _SignInPageState extends State<SignInPage> {
                               keyboardType: TextInputType.phone,
                             ),
                             const SizedBox(height: 10),
-                            TextFormField(
-                              controller: _age,
-                              decoration: const InputDecoration(labelText: 'العمر'),
-                              keyboardType: TextInputType.number,
-                              validator: (v) {
-                                if (v == null || v.trim().isEmpty) return null;
-                                final n = int.tryParse(v);
-                                if (n == null || n <= 0) return 'أدخل عمر صحيح';
-                                return null;
-                              },
-                            ),
-                          ],
+                          TextFormField(
+                            controller: _age,
+                            decoration: const InputDecoration(labelText: 'العمر'),
+                            keyboardType: TextInputType.number,
+                            validator: (v) {
+                              if (v == null || v.trim().isEmpty) return null;
+                              final n = int.tryParse(v);
+                              if (n == null || n <= 0) return 'أدخل عمر صحيح';
+                              return null;
+                            },
+                          ),
+                          const SizedBox(height: 10),
+                          _BirthDatePicker(
+                            label: 'تاريخ الميلاد (اختياري)',
+                            value: _birthDate,
+                            onChanged: (d) => setState(() => _birthDate = d),
+                          ),
+                        ],
 
                           const SizedBox(height: 16),
 

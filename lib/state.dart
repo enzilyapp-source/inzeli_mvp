@@ -73,7 +73,7 @@ class AppState extends ChangeNotifier {
 
   /// Games per category used by LeaderboardPage
   final Map<String, List<String>> games = const <String, List<String>>{
-    'جنجفة': ['كوت', 'بلوت', 'تريكس', 'هند', 'سبيتة'],
+    'جنجفة': ['كوت', 'بلوت', 'تريكس', 'هند', 'سبيتة', 'اونو'],
     'ألعاب شعبية': ['شطرنج', 'دامه', 'كيرم', 'دومنه', 'طاوله', 'بلياردو'],
     'رياضة': ['بيبيفوت', 'قدم', 'سله', 'طائره', 'بولنج', 'بادل', 'تنس طاولة', 'تنس ارضي'],
   };
@@ -99,6 +99,7 @@ class AppState extends ChangeNotifier {
       'تريكس': 'Trex',
       'هند': 'Hind',
       'سبيتة': 'Spita',
+      'اونو': 'Uno',
       'شطرنج': 'Chess',
       'دامه': 'Checkers',
       'كيرم': 'Carrom',
