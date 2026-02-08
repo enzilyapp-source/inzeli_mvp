@@ -212,4 +212,53 @@ class _SignInPageState extends State<SignInPage> {
     );
   }
 }
+
+/// بسيط: حقل يفتح DatePicker لاختيار سنة/شهر/يوم
+class _BirthDatePicker extends StatelessWidget {
+  final String label;
+  final DateTime? value;
+  final ValueChanged<DateTime?> onChanged;
+
+  const _BirthDatePicker({
+    required this.label,
+    required this.value,
+    required this.onChanged,
+  });
+
+  Future<void> _pick(BuildContext context) async {
+    final now = DateTime.now();
+    final initial = value ?? DateTime(now.year - 18, 1, 1);
+    final first = DateTime(1900, 1, 1);
+    final last = now;
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: initial,
+      firstDate: first,
+      lastDate: last,
+      helpText: label,
+      locale: const Locale('ar'),
+    );
+    if (picked != null) onChanged(picked);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final display = value == null
+        ? 'اختياري'
+        : '${value!.year}-${value!.month.toString().padLeft(2, '0')}-${value!.day.toString().padLeft(2, '0')}';
+    return InkWell(
+      onTap: () => _pick(context),
+      child: InputDecorator(
+        decoration: InputDecoration(labelText: label),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Text(display),
+            const Icon(Icons.calendar_today, size: 18),
+          ],
+        ),
+      ),
+    );
+  }
+}
 //pages/signin_page.dart
