@@ -8,6 +8,7 @@ import 'pages/leaderboard_hub_page.dart'; // ✅ NEW (leaderboards first)
 import 'pages/timeline_page.dart';
 import 'pages/profile_page.dart';
 import 'pages/signin_page.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 
 void main() => runApp(const InzeliApp());
 
@@ -19,6 +20,12 @@ class InzeliApp extends StatelessWidget {
     return MaterialApp(
       title: 'Inzeli',
       debugShowCheckedModeBanner: false,
+      localizationsDelegates: const [
+        GlobalMaterialLocalizations.delegate,
+        GlobalWidgetsLocalizations.delegate,
+        GlobalCupertinoLocalizations.delegate,
+      ],
+      supportedLocales: const [Locale('ar'), Locale('en')],
       themeMode: ThemeMode.dark,
       theme: ThemeData(
         brightness: Brightness.dark,
