@@ -9,7 +9,6 @@ import 'pages/leaderboard_hub_page.dart'; // ✅ NEW (leaderboards first)
 import 'pages/timeline_page.dart';
 import 'pages/profile_page.dart';
 import 'pages/signin_page.dart';
-import 'package:flutter_localizations/flutter_localizations.dart';
 
 void main() => runApp(const InzeliApp());
 

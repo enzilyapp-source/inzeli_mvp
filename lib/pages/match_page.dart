@@ -459,7 +459,7 @@ class _MatchPageState extends State<MatchPage> {
 
             if (_resultStatus == 'pending')
               Card(
-                color: Colors.orange.withOpacity(0.12),
+                color: Colors.orange.withValues(alpha: 0.12),
                 child: Padding(
                   padding: const EdgeInsets.all(12),
                   child: Row(
@@ -478,7 +478,7 @@ class _MatchPageState extends State<MatchPage> {
               ),
             if (_resultStatus == 'rejected' && isHost)
               Card(
-                color: Colors.red.withOpacity(0.12),
+                color: Colors.red.withValues(alpha: 0.12),
                 child: const Padding(
                   padding: EdgeInsets.all(12),
                   child: Text('تم رفض النتيجة من أحد اللاعبين. حدّد الفائز من جديد.', style: TextStyle(color: Colors.red)),
