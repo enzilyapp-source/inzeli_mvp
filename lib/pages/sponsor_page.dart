@@ -75,58 +75,62 @@ class _SponsorPageState extends State<SponsorPage> {
   Widget build(BuildContext context) {
     final app = widget.app;
     final theme = Theme.of(context);
+    const tajawal = TextStyle(fontFamily: 'Tajawal');
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('سبونسر'),
+        title: const Text('سبونسر', style: TextStyle(fontFamily: 'Tajawal')),
       ),
-      body: FutureBuilder<List<Map<String, dynamic>>>(
-        future: _sponsorsFuture,
-        builder: (context, snap) {
-          if (snap.connectionState == ConnectionState.waiting) {
-            return const Center(child: CircularProgressIndicator());
-          }
-          if (snap.hasError) {
-            return Center(
-              child: Text('خطأ في تحميل الرعاة: ${snap.error}'),
+      body: DefaultTextStyle.merge(
+        style: tajawal,
+        child: FutureBuilder<List<Map<String, dynamic>>>(
+          future: _sponsorsFuture,
+          builder: (context, snap) {
+            if (snap.connectionState == ConnectionState.waiting) {
+              return const Center(child: CircularProgressIndicator());
+            }
+            if (snap.hasError) {
+              return Center(
+                child: Text('خطأ في تحميل الرعاة: ${snap.error}'),
+              );
+            }
+            final sponsors = snap.data ?? [];
+            if (sponsors.isEmpty) {
+              return const Center(child: Text('لا يوجد رعاة حاليًا'));
+            }
+
+            // لو ما في راعي مفتوح، نختار الأول
+            _openSponsorCode ??= (sponsors.first['code'] ?? '').toString();
+            _sponsorDetailFuture ??= ApiSponsors.getSponsorDetail(
+              code: _openSponsorCode!,
+              token: widget.app.token,
             );
-          }
-          final sponsors = snap.data ?? [];
-          if (sponsors.isEmpty) {
-            return const Center(child: Text('لا يوجد رعاة حاليًا'));
-          }
+            _walletsFuture ??= (widget.app.token != null && widget.app.token!.isNotEmpty)
+                ? ApiSponsors.getMyWallets(sponsorCode: _openSponsorCode!, token: widget.app.token!)
+                : null;
 
-          // لو ما في راعي مفتوح، نختار الأول
-          _openSponsorCode ??= (sponsors.first['code'] ?? '').toString();
-          _sponsorDetailFuture ??= ApiSponsors.getSponsorDetail(
-            code: _openSponsorCode!,
-            token: widget.app.token,
-          );
-          _walletsFuture ??= (widget.app.token != null && widget.app.token!.isNotEmpty)
-              ? ApiSponsors.getMyWallets(sponsorCode: _openSponsorCode!, token: widget.app.token!)
-              : null;
-
-          return ListView(
-            padding: const EdgeInsets.all(12),
-            children: [
-              _SponsorPickerGrid(
-                sponsors: sponsors,
-                openCode: _openSponsorCode,
-                onPick: _openSponsor,
-              ),
-              const SizedBox(height: 12),
-              _openSponsorCode == null
-                  ? const Text('اختر راعي لعرض الألعاب')
-                  : _SponsorDetailSection(
-                      app: app,
-                      theme: theme,
-                      sponsorCode: _openSponsorCode!,
-                      sponsorDetailFuture: _sponsorDetailFuture!,
-                      walletsFuture: _walletsFuture,
-                    ),
-            ],
-          );
-        },
+            return ListView(
+              padding: const EdgeInsets.all(12),
+              children: [
+                _SponsorPickerGrid(
+                  sponsors: sponsors,
+                  openCode: _openSponsorCode,
+                  onPick: _openSponsor,
+                ),
+                const SizedBox(height: 12),
+                _openSponsorCode == null
+                    ? const Text('اختر راعي لعرض الألعاب')
+                    : _SponsorDetailSection(
+                        app: app,
+                        theme: theme,
+                        sponsorCode: _openSponsorCode!,
+                        sponsorDetailFuture: _sponsorDetailFuture!,
+                        walletsFuture: _walletsFuture,
+                      ),
+              ],
+            );
+          },
+        ),
       ),
     );
   }
@@ -146,12 +150,6 @@ class _SponsorDetailSection extends StatelessWidget {
     required this.sponsorDetailFuture,
     required this.walletsFuture,
   });
-
-  List<Map<String, dynamic>> _mockBoard() => [
-        {"displayName": "Nasser H.", "pearls": 5, "streak": 3},
-        {"displayName": "Ahmad", "pearls": 4, "streak": 2},
-        {"displayName": "Saad", "pearls": 3, "streak": 1},
-      ];
 
   @override
   Widget build(BuildContext context) {
@@ -191,80 +189,7 @@ class _SponsorDetailSection extends StatelessWidget {
                   : null,
             ),
             const SizedBox(height: 16),
-            Text('ألعاب السبونسر', style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800)),
-            const SizedBox(height: 8),
-            if (games.isEmpty)
-              const Text('لا توجد ألعاب حالياً')
-            else
-              ...games.map((g) {
-                final gameObj = (g['game'] as Map?) ?? {};
-                final gid = (g['gameId'] ?? gameObj['id'] ?? '').toString();
-                final gname = (gameObj['name'] ?? gid).toString();
-                final prize = (g['prizeAmount'] as num?)?.toInt() ?? 0;
-                final board = _mockBoard();
-                return Card(
-                  child: Padding(
-                    padding: const EdgeInsets.all(12),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          children: [
-                            Expanded(
-                              child: Text(
-                                gname,
-                                style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w900),
-                              ),
-                            ),
-                            Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                              decoration: BoxDecoration(
-                                color: const Color(0xFF172133).withValues(alpha: 0.85),
-                                borderRadius: BorderRadius.circular(18),
-                              ),
-                              child: Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  const Icon(Icons.card_giftcard, size: 18),
-                                  const SizedBox(width: 6),
-                                  Text('$prize'),
-                                ],
-                              ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 8),
-                        Text('لوحة المتصدرين (تجريبية)', style: theme.textTheme.bodySmall),
-                        ListView.separated(
-                          shrinkWrap: true,
-                          physics: const NeverScrollableScrollPhysics(),
-                          itemCount: board.length,
-                          separatorBuilder: (_, __) => const Divider(height: 0),
-                          itemBuilder: (_, i) {
-                            final row = board[i];
-                            return ListTile(
-                              leading: CircleAvatar(
-                                backgroundColor: const Color(0xFF273347),
-                                child: Text('${i + 1}'),
-                              ),
-                              title: Text(row['displayName'].toString()),
-                              subtitle: const Text('لآلئ السبونسر'),
-                              trailing: Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  Image.asset('lib/assets/pearl.png', width: 18, height: 18),
-                                  const SizedBox(width: 6),
-                                  Text('${row['pearls']}'),
-                                ],
-                              ),
-                            );
-                          },
-                        ),
-                      ],
-                    ),
-                  ),
-                );
-              }),
+            // Removed mock sponsor leaderboards; نكتفي بالبطاقة والألعاب الحقيقية
             const SizedBox(height: 12),
             if (walletsFuture != null)
               Column(

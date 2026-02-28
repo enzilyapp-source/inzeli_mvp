@@ -1,10 +1,10 @@
 // lib/pages/signin_page.dart
 import 'package:flutter/material.dart';
+import '../widgets/app_snackbar.dart';
 import '../state.dart';
 import '../api_auth.dart';
 import '../main.dart' show AuthGate; // ✅ to re-enter the gate after success
 import '../widgets/primary_pill_button.dart';
-import 'package:flutter/cupertino.dart';
 
 class SignInPage extends StatefulWidget {
   final AppState app;
@@ -23,7 +23,6 @@ class _SignInPageState extends State<SignInPage> {
   final _pass  = TextEditingController();
   final _name  = TextEditingController();
   final _phone = TextEditingController();
-  final _age   = TextEditingController();
   DateTime? _birthDate;
 
   @override
@@ -32,12 +31,11 @@ class _SignInPageState extends State<SignInPage> {
     _pass.dispose();
     _name.dispose();
     _phone.dispose();
-    _age.dispose();
     super.dispose();
   }
 
-  void _msg(String m) =>
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(m)));
+  void _msg(String m, {bool error = false, bool success = false}) =>
+      showAppSnack(context, m, error: error, success: success);
 
   Future<void> _submit() async {
     // Close keyboard
@@ -51,11 +49,16 @@ class _SignInPageState extends State<SignInPage> {
       if (_isLogin) {
         r = await login(email: _email.text.trim(), password: _pass.text);
       } else {
+        if (_birthDate == null) {
+          _msg('تاريخ الميلاد مطلوب');
+          setState(() => _busy = false);
+          return;
+        }
         r = await register(
           email: _email.text.trim(),
           password: _pass.text,
           displayName: _name.text.trim(),
-          birthDate: _birthDate?.toIso8601String(),
+          birthDate: _birthDate!.toIso8601String(),
         );
       }
 
@@ -67,9 +70,9 @@ class _SignInPageState extends State<SignInPage> {
       final token = r.data!['token'] as String;
       final user  = r.data!['user']  as Map<String, dynamic>;
       await widget.app.setAuthFromBackend(token: token, user: user);
-      // Phone/age are optional UI fields only; backend no longer receives them.
+      // Phone حاليًا غير مرسل للباكند.
 
-      _msg(_isLogin ? 'تم تسجيل الدخول ✅' : 'تم إنشاء الحساب 🎉');
+      _msg(_isLogin ? 'تم تسجيل الدخول ✅' : 'تم إنشاء الحساب 🎉', success: true);
 
       if (!mounted) return;
 
@@ -79,7 +82,7 @@ class _SignInPageState extends State<SignInPage> {
             (_) => false,
       );
     } catch (e) {
-      _msg(e.toString());
+      _msg(e.toString(), error: true);
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -164,20 +167,8 @@ class _SignInPageState extends State<SignInPage> {
                               keyboardType: TextInputType.phone,
                             ),
                             const SizedBox(height: 10),
-                          TextFormField(
-                            controller: _age,
-                            decoration: const InputDecoration(labelText: 'العمر'),
-                            keyboardType: TextInputType.number,
-                            validator: (v) {
-                              if (v == null || v.trim().isEmpty) return null;
-                              final n = int.tryParse(v);
-                              if (n == null || n <= 0) return 'أدخل عمر صحيح';
-                              return null;
-                            },
-                          ),
-                          const SizedBox(height: 10),
                           _BirthDatePicker(
-                            label: 'تاريخ الميلاد (اختياري)',
+                            label: 'تاريخ الميلاد',
                             value: _birthDate,
                             onChanged: (d) => setState(() => _birthDate = d),
                           ),
@@ -244,7 +235,7 @@ class _BirthDatePicker extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final display = value == null
-        ? 'اختياري'
+        ? ''
         : '${value!.year}-${value!.month.toString().padLeft(2, '0')}-${value!.day.toString().padLeft(2, '0')}';
     return InkWell(
       onTap: () => _pick(context),

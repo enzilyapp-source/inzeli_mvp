@@ -2,6 +2,7 @@
 import 'package:flutter/material.dart';
 import '../api_store.dart';
 import '../state.dart';
+import '../widgets/app_snackbar.dart';
 
 class MyItemsPage extends StatefulWidget {
   final AppState app;
@@ -40,7 +41,7 @@ class _MyItemsPageState extends State<MyItemsPage> {
   }
 
   void _msg(String text) {
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(text)));
+    showAppSnack(context, text);
   }
 
   @override
@@ -54,7 +55,22 @@ class _MyItemsPageState extends State<MyItemsPage> {
             return const Center(child: CircularProgressIndicator());
           }
           if (snap.hasError) return Center(child: Text('خطأ: ${snap.error}'));
-          final items = snap.data ?? const [];
+          var items = snap.data ?? const [];
+          // أضف الثيمات المجانية المملوكة محلياً
+          const freeThemes = [
+            {'id': 'blueThunder', 'name': 'برق أزرق', 'kind': 'theme'},
+            {'id': 'goldLightning', 'name': 'برق ذهبي', 'kind': 'theme'},
+            {'id': 'kuwait', 'name': 'ألوان العلم', 'kind': 'theme'},
+            {'id': 'greenLeaf', 'name': 'أوراق خضراء', 'kind': 'theme'},
+            {'id': 'flameBlue', 'name': 'لهب أزرق', 'kind': 'theme'},
+            {'id': 'whiteSparkle', 'name': 'سباركل أبيض', 'kind': 'theme'},
+          ];
+          for (final t in freeThemes) {
+            if (widget.app.freeThemesOwned.contains(t['id'])) {
+              items = List<Map<String, dynamic>>.from(items)
+                ..add({'item': t});
+            }
+          }
           if (items.isEmpty) return const Center(child: Text('لا تملك عناصر بعد'));
 
           return ListView.separated(

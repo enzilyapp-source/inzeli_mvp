@@ -4,6 +4,10 @@ import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'api_dewanyah.dart';
 import 'api_timeline.dart';
+import 'api_user.dart';
+import 'api_users.dart';
+
+enum GameMode { solo, team, both }
 
 /// ------------------------------
 /// AppState (single source of truth)
@@ -48,6 +52,7 @@ class AppState extends ChangeNotifier {
   String? themeId;
   String? frameId;
   String? cardId;
+  Set<String> freeThemesOwned = {};
   // إعدادات محلية
   String? language; // e.g. 'ar' / 'en'
   bool? soundMuted;
@@ -77,6 +82,36 @@ class AppState extends ChangeNotifier {
     'ألعاب شعبية': ['شطرنج', 'دامه', 'كيرم', 'دومنه', 'طاوله', 'بلياردو'],
     'رياضة': ['بيبيفوت', 'قدم', 'سله', 'طائره', 'بولنج', 'بادل', 'تنس طاولة', 'تنس ارضي'],
   };
+
+  /// تحديد وضع اللعب لكل لعبة (solo / team / both)
+  static const Map<String, GameMode> _gameModes = {
+    'كوت': GameMode.team,
+    'بلوت': GameMode.team,
+    'تريكس': GameMode.solo,
+    'هند': GameMode.both,
+    'سبيتة': GameMode.both,
+    'اونو': GameMode.solo,
+    'شطرنج': GameMode.solo,
+    'دامه': GameMode.solo,
+    'كيرم': GameMode.team,
+    'دومنه': GameMode.solo,
+    'طاوله': GameMode.solo,
+    'بلياردو': GameMode.solo,
+    'بيبيفوت': GameMode.both,
+    'قدم': GameMode.team,
+    'سله': GameMode.team,
+    'طائره': GameMode.team,
+    'بولنج': GameMode.both,
+    'بادل': GameMode.team,
+    'تنس طاولة': GameMode.both,
+    'تنس ارضي': GameMode.both,
+    'كونكان': GameMode.team,
+  };
+
+  GameMode gameMode(String game) {
+    final key = game.trim();
+    return _gameModes[key] ?? GameMode.both;
+  }
 
   /// Optional local profiles (used by PlayerProfilePage.profile())
   final Map<String, PlayerProfile> _profiles = <String, PlayerProfile>{};
@@ -178,6 +213,10 @@ class AppState extends ChangeNotifier {
       soundMuted = m['soundMuted'] as bool?;
       profilePrivate = m['profilePrivate'] as bool?;
       tutorialSeen = m['tutorialSeen'] as bool?;
+      final rawFreeThemes = m['freeThemesOwned'];
+      if (rawFreeThemes is List) {
+        freeThemesOwned = rawFreeThemes.map((e) => e.toString()).toSet();
+      }
       final rawGamePearls = m['gamePearls'];
     if (rawGamePearls is Map) {
       gamePearls = rawGamePearls.map((k, v) => MapEntry(k.toString(), (v as num?)?.toInt() ?? 0));
@@ -216,6 +255,7 @@ class AppState extends ChangeNotifier {
               game: (e['game'] ?? '').toString(),
               roomCode: (e['roomCode'] ?? '').toString(),
               winner: (e['winner'] ?? '').toString(),
+              winners: (e['winners'] as List?)?.map((x) => x.toString()).toList() ?? const [],
               losers: (e['losers'] as List?)?.map((x) => x.toString()).toList() ?? const [],
               ts: DateTime.tryParse((e['ts'] ?? '').toString()) ?? DateTime.now(),
               meta: e['meta'] is Map ? Map<String, dynamic>.from(e['meta'] as Map) : null,
@@ -271,6 +311,7 @@ class AppState extends ChangeNotifier {
       'soundMuted': soundMuted,
       'profilePrivate': profilePrivate,
       'tutorialSeen': tutorialSeen ?? false,
+      'freeThemesOwned': freeThemesOwned.toList(),
       'gamePearls': gamePearls,
       'rulesPromptSeen': rulesPromptSeen ?? false,
       'pearlsResetMonth': pearlsResetMonth,
@@ -285,6 +326,7 @@ class AppState extends ChangeNotifier {
                 'game': t.game,
                 'roomCode': t.roomCode,
                 'winner': t.winner,
+                'winners': t.winners,
                 'losers': t.losers,
                 'ts': t.ts.toIso8601String(),
                 if (t.meta != null) 'meta': t.meta,
@@ -650,6 +692,24 @@ class AppState extends ChangeNotifier {
     return total;
   }
 
+  /// streak الحالية (عدد الانتصارات المتتالية الأخيرة) للاعب في لعبة معيّنة
+  int streakOf(String playerName, String game) {
+    final matches = timeline
+        .where((t) => t.game == game && (t.winner == playerName || t.losers.contains(playerName)))
+        .toList()
+      ..sort((a, b) => a.ts.compareTo(b.ts)); // قديم -> جديد
+    int streak = 0;
+    for (var i = matches.length - 1; i >= 0; i--) {
+      final t = matches[i];
+      if (t.winner == playerName) {
+        streak++;
+      } else {
+        break;
+      }
+    }
+    return streak;
+  }
+
   List<TimelineEntry> userMatches(String playerName) =>
       timeline.where((t) => t.winner == playerName || t.losers.contains(playerName)).toList();
 
@@ -736,21 +796,221 @@ class AppState extends ChangeNotifier {
   }
 
   /// Fetch timeline from server and store locally (requires auth token).
-  Future<void> syncTimelineFromServer() async {
+  /// By default we fetch all games so "شسالفه" always shows full results feed.
+  Future<void> syncTimelineFromServer({String? gameId, bool global = true}) async {
     if (token == null || token!.isEmpty) return;
     try {
-      final list = await ApiTimeline.list(token: token);
+      List<String> asStrings(dynamic v) {
+        if (v is List) {
+          return v
+              .map((x) => x.toString().trim())
+              .where((s) => s.isNotEmpty)
+              .toList();
+        }
+        if (v == null) return const [];
+        final s = v.toString().trim();
+        if (s.isEmpty) return const [];
+        return [s];
+      }
+
+      List<String> uniqueStrings(Iterable<String> values) {
+        final out = <String>[];
+        final seen = <String>{};
+        for (final raw in values) {
+          final s = raw.trim();
+          if (s.isEmpty) continue;
+          if (seen.add(s)) out.add(s);
+        }
+        return out;
+      }
+
+      bool looksLikeUserId(String v) {
+        final s = v.trim();
+        if (s.isEmpty) return false;
+        final uuid = RegExp(
+          r'^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$',
+        );
+        final cuid = RegExp(r'^c[a-z0-9]{8,}$');
+        return uuid.hasMatch(s) || cuid.hasMatch(s);
+      }
+
+      Map<String, dynamic> metaOf(Map<String, dynamic> e) {
+        final m = e['meta'];
+        if (m is Map) return Map<String, dynamic>.from(m);
+        return const <String, dynamic>{};
+      }
+
+      final userNameById = <String, String>{};
+      void cacheProfile(Map<String, dynamic> u) {
+        final id = (u['id'] ?? '').toString().trim();
+        final pub = (u['publicId'] ?? '').toString().trim();
+        final dn = (u['displayName'] ?? '').toString().trim();
+
+        if (id.isNotEmpty) userProfiles[id] = Map<String, dynamic>.from(u);
+        if (pub.isNotEmpty) userProfiles[pub] = Map<String, dynamic>.from(u);
+
+        if (dn.isNotEmpty) {
+          if (id.isNotEmpty) userNameById[id] = dn;
+          if (pub.isNotEmpty) userNameById[pub] = dn;
+        }
+      }
+
+      String resolveUserLabel(String raw) {
+        final s = raw.trim();
+        if (s.isEmpty) return '';
+        final mapped = userNameById[s];
+        if (mapped != null && mapped.isNotEmpty) return mapped;
+        return s;
+      }
+
+      for (final p in userProfiles.values) {
+        cacheProfile(Map<String, dynamic>.from(p));
+      }
+
+      final list = await ApiTimeline.list(
+        token: token,
+        limit: 200,
+        gameId: gameId,
+        global: global,
+      );
+
+      // جمع كل المعرفات (فائزين + خاسرين) لنجلب الأسماء مرة واحدة
+      final ids = <String>{};
+      void addMaybeIds(Iterable<String> values) {
+        for (final v in values) {
+          if (looksLikeUserId(v)) ids.add(v);
+        }
+      }
+      for (final e in list) {
+        final meta = metaOf(e);
+        addMaybeIds(asStrings(e['winners']));
+        addMaybeIds(asStrings(e['losers']));
+        addMaybeIds(asStrings(meta['winners']));
+        addMaybeIds(asStrings(meta['losers']));
+        addMaybeIds(asStrings(e['userId']));
+      }
+      // إذا API يسمح بجلب متعدد /users?ids=...
+      if (ids.isNotEmpty) {
+        try {
+          final fetched = await ApiUsers.getMany(ids: ids.toList(), token: token);
+          for (final u in fetched) {
+            cacheProfile(Map<String, dynamic>.from(u));
+          }
+        } catch (_) {
+          // تجاهل لو فشل
+        }
+
+        // Fallback if batch endpoint is unavailable: resolve unresolved ids one-by-one.
+        final unresolved = ids
+            .where((id) => !userNameById.containsKey(id))
+            .take(12)
+            .toList();
+        if (unresolved.isNotEmpty) {
+          await Future.wait(
+            unresolved.map((id) async {
+              try {
+                final results = await searchUsers(id, token: token);
+                if (results.isEmpty) return;
+                Map<String, dynamic>? exact;
+                for (final r in results) {
+                  final rid = (r['id'] ?? '').toString();
+                  final rpub = (r['publicId'] ?? '').toString();
+                  if (rid == id || rpub == id) {
+                    exact = r;
+                    break;
+                  }
+                }
+                final picked = exact ?? results.first;
+                cacheProfile(Map<String, dynamic>.from(picked));
+              } catch (_) {
+                // ignore per-id lookup errors
+              }
+            }),
+          );
+        }
+      }
+
       timeline
         ..clear()
         ..addAll(list.map((e) {
+          final meta = metaOf(e);
+          final kind = (e['kind'] ?? 'match').toString();
+
+          final winnersIds = uniqueStrings([
+            ...asStrings(e['winners']),
+            ...asStrings(meta['winners']),
+            ...asStrings(meta['winnerIds']),
+            ...asStrings(meta['winnerUserIds']),
+            ...asStrings(meta['winnerId']),
+            ...asStrings(meta['winnerUserId']),
+          ]);
+
+          final winnersNames = uniqueStrings([
+            ...asStrings(e['winnersNames']),
+            ...asStrings(e['winnerNames']),
+            ...asStrings(meta['winnersNames']),
+            ...asStrings(meta['winnerNames']),
+            ...asStrings(meta['winnersDisplay']),
+            ...asStrings(meta['winnerDisplay']),
+            ...asStrings(e['winnerName']),
+            ...asStrings(e['winner']),
+            ...asStrings(meta['winnerName']),
+            ...asStrings(meta['winner']),
+          ]);
+
+          final losersIds = uniqueStrings([
+            ...asStrings(e['losers']),
+            ...asStrings(meta['losers']),
+            ...asStrings(meta['losersIds']),
+            ...asStrings(meta['loserIds']),
+            ...asStrings(meta['loserUserIds']),
+            ...asStrings(meta['loserUserId']),
+          ]);
+
+          final losersNames = uniqueStrings([
+            ...asStrings(e['losersNames']),
+            ...asStrings(e['loserNames']),
+            ...asStrings(meta['losersNames']),
+            ...asStrings(meta['loserNames']),
+            ...asStrings(meta['losersDisplay']),
+            ...asStrings(meta['loserDisplay']),
+          ]);
+
+          final winnerCandidates = uniqueStrings([
+            ...winnersNames,
+            ...winnersIds,
+            ...asStrings(e['winnerName']),
+            ...asStrings(e['winner']),
+          ]);
+          var winnerResolved =
+              winnerCandidates.isNotEmpty ? winnerCandidates.first : '';
+
+          // Legacy fallback: old APIs may only provide userId on MATCH_WIN.
+          if (winnerResolved.isEmpty &&
+              kind.toUpperCase() == 'MATCH_WIN' &&
+              asStrings(e['userId']).isNotEmpty) {
+            winnerResolved = asStrings(e['userId']).first;
+          }
+          winnerResolved = resolveUserLabel(winnerResolved);
+
+          final winnersForUi = (winnersNames.isNotEmpty
+                  ? winnersNames
+                  : winnersIds)
+              .map(resolveUserLabel)
+              .toList();
+          final losersForUi = (losersNames.isNotEmpty ? losersNames : losersIds)
+              .map(resolveUserLabel)
+              .toList();
+
           return TimelineEntry(
-            kind: (e['kind'] ?? 'match').toString(),
-            game: (e['gameId'] ?? '').toString(),
+            kind: kind,
+            game: (e['gameId'] ?? e['game'] ?? meta['gameId'] ?? '').toString(),
             roomCode: (e['roomCode'] ?? '').toString(),
-            winner: (e['winner'] ?? '').toString(),
-            losers: (e['losers'] as List?)?.map((x) => x.toString()).toList() ?? const [],
+            winner: winnerResolved,
+            winners: winnersForUi,
+            losers: losersForUi,
             ts: DateTime.tryParse((e['ts'] ?? '').toString()) ?? DateTime.now(),
-            meta: e['meta'] is Map ? Map<String, dynamic>.from(e['meta'] as Map) : null,
+            meta: meta.isNotEmpty ? meta : null,
           );
         }));
       await _save();
@@ -797,6 +1057,7 @@ class TimelineEntry {
   final String game;
   final String roomCode;
   final String winner;
+  final List<String> winners;
   final List<String> losers;
   final DateTime ts;
   final Map<String, dynamic>? meta;
@@ -806,6 +1067,7 @@ class TimelineEntry {
     required this.game,
     required this.roomCode,
     required this.winner,
+    this.winners = const [],
     required this.losers,
     required this.ts,
     this.meta,
@@ -814,7 +1076,11 @@ class TimelineEntry {
 
 class PlayerProfile {
   final String? phone;
-  const PlayerProfile({this.phone});
+  final String? displayName;
+  final String? avatarUrl;
+  final String? avatarBase64;
+  final String? themeId;
+  const PlayerProfile({this.phone, this.displayName, this.avatarUrl, this.avatarBase64, this.themeId});
 }
 
 class GameLevel {

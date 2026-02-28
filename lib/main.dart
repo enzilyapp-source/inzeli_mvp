@@ -1,7 +1,9 @@
 // lib/main.dart
 import 'package:flutter/material.dart';
+import 'dart:convert';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'state.dart';
+import 'widgets/avatar_effects.dart';
 
 // pages
 import 'pages/games_page.dart';
@@ -205,11 +207,16 @@ class _HomePageState extends State<HomePage> {
                 ),
               ),
               const SizedBox(height: 8),
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16),
-                child: _TopProfileCard(app: app),
-              ),
-              const SizedBox(height: 12),
+              if (_index != 4) ...[
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  child: _TopProfileCard(
+                    app: app,
+                    onTap: () => setState(() => _index = 4),
+                  ),
+                ),
+                const SizedBox(height: 12),
+              ],
               Expanded(
                 child: Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 8),
@@ -260,38 +267,83 @@ class _HomePageState extends State<HomePage> {
 /// top profile card
 class _TopProfileCard extends StatelessWidget {
   final AppState app;
-  const _TopProfileCard({required this.app});
+  final VoidCallback? onTap;
+  const _TopProfileCard({required this.app, this.onTap});
 
   @override
   Widget build(BuildContext context) {
-    final pearls = app.creditPoints ?? 0; // (or app.pearls if you renamed)
     final name = app.displayName ?? app.name ?? '—';
-    final email = app.email ?? app.phone ?? '';
+    final id = app.publicId ?? app.userId ?? '';
+    final cardColor = _cardColor(app.cardId);
+    final effect = _effectFromId(app.themeId);
+    ImageProvider? avatarImage;
+    if (app.avatarBase64 != null && app.avatarBase64!.isNotEmpty) {
+      try {
+        final bytes = base64Decode(app.avatarBase64!);
+        avatarImage = MemoryImage(bytes);
+      } catch (_) {}
+    }
 
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-      decoration: BoxDecoration(
-        color: const Color(0xFF172133).withValues(alpha: 0.96),
-        borderRadius: BorderRadius.circular(24),
-      ),
-      child: Row(
-        children: [
-          CircleAvatar(
-            radius: 22,
-            backgroundColor: const Color(0xFF273347),
-            child: Text(
-              name.isNotEmpty ? name.characters.first : '؟',
-              style: const TextStyle(
-                fontWeight: FontWeight.w900,
-                fontSize: 18,
-              ),
+    return InkWell(
+      borderRadius: BorderRadius.circular(20),
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        decoration: BoxDecoration(
+          color: cardColor,
+          borderRadius: BorderRadius.circular(20),
+          boxShadow: const [
+            BoxShadow(
+              color: Colors.black26,
+              blurRadius: 10,
+              offset: Offset(0, 6),
             ),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+          ],
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Column(
+              mainAxisSize: MainAxisSize.min,
               children: [
+                if (effect != null)
+                  AvatarEffect(
+                    effect: effect,
+                    size: 82,
+                    animate: true,
+                    child: CircleAvatar(
+                      radius: 28,
+                      backgroundImage: avatarImage,
+                      backgroundColor: const Color(0xFF273347),
+                      child: avatarImage == null
+                          ? Text(
+                              name.isNotEmpty ? name.characters.first : '؟',
+                              style: const TextStyle(
+                                fontWeight: FontWeight.w900,
+                                fontSize: 20,
+                                color: Colors.white,
+                              ),
+                            )
+                          : null,
+                    ),
+                  )
+                else
+                  CircleAvatar(
+                    radius: 28,
+                    backgroundImage: avatarImage,
+                    backgroundColor: const Color(0xFF273347),
+                    child: avatarImage == null
+                        ? Text(
+                            name.isNotEmpty ? name.characters.first : '؟',
+                            style: const TextStyle(
+                              fontWeight: FontWeight.w900,
+                              fontSize: 20,
+                              color: Colors.white,
+                            ),
+                          )
+                        : null,
+                  ),
+                const SizedBox(height: 8),
                 Text(
                   name,
                   style: const TextStyle(
@@ -300,46 +352,56 @@ class _TopProfileCard extends StatelessWidget {
                     fontWeight: FontWeight.w900,
                   ),
                 ),
-                if (email.isNotEmpty) ...[
-                  const SizedBox(height: 2),
+                if (id.isNotEmpty)
                   Text(
-                    email,
+                    _shortId(id),
                     style: TextStyle(
-                      color: Colors.white.withValues(alpha: 0.65),
+                      color: Colors.white.withValues(alpha: 0.7),
                       fontSize: 12,
+                      letterSpacing: 0.2,
                     ),
                   ),
-                ],
               ],
             ),
-          ),
-          const SizedBox(width: 12),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-            decoration: BoxDecoration(
-              color: const Color(0xFF232E4A),
-              borderRadius: BorderRadius.circular(20),
-            ),
-            child: Row(
-              children: [
-                Image.asset(
-                  'lib/assets/pearl.png',
-                  width: 18,
-                  height: 18,
-                ),
-                const SizedBox(width: 4),
-                Text(
-                  '$pearls',
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontWeight: FontWeight.w900,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
+  }
+
+  String _shortId(String raw) {
+    final clean = raw.replaceAll(RegExp(r'[^A-Za-z0-9]'), '');
+    if (clean.isEmpty) return '';
+    final short = clean.length > 6 ? clean.substring(clean.length - 6) : clean.padLeft(6, '0');
+    return '#$short';
+  }
+
+  Color _cardColor(String? id) {
+    switch (id) {
+      case 'navy':
+        return const Color(0xFF0F1D32);
+      case 'violet':
+        return const Color(0xFF2D1B46);
+      case 'blue':
+      default:
+        return const Color(0xFF1E2F4D);
+    }
+  }
+
+  AvatarEffectType? _effectFromId(String? id) {
+    switch (id) {
+      case 'blueThunder':
+        return AvatarEffectType.blueThunder;
+      case 'goldLightning':
+        return AvatarEffectType.goldLightning;
+      case 'kuwait':
+        return AvatarEffectType.kuwaitSparkles;
+      case 'greenLeaf':
+        return AvatarEffectType.greenLeaf;
+      case 'flameBlue':
+        return AvatarEffectType.flameBlue;
+      default:
+        return null;
+    }
   }
 }

@@ -5,10 +5,11 @@ import 'dart:convert';
 import 'package:image_picker/image_picker.dart';
 import 'package:flutter/foundation.dart';
 import 'package:url_launcher/url_launcher.dart';
+import '../widgets/app_snackbar.dart';
 
 import '../state.dart';
-import '../widgets/pearl_chip.dart';   // uses: PearlChip(count: ..., selected: ...)
 import '../widgets/streak_flame.dart'; // uses: StreakFlame(streak: ...)
+import '../widgets/avatar_effects.dart';
 import 'store_page.dart';
 import 'my_items_page.dart';
 import '../sfx.dart';
@@ -27,6 +28,8 @@ class _ProfilePageState extends State<ProfilePage> {
   static const _deleteUrl = 'https://web.enzily.app/delete-account.html';
   // thresholds and labels for “الأنواط”
   static const List<int> _milestones = [5, 10, 15, 20, 30];
+  AvatarEffectType? _avatarEffect; // default: no theme until user picks
+  int _cardThemeIndex = 0; // 0: blue, 1: navy, 2: violet
   List<String> _labels(AppState app) => [
     app.tr(ar: 'عليمي', en: 'Beginner'),
     app.tr(ar: 'يمشي حاله', en: 'Advance'),
@@ -35,10 +38,140 @@ class _ProfilePageState extends State<ProfilePage> {
     app.tr(ar: 'فلتة', en: 'GOAT'),
   ];
 
-  // local edit buffer for bio
-  String _bioDraft = '';
-  bool _pearlsExpanded = false;
   final ImagePicker _picker = ImagePicker();
+  int _wins = 0;
+  int _losses = 0;
+  int _games = 0;
+  late final TextEditingController _nameCtrl;
+  late final TextEditingController _emailCtrl;
+  late final TextEditingController _phoneCtrl;
+  @override
+  void initState() {
+    super.initState();
+    _avatarEffect = _effectFromId(widget.app.themeId);
+    _cardThemeIndex = _cardIndexFromId(widget.app.cardId);
+    _nameCtrl = TextEditingController(text: _meName());
+    _emailCtrl = TextEditingController(text: widget.app.email ?? '');
+    _phoneCtrl = TextEditingController(text: widget.app.phone ?? '');
+    _wins = widget.app.winsOf(_meName(), _currentGame());
+    _losses = widget.app.lossesOf(_meName(), _currentGame());
+    _games = widget.app.totalGamesPlayed(_meName());
+    _loadStats();
+  }
+
+  String _meName() => widget.app.displayName ?? widget.app.name ?? 'لاعب';
+  String _currentGame() {
+    String game = widget.app.selectedGame ?? '—';
+    if (widget.app.gamePearls.isNotEmpty) {
+      final top = widget.app.gamePearls.entries.reduce((a, b) => a.value >= b.value ? a : b);
+      game = top.key;
+    }
+    return game;
+  }
+
+  (String, int) _topPearlGame(AppState app) {
+    if (app.gamePearls.isNotEmpty) {
+      final top = app.gamePearls.entries.reduce((a, b) => a.value >= b.value ? a : b);
+      return (app.gameLabel(top.key), top.value);
+    }
+    if (app.selectedGame != null && app.selectedGame!.isNotEmpty) {
+      return (app.gameLabel(app.selectedGame!), app.pearlsForGame(app.selectedGame!));
+    }
+    return (app.tr(ar: 'بدون لعبة', en: 'No game'), 0);
+  }
+
+  List<(String, DateTime)> _recentWins(String player) {
+    final wins = widget.app.timeline
+        .where((t) => t.winner == player)
+        .toList()
+      ..sort((a, b) => b.ts.compareTo(a.ts));
+
+    return wins.take(3).map((t) => (widget.app.gameLabel(t.game), t.ts)).toList();
+  }
+
+  String _shortId(String id) {
+    final clean = id.replaceAll(RegExp(r'[^A-Za-z0-9]'), '');
+    if (clean.isEmpty) return '';
+    final short = clean.length > 6 ? clean.substring(clean.length - 6) : clean.padLeft(6, '0');
+    return '#$short';
+  }
+
+  AvatarEffectType? _effectFromId(String? id) {
+    switch (id) {
+      case 'blueThunder':
+        return AvatarEffectType.blueThunder;
+      case 'goldLightning':
+        return AvatarEffectType.goldLightning;
+      case 'kuwait':
+        return AvatarEffectType.kuwaitSparkles;
+      case 'greenLeaf':
+        return AvatarEffectType.greenLeaf;
+      case 'flameBlue':
+        return AvatarEffectType.flameBlue;
+      default:
+        return null;
+    }
+  }
+
+  String? _effectId(AvatarEffectType? effect) {
+    switch (effect) {
+      case AvatarEffectType.blueThunder:
+        return 'blueThunder';
+      case AvatarEffectType.goldLightning:
+        return 'goldLightning';
+      case AvatarEffectType.kuwaitSparkles:
+        return 'kuwait';
+      case AvatarEffectType.greenLeaf:
+        return 'greenLeaf';
+      case AvatarEffectType.flameBlue:
+        return 'flameBlue';
+      default:
+        return null;
+    }
+  }
+
+  int _cardIndexFromId(String? id) {
+    switch (id) {
+      case 'navy':
+        return 1;
+      case 'violet':
+        return 2;
+      case 'blue':
+      default:
+        return 0;
+    }
+  }
+
+  String _cardId(int idx) {
+    switch (idx) {
+      case 1:
+        return 'navy';
+      case 2:
+        return 'violet';
+      default:
+        return 'blue';
+    }
+  }
+
+  Future<void> _loadStats() async {
+    final uid = widget.app.userId;
+    if (uid == null || uid.isEmpty) return;
+    try {
+      final stats = await getUserStats(uid, token: widget.app.token);
+      if (stats == null) return;
+      setState(() {
+        _wins = (stats['wins'] as num?)?.toInt() ?? _wins;
+        _losses = (stats['losses'] as num?)?.toInt() ?? _losses;
+        _games = _wins + _losses;
+      });
+      final gp = stats['gamePearls'];
+      if (gp is Map) {
+        widget.app.gamePearls = gp.map((k, v) => MapEntry(k.toString(), (v as num?)?.toInt() ?? 0));
+        await widget.app.saveState();
+        if (mounted) setState(() {});
+      }
+    } catch (_) {}
+  }
 
   Future<void> _pickAvatar() async {
     try {
@@ -61,8 +194,16 @@ class _ProfilePageState extends State<ProfilePage> {
     }
   }
 
-  void _msg(String text) {
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(text)));
+  @override
+  void dispose() {
+    _nameCtrl.dispose();
+    _emailCtrl.dispose();
+    _phoneCtrl.dispose();
+    super.dispose();
+  }
+
+  void _msg(String text, {bool error = false, bool success = false}) {
+    showAppSnack(context, text, error: error, success: success);
   }
 
   Future<void> _openDeleteWeb() async {
@@ -137,6 +278,7 @@ class _ProfilePageState extends State<ProfilePage> {
     );
 
     if (sure != true) return;
+    if (!mounted) return;
 
     // show quick loading indicator
     showDialog(
@@ -193,6 +335,7 @@ class _ProfilePageState extends State<ProfilePage> {
     showModalBottomSheet(
       context: context,
       showDragHandle: true,
+      isScrollControlled: true,
       builder: (ctx) {
         String selected = app.isEnglish ? 'en' : 'ar';
         bool muted = app.soundMuted ?? false;
@@ -211,8 +354,35 @@ class _ProfilePageState extends State<ProfilePage> {
                   mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    const Text('إعدادات التطبيق', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 16)),
-                    const SizedBox(height: 12),
+                    const Text('إعدادات الحساب', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 16)),
+                    const SizedBox(height: 10),
+
+                    TextField(
+                      controller: _nameCtrl,
+                      decoration: const InputDecoration(labelText: 'الاسم'),
+                    ),
+                    const SizedBox(height: 8),
+                    TextField(
+                      controller: _emailCtrl,
+                      decoration: const InputDecoration(labelText: 'الإيميل'),
+                      keyboardType: TextInputType.emailAddress,
+                    ),
+                    const SizedBox(height: 8),
+                    TextField(
+                      controller: _phoneCtrl,
+                      decoration: const InputDecoration(labelText: 'رقم الجوال'),
+                      keyboardType: TextInputType.phone,
+                    ),
+                    const SizedBox(height: 10),
+                    OutlinedButton.icon(
+                      icon: const Icon(Icons.image_outlined),
+                      label: const Text('تغيير الصورة'),
+                      onPressed: _pickAvatar,
+                    ),
+
+                    const SizedBox(height: 16),
+                    const Text('إعدادات التطبيق', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 15)),
+                    const SizedBox(height: 10),
                     const Text('اللغة', style: TextStyle(fontWeight: FontWeight.w800)),
                     const SizedBox(height: 8),
                     SegmentedButton<String>(
@@ -228,7 +398,7 @@ class _ProfilePageState extends State<ProfilePage> {
                         setSheet(() {});
                       },
                     ),
-                    const SizedBox(height: 16),
+                    const SizedBox(height: 12),
                     SwitchListTile(
                       value: muted,
                       onChanged: (v) {
@@ -251,8 +421,31 @@ class _ProfilePageState extends State<ProfilePage> {
                       title: const Text('إخفاء الملف الشخصي'),
                       subtitle: const Text('عند الإخفاء يظهر في البحث الثيم + أفضل لعبة + فوز/خسارة فقط'),
                     ),
-                    const SizedBox(height: 8),
-                    const Text('بعد التحويل إلى الإنجليزية تظهر كلمة "انزلي" كـ "Start" في الأزرار.'),
+
+                    const SizedBox(height: 14),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        TextButton.icon(
+                          icon: const Icon(Icons.close),
+                          label: const Text('إغلاق'),
+                          onPressed: () => Navigator.pop(ctx),
+                        ),
+                        FilledButton.icon(
+                          icon: const Icon(Icons.save),
+                          label: const Text('حفظ التغييرات'),
+                          onPressed: () async {
+                            app.displayName = _nameCtrl.text.trim().isEmpty ? app.displayName : _nameCtrl.text.trim();
+                            app.email = _emailCtrl.text.trim().isEmpty ? app.email : _emailCtrl.text.trim();
+                            app.phone = _phoneCtrl.text.trim().isEmpty ? app.phone : _phoneCtrl.text.trim();
+                            await app.saveState();
+                            if (mounted) setState(() {});
+                            if (ctx.mounted) Navigator.pop(ctx);
+                          },
+                        ),
+                      ],
+                    ),
+
                     if (app.isSignedIn) ...[
                       const SizedBox(height: 12),
                       const Divider(),
@@ -295,6 +488,116 @@ class _ProfilePageState extends State<ProfilePage> {
     );
   }
 
+  void _openAvatarThemePicker() {
+    showModalBottomSheet(
+      context: context,
+      showDragHandle: true,
+      builder: (ctx) {
+        final effects = <(AvatarEffectType?, String)>[
+          (null, 'بدون ثيم'),
+          (AvatarEffectType.blueThunder, 'برق أزرق'),
+          (AvatarEffectType.goldLightning, 'برق ذهبي'),
+          (AvatarEffectType.kuwaitSparkles, 'ألوان العلم'),
+          (AvatarEffectType.greenLeaf, 'أوراق خضراء'),
+        ];
+        final cardThemes = [
+          ('أزرق', 0),
+          ('كحلي', 1),
+          ('بنفسجي', 2),
+        ];
+        return SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text('تعديل الصورة والثيم', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 16)),
+                const SizedBox(height: 12),
+                FilledButton.icon(
+                  onPressed: _pickAvatar,
+                  icon: const Icon(Icons.image_outlined),
+                  label: const Text('تغيير الصورة'),
+                ),
+                const SizedBox(height: 12),
+                const Text('ثيم الهالة حول الصورة', style: TextStyle(fontWeight: FontWeight.w800)),
+                const SizedBox(height: 8),
+                SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  child: Row(
+                    children: effects.map((e) {
+                      final selected = _avatarEffect == e.$1;
+                      return Padding(
+                        padding: const EdgeInsets.only(right: 10),
+                        child: GestureDetector(
+                          onTap: () => setState(() => _avatarEffect = e.$1),
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              AvatarEffect(
+                                effect: e.$1 ?? AvatarEffectType.blueThunder,
+                                size: 74,
+                                animate: e.$1 != null,
+                                child: CircleAvatar(
+                                  radius: 26,
+                                  backgroundColor: Colors.white24,
+                                  child: Text(e.$2.characters.first, style: const TextStyle(color: Colors.white)),
+                                ),
+                              ),
+                              const SizedBox(height: 4),
+                              Text(
+                                e.$2,
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  color: selected ? Theme.of(context).colorScheme.primary : Colors.white70,
+                                  fontWeight: selected ? FontWeight.w800 : FontWeight.w600,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      );
+                    }).toList(),
+                  ),
+                ),
+                const SizedBox(height: 16),
+                const Text('ثيم كرت الملف', style: TextStyle(fontWeight: FontWeight.w800)),
+                const SizedBox(height: 8),
+                Wrap(
+                  spacing: 8,
+                  children: cardThemes.map((c) {
+                    final selected = _cardThemeIndex == c.$2;
+                    return ChoiceChip(
+                      label: Text(c.$1),
+                      selected: selected,
+                      onSelected: (_) => setState(() => _cardThemeIndex = c.$2),
+                    );
+                  }).toList(),
+                ),
+                const SizedBox(height: 12),
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: FilledButton.icon(
+                    onPressed: () async {
+                      widget.app.themeId = _effectId(_avatarEffect);
+                      widget.app.cardId = _cardId(_cardThemeIndex);
+                      await widget.app.saveState();
+                      if (!ctx.mounted) return;
+                      Navigator.pop(ctx);
+                      setState(() {});
+                    },
+                    icon: const Icon(Icons.save),
+                    label: const Text('حفظ'),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final app = widget.app;
@@ -308,8 +611,22 @@ class _ProfilePageState extends State<ProfilePage> {
     final gameLabel = app.gameLabel(game);
     final meName = app.displayName ?? app.name ?? 'لاعب';
     final displayUserId = app.publicId ?? app.userId ?? '';
-
-    final credit = app.storeCredit;
+    final (topGameName, topPearls) = _topPearlGame(app);
+    // النوطة الحالية بناءً على أعلى لؤلؤة
+    String currentRankLabelForPearls(int pearls) {
+      int milestone = _milestones.first;
+      for (final m in _milestones) {
+        if (pearls >= m) milestone = m;
+      }
+      return _rankName(_labelFor(milestone));
+    }
+    final currentRank = currentRankLabelForPearls(topPearls);
+    final recentWins = _recentWins(meName);
+    final headerBg = _cardThemeIndex == 0
+        ? const Color(0xFF1E2F4D)
+        : _cardThemeIndex == 1
+            ? const Color(0xFF0F1D32)
+            : const Color(0xFF2D1B46); // violet theme option
 
     // level ring uses wins/losses for the currently selected game
     final lvl = app.levelForGame(meName, game);
@@ -324,217 +641,196 @@ class _ProfilePageState extends State<ProfilePage> {
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
-        // Header card
-        Card(
-          child: Padding(
-            padding: const EdgeInsets.all(16),
-            child: Row(
-              children: [
-                // avatar with partial ring
-                Stack(
-                  alignment: Alignment.center,
-                  children: [
-                    SizedBox(
-                      width: 84,
-                      height: 84,
-                      child: CustomPaint(
-                        painter: _RingPainter(fill01: lvl.fill01),
-                      ),
+        // Header (hero with avatar, top game pearls, and recent trophies)
+          Card(
+            elevation: 6,
+            clipBehavior: Clip.none,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+            child: SizedBox(
+              height: 176,
+              child: Stack(
+                clipBehavior: Clip.none,
+                children: [
+                  Container(
+                    decoration: BoxDecoration(
+                      color: headerBg,
+                      borderRadius: BorderRadius.circular(24),
                     ),
-                    GestureDetector(
-                      onTap: _pickAvatar,
-                      child: Stack(
-                        alignment: Alignment.bottomRight,
+                  ),
+                  Positioned(
+                    top: 12,
+                    left: 12,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withValues(alpha: 0.12),
+                        borderRadius: BorderRadius.circular(14),
+                        border: Border.all(color: Colors.white24, width: 1),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
                         children: [
-                          CircleAvatar(
-                            radius: 34,
-                            backgroundImage: avatarImage,
-                            child: avatarImage == null
-                                ? Text(
-                                    meName.isNotEmpty ? meName.characters.first : '؟',
-                                    style: const TextStyle(fontSize: 22),
-                                  )
-                                : null,
-                          ),
-                          Container(
-                            margin: const EdgeInsets.only(bottom: 2, right: 2),
-                            decoration: BoxDecoration(
-                              color: Colors.black54,
-                              borderRadius: BorderRadius.circular(10),
-                            ),
-                            padding: const EdgeInsets.all(4),
-                            child: const Icon(Icons.edit, size: 14, color: Colors.white),
+                          const Icon(Icons.workspace_premium, size: 16, color: Color(0xFFF1A949)),
+                          const SizedBox(width: 6),
+                          Text(
+                            currentRank,
+                            style: const TextStyle(fontWeight: FontWeight.w800, color: Colors.white),
                           ),
                         ],
                       ),
                     ),
-                  ],
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        children: [
-                          Expanded(
-                            child: Text(
-                              meName,
-                              style: const TextStyle(
-                                fontWeight: FontWeight.w900,
-                                fontSize: 18,
-                              ),
-                            ),
-                          ),
-                          IconButton(
-                            tooltip: 'إعدادات',
-                            icon: const Icon(Icons.settings_outlined),
-                            onPressed: () => _openSettings(app),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        app.email ?? app.phone ?? '—',
-                        style: TextStyle(
-                          color: onSurface.withValues(alpha: .7),
-                        ),
-                      ),
-                      if (displayUserId.isNotEmpty)
-                        Padding(
-                          padding: const EdgeInsets.only(top: 2.0),
-                          child: Text(
-                            'ID: $displayUserId',
-                            style: const TextStyle(color: Colors.white54, fontSize: 12),
-                          ),
-                        ),
-                      const SizedBox(height: 8),
-                      Wrap(
-                        spacing: 8,
-                        runSpacing: 8,
-                        children: [
-                          if (_topPearlGame(app) != null)
-                            _StatPill(
-                              leading: Image.asset('lib/assets/pearl.png', width: 18, height: 18),
-                              label: app.tr(ar: 'أعلى لعبة', en: 'Top Game'),
-                              value: '${_topPearlGame(app)!.$1} (${_topPearlGame(app)!.$2})',
-                            ),
-                          _StatPill(
-                            leading: const Icon(Icons.emoji_events_outlined, size: 18),
-                            label: app.tr(ar: 'فوز', en: 'Wins'),
-                            value: '${app.winsOf(meName, game)}',
-                          ),
-                          _StatPill(
-                            leading: const Icon(Icons.cancel_outlined, size: 18),
-                            label: app.tr(ar: 'خسارة', en: 'Losses'),
-                            value: '${app.lossesOf(meName, game)}',
-                          ),
-                          _StatPill(
-                            leading: const Icon(Icons.sports_esports_outlined, size: 18),
-                            label: app.tr(ar: 'مباريات', en: 'Games'),
-                            value: '${app.totalGamesPlayed(meName)}',
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 8),
-                      Builder(builder: (_) {
-                        final pts = app.pointsOf(meName, game);
-                        final earned = _milestones.where((m) => pts >= m).toList();
-                        if (earned.isEmpty) return const SizedBox.shrink();
-                        return Wrap(
-                          spacing: 6,
-                          runSpacing: 6,
-                          children: earned
-                              .map(
-                                (m) => Chip(
-                                  label: Text(app.tr(ar: 'نقطة $m', en: '$m pts')),
+                  ),
+                  Positioned(
+                    left: 12,
+                    bottom: -12,
+                    child: _PearlBadge(
+                      game: topGameName,
+                      pearls: topPearls,
+                      size: 60,
+                    ),
+                  ),
+                  Positioned(
+                    right: 12,
+                    bottom: -12,
+                    child: _TrophyStrip(
+                      recentWins: recentWins,
+                      size: 42,
+                    ),
+                  ),
+                  Center(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Stack(
+                          alignment: Alignment.bottomRight,
+                          children: [
+                            if (_avatarEffect != null)
+                              AvatarEffect(
+                                effect: _avatarEffect!,
+                                size: 108,
+                                animate: true,
+                                child: CircleAvatar(
+                                  radius: 42,
+                                  backgroundImage: avatarImage,
+                                  backgroundColor: Colors.white.withValues(alpha: 0.12),
+                                  child: avatarImage == null
+                                      ? Text(
+                                          meName.isNotEmpty ? meName.characters.first : '؟',
+                                          style: const TextStyle(fontSize: 26, fontWeight: FontWeight.bold, color: Colors.white),
+                                        )
+                                      : null,
                                 ),
                               )
-                              .toList(),
-                        );
-                      }),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-        ),
-      ),
-
-      const SizedBox(height: 8),
-
-      // Quick actions row
-      Wrap(
-        spacing: 10,
-        runSpacing: 10,
-        children: [
-          _QuickActionChip(
-            icon: Icons.settings_outlined,
-            label: app.tr(ar: 'الإعدادات', en: 'Settings'),
-            onTap: () => _openSettings(app),
-          ),
-          _QuickActionChip(
-            icon: Icons.shopping_bag_outlined,
-            label: app.tr(ar: 'المتجر', en: 'Market'),
-            onTap: () => _openStore(app),
-          ),
-          _QuickActionChip(
-            icon: Icons.style_outlined,
-            label: app.tr(ar: 'ثيماتي', en: 'My Themes'),
-            onTap: () => _openItems(app),
-          ),
-        ],
-      ),
-
-      const SizedBox(height: 12),
-
-      // Pearls per game (collapsible)
-      Card(
-        child: InkWell(
-          borderRadius: BorderRadius.circular(12),
-          onTap: () => setState(() => _pearlsExpanded = !_pearlsExpanded),
-          child: Padding(
-            padding: const EdgeInsets.all(12),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Text(
-                      app.tr(ar: 'لآلئي لكل لعبة', en: 'Pearls per game'),
-                      style: const TextStyle(fontWeight: FontWeight.w900),
+                            else
+                              CircleAvatar(
+                                radius: 42,
+                                backgroundImage: avatarImage,
+                                backgroundColor: Colors.white.withValues(alpha: 0.12),
+                                child: avatarImage == null
+                                    ? Text(
+                                        meName.isNotEmpty ? meName.characters.first : '؟',
+                                        style: const TextStyle(fontSize: 26, fontWeight: FontWeight.bold, color: Colors.white),
+                                      )
+                                    : null,
+                              ),
+                            Positioned(
+                              bottom: 2,
+                              right: 4,
+                              child: InkWell(
+                                onTap: _openAvatarThemePicker,
+                                borderRadius: BorderRadius.circular(14),
+                                child: Container(
+                                  padding: const EdgeInsets.all(6),
+                                  decoration: BoxDecoration(
+                                    color: Colors.black.withValues(alpha: 0.35),
+                                    shape: BoxShape.circle,
+                                  ),
+                                  child: const Icon(Icons.edit, size: 16, color: Colors.white),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 10),
+                        Text(
+                          meName,
+                          style: const TextStyle(
+                            fontWeight: FontWeight.w900,
+                            fontSize: 18,
+                            color: Colors.white,
+                          ),
+                        ),
+                        if (displayUserId.isNotEmpty) ...[
+                          const SizedBox(height: 4),
+                          Text(
+                            _shortId(displayUserId),
+                            style: TextStyle(
+                              color: Colors.white.withValues(alpha: .72),
+                              fontSize: 12,
+                              letterSpacing: 0.3,
+                            ),
+                          ),
+                        ],
+                      ],
                     ),
-                    const Spacer(),
-                    Icon(_pearlsExpanded ? Icons.expand_less : Icons.expand_more),
-                  ],
-                ),
-                if (_pearlsExpanded) ...[
-                  const SizedBox(height: 10),
-                  _PearlProgressList(
-                    entries: _gamePearlEntries(app),
-                    app: app,
                   ),
                 ],
-              ],
+              ),
+            ),
+          ),
+
+        const SizedBox(height: 10),
+
+        // Stats row (icons فقط)
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+          children: [
+            _IconStat(icon: Icons.emoji_events_outlined, value: _wins, sparkleColor: Colors.greenAccent),
+            _IconStat(icon: Icons.cancel_outlined, value: _losses, sparkleColor: Colors.redAccent),
+            _IconStat(icon: Icons.sports_esports_outlined, value: _games),
+          ],
+        ),
+
+        const SizedBox(height: 12),
+
+        // Pearls per game (دائرة تعبئة لكل لعبة)
+        Card(
+          child: Padding(
+            padding: const EdgeInsets.all(12),
+            child: _PearlCircleGrid(
+              entries: _gamePearlEntries(app),
+              maxValue: _milestones.last,
+              milestones: _milestones,
+              rankLabel: _labelFor,
+              rankName: _rankName,
             ),
           ),
         ),
-      ),
 
-      const SizedBox(height: 12),
+        const SizedBox(height: 12),
 
-      // Store actions
-      Card(
-        child: ListTile(
-          leading: const Icon(Icons.shopping_bag_outlined),
-          title: const Text('متجر الثيمات والإطارات'),
-          subtitle: Text('رصيد الشراء: $credit'),
-          trailing: FilledButton(
-            onPressed: () => _openStore(app),
-            child: const Text('فتح المتجر'),
-          ),
+        // Quick actions row moved to bottom
+        Wrap(
+          spacing: 10,
+          runSpacing: 10,
+          children: [
+            _QuickActionChip(
+              icon: Icons.settings_outlined,
+              label: app.tr(ar: 'الإعدادات', en: 'Settings'),
+              onTap: () => _openSettings(app),
+            ),
+            _QuickActionChip(
+              icon: Icons.shopping_bag_outlined,
+              label: app.tr(ar: 'المتجر', en: 'Market'),
+              onTap: () => _openStore(app),
+            ),
+            _QuickActionChip(
+              icon: Icons.style_outlined,
+              label: app.tr(ar: 'ثيماتي', en: 'My Themes'),
+              onTap: () => _openItems(app),
+            ),
+          ],
         ),
-      ),
 
       if (app.ownedDewanyahs.isNotEmpty) ...[
         const SizedBox(height: 12),
@@ -579,7 +875,7 @@ class _ProfilePageState extends State<ProfilePage> {
 
       const SizedBox(height: 12),
 
-      // Milestones (الأنواط) row using PearlChip
+      // Milestones (الأنواط) row as animated orbs
       Card(
         child: Padding(
           padding: const EdgeInsets.fromLTRB(12, 12, 12, 4),
@@ -595,26 +891,15 @@ class _ProfilePageState extends State<ProfilePage> {
                 ),
                 const SizedBox(height: 8),
                 Wrap(
-                  spacing: 8,
-                  runSpacing: 8,
+                  spacing: 10,
+                  runSpacing: 10,
                   children: _milestones.map((m) {
                     final got = app.winsOf(meName, game);
-                    return Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        PearlChip(count: m, selected: got >= m),
-                        const SizedBox(height: 4),
-                        Text(
-                          _labelFor(m),
-                          style: TextStyle(
-                            fontSize: 12,
-                            color: Theme.of(context)
-                                .colorScheme
-                                .onSurface
-                                .withValues(alpha: .65),
-                          ),
-                        ),
-                      ],
+                    final achieved = got >= m;
+                    return _RankOrb(
+                      label: _labelFor(m),
+                      count: m,
+                      achieved: achieved,
                     );
                   }).toList(),
                 ),
@@ -687,21 +972,6 @@ class _ProfilePageState extends State<ProfilePage> {
 
         const SizedBox(height: 12),
 
-        // Bio
-        Card(
-          child: ListTile(
-            leading: const Icon(Icons.badge_outlined),
-            title: Text(
-              app.bio50?.isNotEmpty == true ? app.bio50! : '—',
-            ),
-            subtitle: Text(app.tr(ar: 'نبذة قصيرة', en: 'Bio')),
-            trailing: OutlinedButton.icon(
-              icon: const Icon(Icons.edit),
-              label: Text(app.tr(ar: 'تعديل', en: 'Edit')),
-              onPressed: () => _editBio(context),
-            ),
-          ),
-        ),
       ],
     );
   }
@@ -746,13 +1016,6 @@ class _ProfilePageState extends State<ProfilePage> {
     return uniq;
   }
 
-  (String, int)? _topPearlGame(AppState app) {
-    final entries = _gamePearlEntries(app);
-    if (entries.isEmpty) return null;
-    entries.sort((a, b) => b.$2.compareTo(a.$2));
-    return entries.first;
-  }
-
   int _winStreak(String user, String game) {
     // simple local streak using timeline (latest-first)
     final list = widget.app
@@ -770,38 +1033,6 @@ class _ProfilePageState extends State<ProfilePage> {
       }
     }
     return streak;
-  }
-
-  Future<void> _editBio(BuildContext context) async {
-    final app = widget.app;
-    _bioDraft = app.bio50 ?? '';
-    await showDialog<void>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('تعديل النبذة'),
-        content: TextField(
-          autofocus: true,
-          maxLength: 50,
-          controller: TextEditingController(text: _bioDraft),
-          onChanged: (v) => _bioDraft = v,
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('إلغاء'),
-          ),
-          FilledButton(
-            onPressed: () {
-              app.setBio(_bioDraft);
-              Navigator.pop(ctx);
-            },
-            child: const Text('حفظ'),
-          ),
-        ],
-      ),
-    );
-    if (!mounted) return;
-    setState(() {});
   }
 
 }
@@ -845,6 +1076,423 @@ class _RingPainter extends CustomPainter {
       oldDelegate.fill01 != fill01;
 }
 
+class _PearlBadge extends StatelessWidget {
+  final String game;
+  final int pearls;
+  final double size;
+  const _PearlBadge({required this.game, required this.pearls, this.size = 72});
+
+  @override
+  Widget build(BuildContext context) {
+    final double topOffset = size * 0.2;
+    final double bottomOffset = size * 0.18;
+    return Stack(
+      alignment: Alignment.center,
+      children: [
+        _SparkleOnce(
+          color: const Color(0xFFF1A949),
+          size: size + 16,
+        ),
+        Container(
+          width: size,
+          height: size,
+          decoration: BoxDecoration(
+            color: Colors.white,
+            shape: BoxShape.circle,
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.12),
+                blurRadius: 10,
+                offset: const Offset(0, 6),
+              ),
+            ],
+          ),
+          child: Stack(
+            alignment: Alignment.center,
+            children: [
+              Positioned(
+                top: topOffset,
+                left: 0,
+                right: 0,
+                child: Text(
+                  '$pearls',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    color: const Color(0xFF1E2F4D),
+                    fontWeight: FontWeight.w900,
+                    fontSize: size * 0.28,
+                  ),
+                ),
+              ),
+              Positioned(
+                bottom: bottomOffset,
+                left: 8,
+                right: 8,
+                child: Text(
+                  game,
+                  textAlign: TextAlign.center,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    color: Colors.black87,
+                    fontWeight: FontWeight.w700,
+                    fontSize: size * 0.17,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _TrophyStrip extends StatelessWidget {
+  final List<(String, DateTime)> recentWins;
+  final double size;
+  const _TrophyStrip({required this.recentWins, this.size = 46});
+
+  @override
+  Widget build(BuildContext context) {
+    final trophies = recentWins.take(3).toList();
+    const trophyFill = Color(0xFFE3E6EF);
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: List.generate(3, (i) {
+        if (i >= trophies.length) {
+          return Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 3),
+            child: _TrophyCircle(
+              label: '—',
+              date: null,
+              filled: false,
+              color: Colors.white.withValues(alpha: .4),
+              size: size,
+            ),
+          );
+        }
+        final t = trophies[i];
+        return Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 3),
+          child: _TrophyCircle(
+            label: t.$1,
+            date: t.$2,
+            filled: true,
+            color: trophyFill,
+            size: size,
+          ),
+        );
+      }),
+    );
+  }
+}
+
+class _TrophyCircle extends StatelessWidget {
+  final String label;
+  final DateTime? date;
+  final bool filled;
+  final Color color;
+  final double size;
+  const _TrophyCircle({required this.label, required this.date, required this.filled, required this.color, this.size = 46});
+
+  @override
+  Widget build(BuildContext context) {
+    final textColor = filled ? Colors.black : Colors.white;
+    return Container(
+      width: size,
+      height: size,
+      decoration: BoxDecoration(
+        color: filled ? color : Colors.white,
+        shape: BoxShape.circle,
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.12),
+            blurRadius: 6,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.emoji_events_rounded, size: size * 0.35, color: Colors.amber),
+            if (filled) ...[
+              SizedBox(height: size * 0.05),
+              Text(
+                label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  color: textColor,
+                  fontWeight: FontWeight.w800,
+                  fontSize: size * 0.22,
+                ),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _RankOrb extends StatelessWidget {
+  final String label;
+  final int count;
+  final bool achieved;
+  const _RankOrb({required this.label, required this.count, required this.achieved});
+
+  @override
+  Widget build(BuildContext context) {
+    final style = _rankStyle(label);
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Stack(
+          alignment: Alignment.center,
+          children: [
+            if (achieved && style.sparkle != null)
+              _SparkleOnce(
+                color: style.sparkle!,
+                size: 78,
+                duration: const Duration(milliseconds: 2200),
+              ),
+            Container(
+              width: 76,
+              height: 76,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                gradient: style.gradient,
+                boxShadow: [
+                  BoxShadow(
+                    color: (style.shadow ?? Colors.black26).withValues(alpha: achieved ? 0.35 : 0.2),
+                    blurRadius: achieved ? 14 : 8,
+                    offset: const Offset(0, 6),
+                  ),
+                ],
+                border: Border.all(
+                  color: Colors.white.withValues(alpha: achieved ? 0.22 : 0.12),
+                  width: 1.4,
+                ),
+              ),
+              child: Stack(
+                alignment: Alignment.center,
+                children: [
+                  // metallic sheen
+                  Positioned.fill(
+                    child: DecoratedBox(
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        gradient: const LinearGradient(
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                          colors: [
+                            Colors.white24,
+                            Colors.transparent,
+                            Colors.white10,
+                          ],
+                          stops: [0.0, 0.45, 0.9],
+                        ),
+                      ),
+                    ),
+                  ),
+                  // inner highlight ring
+                  Container(
+                    width: 60,
+                    height: 60,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      gradient: RadialGradient(
+                        colors: [
+                          Colors.white.withValues(alpha: 0.24),
+                          Colors.white.withValues(alpha: 0.0),
+                        ],
+                        stops: const [0.0, 1.0],
+                      ),
+                    ),
+                  ),
+                  Center(
+                    child: Text(
+                      '$count',
+                      style: TextStyle(
+                        fontFamily: 'Tajawal',
+                        fontVariations: const [FontVariation('wght', 800)],
+                        fontSize: 18,
+                        letterSpacing: 0.2,
+                        color: style.text ?? Colors.white,
+                        shadows: [
+                          Shadow(color: Colors.black.withValues(alpha: 0.35), blurRadius: 6),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 4),
+        Text(
+          label,
+          style: TextStyle(
+            fontSize: 12,
+            color: Colors.white.withValues(alpha: .75),
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+      ],
+    );
+  }
+
+  _RankStyle _rankStyle(String label) {
+    switch (label) {
+      case 'عليمي':
+      case 'Beginner':
+        return _RankStyle(
+          gradient: const LinearGradient(
+            colors: [Color(0xFFFFE082), Color(0xFFF6C453), Color(0xFFCE9E2B)],
+            stops: [0.0, 0.55, 1.0],
+          ),
+          sparkle: const Color(0xFFFFE082),
+        );
+      case 'يمشي حاله':
+      case 'Advance':
+        return _RankStyle(
+          gradient: const LinearGradient(
+            colors: [Color(0xFFD7A15F), Color(0xFFB87733), Color(0xFF8A4B2E)],
+            stops: [0.0, 0.45, 1.0],
+          ),
+          sparkle: const Color(0xFFD7A15F),
+        );
+      case 'زين':
+      case 'Professional':
+        return _RankStyle(
+          gradient: const LinearGradient(
+            colors: [Color(0xFFEFF3F8), Color(0xFFC9D0D9), Color(0xFF9FA9B5)],
+            stops: [0.0, 0.55, 1.0],
+          ),
+          sparkle: const Color(0xFFFFFFFF),
+          text: Colors.black87,
+          shadow: const Color(0xFF90A4AE),
+        );
+      case 'فنان':
+      case 'Legend':
+        return _RankStyle(
+          gradient: const LinearGradient(
+            colors: [Color(0xFFE0FEFF), Color(0xFFA0F3FF), Color(0xFF5CD7F7)],
+            stops: [0.0, 0.55, 1.0],
+          ),
+          sparkle: const Color(0xFFA5F2FF),
+          text: const Color(0xFF0A2C35),
+          shadow: const Color(0xFF4DD0E1),
+        );
+      case 'فلتة':
+      case 'GOAT':
+        return _RankStyle(
+          gradient: const LinearGradient(
+            colors: [Color(0xFFB388FF), Color(0xFF8E24AA), Color(0xFF512DA8)],
+            stops: [0.0, 0.5, 1.0],
+          ),
+          sparkle: const Color(0xFFE0E0FF),
+          text: const Color(0xFFF5F5F5),
+          shadow: const Color(0xFF7E57C2),
+        );
+      default:
+        return _RankStyle(
+          gradient: const LinearGradient(colors: [Color(0xFF607D8B), Color(0xFF455A64)]),
+          sparkle: const Color(0xFF90A4AE),
+        );
+    }
+  }
+}
+
+class _RankStyle {
+  final Gradient gradient;
+  final Color? sparkle;
+  final Color? text;
+  final Color? shadow;
+  _RankStyle({required this.gradient, this.sparkle, this.text, this.shadow});
+}
+class _SparkleOnce extends StatefulWidget {
+  final Color color;
+  final double size;
+  final Duration duration;
+  const _SparkleOnce({
+    required this.color,
+    this.size = 60,
+    this.duration = const Duration(milliseconds: 1800),
+  });
+
+  @override
+  State<_SparkleOnce> createState() => _SparkleOnceState();
+}
+
+class _SparkleOnceState extends State<_SparkleOnce> with SingleTickerProviderStateMixin {
+  late final AnimationController _ctrl;
+
+  @override
+  void initState() {
+    super.initState();
+    _ctrl = AnimationController(vsync: this, duration: widget.duration)..forward();
+  }
+
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: widget.size,
+      height: widget.size,
+      child: AnimatedBuilder(
+        animation: _ctrl,
+        builder: (_, __) => CustomPaint(
+          painter: _SparklePainter(
+            color: widget.color,
+            progress: Curves.easeOut.transform(_ctrl.value),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _SparklePainter extends CustomPainter {
+  final Color color;
+  final double progress; // 0..1
+  _SparklePainter({required this.color, required this.progress});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final center = Offset(size.width / 2, size.height / 2);
+    final baseR = size.shortestSide / 2.8;
+    final sparkles = 16;
+    final maxBurst = size.shortestSide * 0.45;
+    final paint = Paint()..style = PaintingStyle.fill;
+
+    for (int i = 0; i < sparkles; i++) {
+      final angle = (2 * math.pi / sparkles) * i;
+      final burst = baseR + progress * maxBurst;
+      final pos = center + Offset(math.cos(angle), math.sin(angle)) * burst;
+      final fade = (1 - progress).clamp(0.0, 1.0);
+      final alpha = (fade * 0.7).clamp(0.0, 0.7);
+      paint.color = color.withValues(alpha: alpha);
+      final radius = (1.2 + (i % 3) * 0.4) * fade * 1.8;
+      canvas.drawCircle(pos, radius, paint);
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _SparklePainter oldDelegate) {
+    return oldDelegate.progress != progress || oldDelegate.color != color;
+  }
+}
+
 class _StatusBadge extends StatelessWidget {
   final String label;
   const _StatusBadge({required this.label});
@@ -883,6 +1531,71 @@ class _StatusBadge extends StatelessWidget {
   }
 }
 
+class _IconStat extends StatefulWidget {
+  final IconData icon;
+  final int value;
+  final Color? sparkleColor;
+  const _IconStat({required this.icon, required this.value, this.sparkleColor});
+
+  @override
+  State<_IconStat> createState() => _IconStatState();
+}
+
+class _IconStatState extends State<_IconStat> with SingleTickerProviderStateMixin {
+  late final AnimationController _ctrl;
+  late final Animation<double> _scale;
+
+  @override
+  void initState() {
+    super.initState();
+    _ctrl = AnimationController(vsync: this, duration: const Duration(milliseconds: 250));
+    _scale = Tween<double>(begin: 1, end: 0.9).animate(CurvedAnimation(parent: _ctrl, curve: Curves.easeInOut));
+  }
+
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
+  }
+
+  void _onTapDown(TapDownDetails _) => _ctrl.forward();
+  void _onTapCancel() => _ctrl.reverse();
+  void _onTapUp(TapUpDetails _) => _ctrl.reverse();
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTapDown: _onTapDown,
+      onTapCancel: _onTapCancel,
+      onTapUp: _onTapUp,
+      child: ScaleTransition(
+        scale: _scale,
+        child: Column(
+          children: [
+            Stack(
+              alignment: Alignment.center,
+              children: [
+                if (widget.sparkleColor != null)
+                  _SparkleOnce(
+                    color: widget.sparkleColor!,
+                    size: 54,
+                  ),
+                CircleAvatar(
+                  radius: 22,
+                  backgroundColor: Colors.white.withValues(alpha: 0.1),
+                  child: Icon(widget.icon, color: Colors.white, size: 22),
+                ),
+              ],
+            ),
+            const SizedBox(height: 4),
+            Text('${widget.value}', style: const TextStyle(fontWeight: FontWeight.w800)),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 class _QuickActionChip extends StatelessWidget {
   final IconData icon;
   final String label;
@@ -910,132 +1623,107 @@ class _QuickActionChip extends StatelessWidget {
   }
 }
 
-class _StatPill extends StatelessWidget {
-  final Widget leading;
-  final String label;
-  final String value;
-  const _StatPill({
-    required this.leading,
-    required this.label,
-    required this.value,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final cs = Theme.of(context).colorScheme;
-    return Container(
-      padding: const EdgeInsets.symmetric(
-        horizontal: 10,
-        vertical: 8,
-      ),
-      decoration: BoxDecoration(
-        color: cs.surfaceContainerHighest.withValues(alpha: .35),
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          leading,
-          const SizedBox(width: 6),
-          Text(
-            value,
-            style: const TextStyle(fontWeight: FontWeight.w900),
-          ),
-          const SizedBox(width: 6),
-          Text(
-            label,
-            style: TextStyle(
-              color: cs.onSurface.withValues(alpha: .7),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _PearlProgressList extends StatelessWidget {
+class _PearlCircleGrid extends StatelessWidget {
   final List<(String, int)> entries;
-  final AppState app;
-  const _PearlProgressList({required this.entries, required this.app});
-
-  int _nextMilestone(int pearls) {
-    if (pearls < 5) return 5;
-    if (pearls < 10) return 10;
-    if (pearls < 15) return 15;
-    if (pearls < 20) return 20;
-    if (pearls < 30) return 30;
-    return pearls;
-  }
+  final int maxValue;
+  final List<int> milestones;
+  final String Function(int) rankLabel;
+  final String Function(String) rankName;
+  const _PearlCircleGrid({required this.entries, required this.maxValue, required this.milestones, required this.rankLabel, required this.rankName});
 
   @override
   Widget build(BuildContext context) {
-    return Column(
+    if (entries.isEmpty) return const Text('لا توجد بيانات');
+    final color = Theme.of(context).colorScheme.primary;
+    return Wrap(
+      spacing: 12,
+      runSpacing: 12,
       children: entries.map((e) {
-        final name = e.$1;
-        final pearls = e.$2;
-        final next = _nextMilestone(pearls);
-        final progress = next == 0 ? 0.0 : (pearls / next).clamp(0.0, 1.0);
-        return Padding(
-          padding: const EdgeInsets.symmetric(vertical: 6),
-          child: Container(
-            padding: const EdgeInsets.all(10),
-            decoration: BoxDecoration(
-              color: const Color(0xFF172133).withValues(alpha: 0.85),
-              borderRadius: BorderRadius.circular(14),
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Image.asset('lib/assets/pearl.png', width: 18, height: 18),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        name,
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontWeight: FontWeight.w800,
+        final game = e.$1;
+        final value = e.$2.clamp(0, maxValue);
+        final pct = value / maxValue;
+        return SizedBox(
+          width: 88,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Stack(
+                alignment: Alignment.center,
+                children: [
+                  TweenAnimationBuilder<double>(
+                    tween: Tween(begin: 0, end: pct),
+                    duration: const Duration(milliseconds: 700),
+                    curve: Curves.easeOutCubic,
+                    builder: (_, v, __) => SizedBox(
+                      width: 74,
+                      height: 74,
+                      child: CustomPaint(
+                        painter: _ArcPainter(
+                          progress: v,
+                          color: color,
+                          bgColor: Colors.grey.shade800,
+                          strokeWidth: 7,
                         ),
                       ),
                     ),
-                    Text(
-                      '$pearls',
-                      style: const TextStyle(
-                        color: Color(0xFFF1A949),
-                        fontWeight: FontWeight.w900,
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 8),
-                LinearProgressIndicator(
-                  value: progress,
-                  backgroundColor: Colors.white.withValues(alpha: 0.15),
-                  color: const Color(0xFFF1A949),
-                  minHeight: 8,
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                const SizedBox(height: 6),
-                Text(
-                  pearls >= next
-                      ? app.tr(ar: 'وصلت للنوط الحالي', en: 'Current rank reached')
-                      : app.tr(
-                          ar: 'المتبقي للوصول للنوط التالي: ${next - pearls} لؤلؤة',
-                          en: 'Pearls to next rank: ${next - pearls}',
-                        ),
-                  style: TextStyle(
-                    color: Colors.white.withValues(alpha: 0.75),
-                    fontSize: 12,
                   ),
-                ),
-              ],
-            ),
+                  Text('$value', style: const TextStyle(fontWeight: FontWeight.w900)),
+                ],
+              ),
+              const SizedBox(height: 6),
+              Text(game, style: const TextStyle(fontWeight: FontWeight.w700)),
+              Text(rankLabel(_nearestRank(value)), style: TextStyle(fontSize: 11, color: Colors.white70)),
+            ],
           ),
         );
       }).toList(),
     );
+  }
+
+  int _nearestRank(int value) {
+    for (final m in milestones) {
+      if (value <= m) return m;
+    }
+    return milestones.last;
+  }
+}
+
+class _ArcPainter extends CustomPainter {
+  final double progress; // 0..1
+  final Color color;
+  final Color bgColor;
+  final double strokeWidth;
+
+  _ArcPainter({required this.progress, required this.color, required this.bgColor, required this.strokeWidth});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final center = Offset(size.width / 2, size.height / 2);
+    final radius = (math.min(size.width, size.height) - strokeWidth) / 2;
+    final rect = Rect.fromCircle(center: center, radius: radius);
+    final start = -math.pi / 2;
+    final sweep = 2 * math.pi * progress;
+
+    // background
+    final bgPaint = Paint()
+      ..color = bgColor
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = strokeWidth
+      ..strokeCap = StrokeCap.round;
+    canvas.drawArc(rect, 0, 2 * math.pi, false, bgPaint);
+
+    // progress
+    final fgPaint = Paint()
+      ..color = color
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = strokeWidth
+      ..strokeCap = StrokeCap.round;
+    canvas.drawArc(rect, start, sweep, false, fgPaint);
+  }
+
+  @override
+  bool shouldRepaint(covariant _ArcPainter oldDelegate) {
+    return oldDelegate.progress != progress || oldDelegate.color != color || oldDelegate.bgColor != bgColor || oldDelegate.strokeWidth != strokeWidth;
   }
 }
 //profile_page.dart

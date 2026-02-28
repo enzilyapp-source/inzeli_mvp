@@ -4,9 +4,19 @@ import 'package:http/http.dart' as http;
 import 'api_base.dart';
 
 class ApiTimeline {
-  static Future<List<Map<String, dynamic>>> list({String? token, int limit = 100, String? gameId}) async {
-    final uri = Uri.parse(
-        '$apiBase/timeline?limit=$limit${gameId != null && gameId.isNotEmpty ? '&gameId=$gameId' : ''}');
+  static Future<List<Map<String, dynamic>>> list({
+    String? token,
+    int limit = 100,
+    String? gameId,
+    bool global = true,
+  }) async {
+    final query = <String, String>{
+      'limit': '$limit',
+      if (gameId != null && gameId.isNotEmpty) 'gameId': gameId,
+      if (global) 'scope': 'all',
+    };
+    final uri =
+        Uri.parse('$apiBase/timeline').replace(queryParameters: query);
     final res = await http.get(uri, headers: {
       if (token != null && token.isNotEmpty) 'Authorization': 'Bearer $token',
     });

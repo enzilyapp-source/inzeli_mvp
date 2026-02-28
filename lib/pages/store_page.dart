@@ -2,6 +2,7 @@
 import 'package:flutter/material.dart';
 import '../api_store.dart';
 import '../state.dart';
+import '../widgets/app_snackbar.dart';
 
 class StorePage extends StatefulWidget {
   final AppState app;
@@ -24,12 +25,30 @@ class _StorePageState extends State<StorePage> {
 
   Future<List<Map<String, dynamic>>> _load() async {
     final items = await ApiStore.listItems();
+    // إدراج الثيمات المجانية في حال لم تُرجعها الـ API
+    const freeThemes = [
+      {'id': 'blueThunder', 'name': 'برق أزرق', 'kind': 'theme', 'price': 0, 'preview': 'هالة برق أزرق'},
+      {'id': 'goldLightning', 'name': 'برق ذهبي', 'kind': 'theme', 'price': 0, 'preview': 'هالة برق ذهبي'},
+      {'id': 'kuwait', 'name': 'ألوان العلم', 'kind': 'theme', 'price': 0, 'preview': 'هالة العلم'},
+      {'id': 'greenLeaf', 'name': 'أوراق خضراء', 'kind': 'theme', 'price': 0, 'preview': 'أوراق متحركة'},
+      {'id': 'flameBlue', 'name': 'لهب أزرق', 'kind': 'theme', 'price': 0, 'preview': 'هالة لهب أزرق'},
+      {'id': 'whiteSparkle', 'name': 'سباركل أبيض', 'kind': 'theme', 'price': 0, 'preview': 'هالة بريق أبيض'},
+    ];
+    final existingIds = items.map((e) => e['id'].toString()).toSet();
+    for (final t in freeThemes) {
+      if (!existingIds.contains(t['id'])) {
+        items.add(Map<String, dynamic>.from(t));
+      }
+    }
     if (widget.app.token != null && widget.app.token!.isNotEmpty) {
       try {
         final mine = await ApiStore.myItems(token: widget.app.token!);
         ownedIds = mine.map((e) => e['itemId'].toString()).toSet();
       } catch (_) {}
     }
+    ownedIds.addAll(widget.app.freeThemesOwned);
+    // اعتبر الثيم الحالي مملوكاً دائماً
+    if (widget.app.themeId != null) ownedIds.add(widget.app.themeId!);
     return items;
   }
 
@@ -40,11 +59,20 @@ class _StorePageState extends State<StorePage> {
     }
     setState(() => loading = true);
     try {
-      final res = await ApiStore.buyItem(token: widget.app.token!, itemId: itemId);
-      ownedIds.add(itemId);
-      widget.app.creditBalance = (res['balance'] as num?)?.toInt() ?? widget.app.creditBalance;
-      await widget.app.saveState();
-      _msg('تم الشراء');
+      final item = (await _future).firstWhere((e) => e['id'].toString() == itemId, orElse: () => {});
+      final price = (item['price'] ?? 0) as num;
+      if (price == 0) {
+        ownedIds.add(itemId);
+        widget.app.freeThemesOwned.add(itemId);
+        await widget.app.saveState();
+        _msg('تمت الإضافة إلى ثيماتي', success: true);
+      } else {
+        final res = await ApiStore.buyItem(token: widget.app.token!, itemId: itemId);
+        ownedIds.add(itemId);
+        widget.app.creditBalance = (res['balance'] as num?)?.toInt() ?? widget.app.creditBalance;
+        await widget.app.saveState();
+        _msg('تم الشراء');
+      }
     } catch (e) {
       _msg('فشل الشراء: $e');
     } finally {
@@ -68,15 +96,15 @@ class _StorePageState extends State<StorePage> {
       widget.app.frameId = res['frameId']?.toString() ?? widget.app.frameId;
       widget.app.cardId = res['cardId']?.toString() ?? widget.app.cardId;
       await widget.app.saveState();
-      _msg('تم التطبيق');
+      _msg('تم التطبيق', success: true);
       setState(() {});
     } catch (e) {
-      _msg('فشل التطبيق: $e');
+      _msg('فشل التطبيق: $e', error: true);
     }
   }
 
-  void _msg(String text) {
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(text)));
+  void _msg(String text, {bool error = false, bool success = false}) {
+    showAppSnack(context, text, error: error, success: success);
   }
 
   @override

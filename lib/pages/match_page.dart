@@ -2,6 +2,7 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:qr_flutter/qr_flutter.dart';
+import 'dart:ui' show ImageFilter;
 
 import '../state.dart';
 import '../api_room.dart';
@@ -9,6 +10,7 @@ import '../sfx.dart';
 import 'scan_page.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:flutter/services.dart';
+import '../widgets/app_snackbar.dart';
 
 class MatchPage extends StatefulWidget {
   final AppState app;
@@ -34,8 +36,6 @@ class _MatchPageState extends State<MatchPage> {
   List<Map<String, dynamic>> players = [];
   final Map<String, int> _pearlsByUser = {};
   final Map<String, String?> _teamOf = {};
-  final Map<String, bool> _isLeader = {};
-  Map<String, dynamic>? _teamQuorum;
   final Set<String> _knownPlayerIds = {};
 
   String? _winnerUserId;
@@ -56,6 +56,163 @@ class _MatchPageState extends State<MatchPage> {
   int _totalPlayers = 0;
   bool _approvalDialogOpen = false;
   bool _resultNotified = false;
+  GameMode _currentGameMode = GameMode.both;
+  int? _lastRemainingSoundTick;
+
+  // -------- قيد (تسجيل نقاط الجنجفه) --------
+  final int _qaidDefaultTarget = 100;
+  int _qaidTarget = 100;
+  int _qaidScoreA = 0;
+  int _qaidScoreB = 0;
+  final _qaidInputA = TextEditingController();
+  final _qaidInputB = TextEditingController();
+  List<Map<String, dynamic>> _qaidRounds = [];
+  final Map<String, TextEditingController> _qaidPlayerInputs = {};
+  final Map<String, int> _qaidPlayerScores = {};
+
+  // قواعد أحجام الفرق لكل لعبة (عدد اللاعبين في كل فريق)
+  static const Map<String, List<int>> _teamSizeRules = {
+    'كوت': [2, 3],   // 2 ضد 2 أو 3 ضد 3
+    'بلوت': [2],     // 2 ضد 2
+    'تريكس': [2],    // 2 ضد 2
+    'هند': [2],      // 2 ضد 2 في وضع الفرق
+    'كيرم': [2],     // 2 ضد 2 فقط
+    'سبيتة': [2],    // 2 ضد 2 في وضع الفرق
+    'بيبيفوت': [2],  // 2 ضد 2 في وضع الفرق
+    'قدم': [9],      // 9 ضد 9
+    'سله': [5],      // 5 ضد 5
+    'طائره': [2, 3, 5, 6], // خيارات متعددة للفرق
+    'بادل': [2],     // 2 ضد 2
+    'تنس طاولة': [2], // دبلز 2 ضد 2
+    'تنس ارضي': [2], // دبلز 2 ضد 2
+  };
+  static const int _hindSoloSize = 5; // هند فردي = 5 لاعبين
+  static const int _spitaSoloSize = 5; // سبيتة فردي = 5 لاعبين
+  bool get _iAmInRoom {
+    final uid = widget.app.userId;
+    if (uid == null || uid.isEmpty) return false;
+    return _uniquePlayersList.any((p) => (p['userId'] ?? '') == uid);
+  }
+
+  bool _isCardGame(String game) {
+    final g = game.trim();
+    const cardGames = [
+      'كوت',
+      'بلوت',
+      'تريكس',
+      'تريكس كمبليت',
+      'هند',
+      'hand',
+      'trex',
+      'baloot',
+      'coup',
+      'sbeeta',
+      'سبيتة',
+    ];
+    return cardGames.any((c) => g.toLowerCase().contains(c.trim().toLowerCase())) && !g.toLowerCase().contains('uno');
+  }
+
+  void _resetQaid() {
+    _qaidTarget = _qaidDefaultTarget;
+    _qaidScoreA = 0;
+    _qaidScoreB = 0;
+    _qaidRounds = [];
+    _qaidInputA.clear();
+    _qaidInputB.clear();
+    _qaidPlayerScores.clear();
+    for (final c in _qaidPlayerInputs.values) {
+      c.dispose();
+    }
+    _qaidPlayerInputs.clear();
+    final players = _uniquePlayersList;
+    for (final p in players) {
+      final uid = (p['userId'] ?? '').toString();
+      if (uid.isEmpty) continue;
+      _qaidPlayerScores[uid] = 0;
+      _qaidPlayerInputs[uid] = TextEditingController();
+    }
+  }
+
+  void _ensureQaidPlayer(String uid) {
+    if (!_qaidPlayerScores.containsKey(uid)) {
+      _qaidPlayerScores[uid] = 0;
+    }
+    if (!_qaidPlayerInputs.containsKey(uid)) {
+      _qaidPlayerInputs[uid] = TextEditingController();
+    }
+  }
+
+  void _saveQaidRound(bool teamMode) {
+    if (teamMode) {
+      final a = int.tryParse(_qaidInputA.text.trim()) ?? 0;
+      final b = int.tryParse(_qaidInputB.text.trim()) ?? 0;
+      _qaidScoreA += a;
+      _qaidScoreB += b;
+      _qaidRounds.add({'a': a, 'b': b, 'ts': DateTime.now().toIso8601String()});
+      _qaidInputA.clear();
+      _qaidInputB.clear();
+    } else {
+      final map = <String, int>{};
+      _qaidPlayerInputs.forEach((uid, ctrl) {
+        final v = int.tryParse(ctrl.text.trim()) ?? 0;
+        map[uid] = v;
+        _qaidPlayerScores[uid] = (_qaidPlayerScores[uid] ?? 0) + v;
+        ctrl.clear();
+      });
+      _qaidRounds.add({'scores': map, 'ts': DateTime.now().toIso8601String()});
+    }
+    setState(() {});
+  }
+
+  void _undoQaidRound(bool teamMode) {
+    if (_qaidRounds.isEmpty) return;
+    final last = _qaidRounds.removeLast();
+    if (teamMode) {
+      _qaidScoreA -= (last['a'] as int? ?? 0);
+      _qaidScoreB -= (last['b'] as int? ?? 0);
+    } else {
+      final map = last['scores'] as Map<String, dynamic>? ?? {};
+      map.forEach((uid, v) {
+        _qaidPlayerScores[uid] = (_qaidPlayerScores[uid] ?? 0) - (v as int? ?? 0);
+      });
+    }
+    setState(() {});
+  }
+
+  String _playerKey(Map<String, dynamic> p) {
+    final uid = (p['userId'] ?? '').toString();
+    if (uid.isNotEmpty) return uid;
+    final user = p['user'] as Map<String, dynamic>? ?? const {};
+    final name = (user['displayName'] ?? user['name'] ?? user['email'] ?? user['phone'] ?? '').toString().trim().toLowerCase();
+    if (name.isNotEmpty) return 'name:$name';
+    return p.hashCode.toString();
+  }
+
+  List<Map<String, dynamic>> _dedupePlayers(List<Map<String, dynamic>> list) {
+    final seen = <String>{};
+    final result = <Map<String, dynamic>>[];
+    for (final p in list) {
+      final key = _playerKey(p);
+      if (seen.add(key)) result.add(p);
+    }
+    return result;
+  }
+
+  List<Map<String, dynamic>> get _uniquePlayersList {
+    // نحذف المكرر بحسب الـ id ثم الاسم لضمان عدم تكرار اللاعب.
+    final base = _dedupePlayers(players);
+    final seenIds = <String>{};
+    final seenNames = <String>{};
+    final out = <Map<String, dynamic>>[];
+    for (final p in base) {
+      final uid = (p['userId'] ?? '').toString();
+      if (uid.isNotEmpty && !seenIds.add(uid)) continue;
+      final nameKey = _nameForMap(p).trim().toLowerCase();
+      if (!seenNames.add(nameKey)) continue;
+      out.add(p);
+    }
+    return out;
+  }
 
   @override
   void initState() {
@@ -66,6 +223,13 @@ class _MatchPageState extends State<MatchPage> {
     final code = (widget.room?['code'] ?? widget.app.roomCode ?? '').toString();
     final mode = widget.room?['mode']?.toString();
     final teamModeFlag = widget.room?['teamMode'];
+    final initialGame = (widget.room?['gameId'] ?? widget.app.selectedGame ?? '').toString();
+    _currentGameMode = widget.app.gameMode(initialGame);
+    // حضّر القيد إذا اللعبة من ألعاب الجنجفه
+    if (_isCardGame(initialGame)) {
+      _resetQaid();
+    }
+
     if (teamModeFlag is bool) {
       _teamMode = teamModeFlag;
     } else if (mode == 'team') {
@@ -73,6 +237,7 @@ class _MatchPageState extends State<MatchPage> {
     } else if (mode == 'solo') {
       _teamMode = false;
     }
+    _enforceGameMode();
     if (code.isNotEmpty) _refresh(code);
     // تحديث تلقائي كل 10 ثوانٍ
     if (code.isNotEmpty) {
@@ -87,12 +252,18 @@ class _MatchPageState extends State<MatchPage> {
     _ticker?.cancel();
     _autoRefresh?.cancel();
     _codeCtrl.dispose();
+    _qaidInputA.dispose();
+    _qaidInputB.dispose();
+    for (final c in _qaidPlayerInputs.values) {
+      c.dispose();
+    }
     super.dispose();
   }
 
-  void _msg(String m) {
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(m)));
+  void _msg(String m, {Color? color, IconData? icon, bool animateIcon = false}) {
+    final bool error = color == Colors.red || color == Colors.redAccent;
+    final bool success = color == Colors.green || color == Colors.greenAccent;
+    showAppSnack(context, m, error: error, success: success);
   }
 
   Future<Position?> _getLocation() async {
@@ -119,7 +290,7 @@ class _MatchPageState extends State<MatchPage> {
   }
 
   String _nameForUser(String uid) {
-    final p = players.firstWhere(
+    final p = _uniquePlayersList.firstWhere(
           (e) => (e['userId'] ?? '').toString() == uid,
       orElse: () => const <String, dynamic>{},
     );
@@ -142,7 +313,22 @@ class _MatchPageState extends State<MatchPage> {
     void tick() {
       final elapsed = DateTime.now().difference(_startedAt!).inSeconds;
       final remain = _timerSec! - elapsed;
-      setState(() => _remaining = remain.clamp(0, 1 << 30));
+      final clamped = remain.clamp(0, 1 << 30);
+      if (clamped != _remaining) {
+        // أصوات آخر 3 ثواني
+        if (clamped <= 3 && (_lastRemainingSoundTick ?? 4) > clamped) {
+          Sfx.error(mute: widget.app.soundMuted == true);
+          _lastRemainingSoundTick = clamped;
+        }
+        // عند انتهاء العداد
+        if (clamped == 0 && _remaining > 0) {
+          Sfx.success(mute: widget.app.soundMuted == true);
+          HapticFeedback.heavyImpact();
+          _msg('انتهى العدّاد، حدد الفائز', color: Colors.green);
+          _locked = false;
+        }
+      }
+      setState(() => _remaining = clamped);
       if (_remaining <= 0) _ticker?.cancel();
     }
 
@@ -151,7 +337,7 @@ class _MatchPageState extends State<MatchPage> {
   }
 
   void _detectNewPlayers(List<Map<String, dynamic>> incoming) {
-    final currentIds = incoming.map((e) => (e['userId'] ?? '').toString()).where((id) => id.isNotEmpty).toSet();
+    final currentIds = incoming.map(_playerKey).toSet();
     final newIds = currentIds.difference(_knownPlayerIds);
     if (newIds.isNotEmpty) {
       for (final id in newIds) {
@@ -173,6 +359,89 @@ class _MatchPageState extends State<MatchPage> {
     final uid = (p['userId'] ?? '').toString();
     final user = p['user'] as Map<String, dynamic>? ?? const {};
     return (user['displayName'] ?? user['name'] ?? user['email'] ?? user['phone'] ?? uid).toString();
+  }
+
+  void _enforceGameMode() {
+    switch (_currentGameMode) {
+      case GameMode.team:
+        _teamMode = true;
+        _winnerTeam ??= 'A';
+        break;
+      case GameMode.solo:
+        _teamMode = false;
+        _winnerTeam = null;
+        _teamOf.clear();
+        break;
+      case GameMode.both:
+        // لا تغيير
+        break;
+    }
+  }
+
+  bool _validateSetup(String game) {
+    final count = _uniquePlayersList.length;
+
+      if (_teamMode) {
+        final sizeA = _teamOf.values.where((t) => t == 'A').length;
+        final sizeB = _teamOf.values.where((t) => t == 'B').length;
+        if (sizeA == 0 || sizeB == 0) {
+          _msg('وزّع اللاعبين على الفريقين أولاً', icon: Icons.error, color: Colors.orange);
+          return false;
+        }
+        if (sizeA != sizeB) {
+          _msg('لازم عدد الفريقين يكون متساوي', icon: Icons.error, color: Colors.orange);
+          return false;
+        }
+        final allowed = _teamSizeRules[game];
+        if (allowed != null && !allowed.contains(sizeA)) {
+          final txt = allowed.map((n) => '$n ضد $n').join(' أو ');
+          _msg('لعبة $game تسمح بـ $txt فقط', icon: Icons.error, color: Colors.orange);
+          return false;
+        }
+      } else {
+        if (game == 'هند' && count != _hindSoloSize) {
+          _msg('هند فردي لازم يكونوا $_hindSoloSize لاعبين', icon: Icons.error, color: Colors.orange);
+          return false;
+        }
+        if (game == 'سبيتة' && count != _spitaSoloSize) {
+          _msg('سبيتة فردي لازم يكونوا $_spitaSoloSize لاعبين', icon: Icons.error, color: Colors.orange);
+          return false;
+        }
+        if (game == 'شطرنج' && count != 2) {
+          _msg('شطرنج فردي فقط 1 ضد 1', icon: Icons.error, color: Colors.orange);
+          return false;
+        }
+        if (game == 'دامه' && count != 2) {
+          _msg('دامه فردي فقط 1 ضد 1', icon: Icons.error, color: Colors.orange);
+          return false;
+        }
+        if (game == 'دومنه' && count != 2) {
+          _msg('دومنه فردي فقط 1 ضد 1', icon: Icons.error, color: Colors.orange);
+          return false;
+        }
+        if (game == 'طاوله' && count != 2) {
+          _msg('طاوله فردي فقط 1 ضد 1', icon: Icons.error, color: Colors.orange);
+          return false;
+        }
+        if (game == 'بلياردو' && count != 2) {
+          _msg('بلياردو فردي فقط 1 ضد 1', icon: Icons.error, color: Colors.orange);
+          return false;
+        }
+        if (game == 'بيبيفوت' && count != 2 && _teamMode == false) {
+          _msg('بيبي فوت فردي فقط 1 ضد 1 أو فرق 2 ضد 2', icon: Icons.error, color: Colors.orange);
+          return false;
+        }
+        if (game == 'تنس طاولة' && _teamMode == false && count != 2) {
+          _msg('تنس طاولة فردي 1 ضد 1 أو فرق 2 ضد 2', icon: Icons.error, color: Colors.orange);
+          return false;
+        }
+        if (game == 'تنس ارضي' && _teamMode == false && count != 2) {
+          _msg('تنس فردي 1 ضد 1 أو فرق 2 ضد 2', icon: Icons.error, color: Colors.orange);
+          return false;
+        }
+      }
+
+    return true;
   }
 
   Future<void> _refreshResultState(String code) async {
@@ -202,6 +471,7 @@ class _MatchPageState extends State<MatchPage> {
         _resultNotified = true;
         _msg('تم اعتماد النتيجة 🎉');
         Sfx.success(mute: widget.app.soundMuted == true);
+        widget.app.syncTimelineFromServer().catchError((_) {});
       }
       return;
     }
@@ -226,44 +496,48 @@ class _MatchPageState extends State<MatchPage> {
       showDialog<bool>(
         context: context,
         barrierDismissible: false,
-        builder: (ctx) => AlertDialog(
-          title: const Text('تأكيد النتيجة'),
-          content: Text([
-            if (winnerNames.isNotEmpty) 'الفائزون: $winnerNames',
-            if (loserNames.isNotEmpty) 'الخاسرون: $loserNames',
-            'وافق على النتيجة أو ارفض ليعيد المضيف اختيار الفائز.',
-          ].join('\n')),
-          actions: [
-            TextButton(
-              onPressed: () async {
-                Navigator.pop(ctx, false);
-                try {
-                  await ApiRoom.voteResult(code: _room?['code'] ?? widget.room?['code'] ?? '', approve: false, token: widget.app.token);
+        builder: (ctx) => Directionality(
+          textDirection: TextDirection.rtl,
+          child: AlertDialog(
+            title: const Text('تأكيد النتيجة'),
+            content: Text([
+              if (winnerNames.isNotEmpty) 'الفائزون: $winnerNames',
+              if (loserNames.isNotEmpty) 'الخاسرون: $loserNames',
+              'وافق على النتيجة أو ارفض ليعيد المضيف اختيار الفائز.',
+            ].join('\n')),
+            actions: [
+              TextButton(
+                onPressed: () async {
+                  Navigator.pop(ctx, false);
+                  try {
+                    await ApiRoom.voteResult(code: _room?['code'] ?? widget.room?['code'] ?? '', approve: false, token: widget.app.token);
                   _msg('تم الرفض، سيُعاد تحديد النتيجة');
                   Sfx.error(mute: widget.app.soundMuted == true);
-                  _refreshResultState(_room?['code'] ?? widget.room?['code'] ?? '');
-                } finally {
-                  _approvalDialogOpen = false;
-                  _resultNotified = false;
-                }
-              },
-              child: const Text('رفض'),
-            ),
-            FilledButton(
-              onPressed: () async {
-                Navigator.pop(ctx, true);
-                try {
-                  await ApiRoom.voteResult(code: _room?['code'] ?? widget.room?['code'] ?? '', approve: true, token: widget.app.token);
-                  _msg('تمت الموافقة على النتيجة');
-                  Sfx.tap(mute: widget.app.soundMuted == true);
-                  _refreshResultState(_room?['code'] ?? widget.room?['code'] ?? '');
-                } finally {
-                  _approvalDialogOpen = false;
-                }
-              },
-              child: const Text('موافقة'),
-            ),
-          ],
+                    _refreshResultState(_room?['code'] ?? widget.room?['code'] ?? '');
+                  } finally {
+                    _approvalDialogOpen = false;
+                    _resultNotified = false;
+                  }
+                },
+                child: const Text('رفض'),
+              ),
+              FilledButton(
+                onPressed: () async {
+                  Navigator.pop(ctx, true);
+                  try {
+                    await ApiRoom.voteResult(code: _room?['code'] ?? widget.room?['code'] ?? '', approve: true, token: widget.app.token);
+                    _msg('تمت الموافقة على النتيجة');
+                    Sfx.tap(mute: widget.app.soundMuted == true);
+                    _refreshResultState(_room?['code'] ?? widget.room?['code'] ?? '');
+                    widget.app.syncTimelineFromServer().catchError((_) {});
+                  } finally {
+                    _approvalDialogOpen = false;
+                  }
+                },
+                child: const Text('موافقة'),
+              ),
+            ],
+          ),
         ),
       );
     }
@@ -294,18 +568,18 @@ class _MatchPageState extends State<MatchPage> {
 
       final p = room['players'];
       if (p is List) {
-        final incoming = p.cast<Map<String, dynamic>>();
+        final incoming = _dedupePlayers(p.cast<Map<String, dynamic>>());
         _detectNewPlayers(incoming);
         players = incoming;
       }
 
       _pearlsByUser.clear();
       _teamOf.clear();
-      _isLeader.clear();
 
       final gameId = (room['gameId'] ?? widget.app.selectedGame ?? '').toString();
+      _currentGameMode = widget.app.gameMode(gameId);
 
-      for (final rp in players) {
+      for (final rp in _uniquePlayersList) {
         final uid = (rp['userId'] ?? '').toString();
         final user = rp['user'] as Map<String, dynamic>?;
         // حاول نقرأ أي قيمة لؤلؤ متاحة من السيرفر، وإلا 5 افتراضي
@@ -328,25 +602,42 @@ class _MatchPageState extends State<MatchPage> {
         final team = rp['team']?.toString();
         _teamOf[uid] = (team == 'A' || team == 'B') ? team : null;
 
-        final leader = (rp['isLeader'] == true);
-        _isLeader[uid] = leader;
       }
 
-      _teamQuorum = room['teamQuorum'] as Map<String, dynamic>?;
       final roomTeamMode = room['teamMode'];
       final roomMode = room['mode']?.toString();
 
-      // Decide mode: prefer explicit backend flag. Otherwise, keep the host's toggle.
+      final prevTeamMode = _teamMode;
+      // Decide mode: prefer explicit backend flag. Otherwise, infer from teams or game mode.
       if (roomTeamMode is bool) {
         _teamMode = roomTeamMode;
       } else if (roomMode == 'solo') {
         _teamMode = false;
       } else if (roomMode == 'team') {
         _teamMode = true;
+      } else if (_currentGameMode == GameMode.team) {
+        _teamMode = true;
+      } else if (_currentGameMode == GameMode.solo) {
+        _teamMode = false;
+      } else {
+        final hasTeams = _teamOf.values.any((t) => t == 'A' || t == 'B');
+        final bothTeams = _teamOf.values.contains('A') && _teamOf.values.contains('B');
+        if (bothTeams) {
+          _teamMode = true;
+        } else if (!hasTeams) {
+          _teamMode = false;
+        }
       }
+
+      _enforceGameMode();
 
       if (!_teamMode) {
         _winnerTeam = null;
+      }
+
+      // لو تغير نوع اللعب بين فردي/فرق أثناء الجولة للكوت/الجنجفة، صفّر القيد عشان يتوافق مع النمط
+      if (_startedAt != null && _isCardGame(gameId) && prevTeamMode != _teamMode) {
+        _resetQaid();
       }
 
       _timerSec = (room['timerSec'] as num?)?.toInt();
@@ -371,11 +662,29 @@ class _MatchPageState extends State<MatchPage> {
 
     final hostId = (_room?['hostUserId'] ?? widget.room?['hostUserId'])?.toString();
     final isHost = widget.app.userId != null && hostId == widget.app.userId;
+    final bool qaidGame = _isCardGame(game);
+    final bool started = _startedAt != null;
+    if (started && qaidGame && !_teamMode) {
+      for (final p in _uniquePlayersList) {
+        final uid = (p['userId'] ?? '').toString();
+        if (uid.isNotEmpty) _ensureQaidPlayer(uid);
+      }
+    }
 
     return Scaffold(
       appBar: AppBar(
         title: Text('مباراة $game — كود: ${code.isEmpty ? "—" : code}'),
         actions: [
+          if (_startedAt == null && _timerSec == null)
+            IconButton(
+              tooltip: 'إغلاق الروم',
+              icon: const Icon(Icons.close, color: Colors.redAccent),
+              onPressed: () {
+                widget.app.setRoomCode(null);
+                Navigator.pop(context);
+                _msg('تم إغلاق الروم', color: Colors.redAccent);
+              },
+            ),
           if (sponsorCode != null && sponsorCode.isNotEmpty)
             Padding(
               padding: const EdgeInsetsDirectional.only(end: 8),
@@ -387,354 +696,413 @@ class _MatchPageState extends State<MatchPage> {
             ),
         ],
       ),
-      body: RefreshIndicator(
-        onRefresh: () async {
-          if (code.isNotEmpty) await _refresh(code);
-        },
-        child: ListView(
-          padding: const EdgeInsets.all(16),
-          children: [
-            if (code.isNotEmpty) ...[
-              Center(
-                child: QrImageView(
-                  data: 'https://inzeli.app/join/$code',
-                  size: 220,
-                  backgroundColor: Colors.white,
-                ),
-              ),
-              const SizedBox(height: 8),
-              SelectableText('كود الروم: $code', textAlign: TextAlign.center),
-              const SizedBox(height: 12),
-              Align(
-                alignment: Alignment.center,
-                child: OutlinedButton.icon(
-                  icon: const Icon(Icons.refresh),
-                  label: const Text('تحديث'),
-                  onPressed: () => _refresh(code),
-                ),
-              ),
-            ],
-
-            const SizedBox(height: 12),
-            if (isHost && _teamMode)
-              Card(
-                color: Colors.orange.withValues(alpha: 0.15),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                child: Padding(
-                  padding: const EdgeInsets.all(12),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Text(
-                        'تذكير توزيع الفرق',
-                        style: TextStyle(fontWeight: FontWeight.w900),
-                      ),
-                      const SizedBox(height: 6),
-                      Text(
-                        'خلك على توزيع زوجي (٢ ضد ٢، ٣ ضد ٣ ...). لو العدد ما يساوي، سوها فردي لاعب ضد لاعب عشان اللؤلؤ يتوزع بعدل.',
-                        style: TextStyle(color: Colors.white.withValues(alpha: 0.8)),
-                      ),
-                    ],
+      body: Stack(
+        children: [
+          RefreshIndicator(
+            onRefresh: () async {
+              if (code.isNotEmpty) await _refresh(code);
+            },
+            child: ListView(
+              padding: const EdgeInsets.all(16),
+              children: [
+                if (code.isNotEmpty) ...[
+                  Center(
+                    child: QrImageView(
+                      data: 'https://inzeli.app/join/$code',
+                      size: 220,
+                      backgroundColor: Colors.white,
+                    ),
                   ),
-                ),
-              ),
-            const SizedBox(height: 12),
-            if (_timerSec != null && _startedAt != null) ...[
-              Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  const Icon(Icons.timer_outlined),
-                  const SizedBox(width: 6),
-                  Text(
-                    _fmt(_remaining),
-                    style: const TextStyle(
-                      fontWeight: FontWeight.w900,
-                      fontSize: 16,
+                  const SizedBox(height: 8),
+                  SelectableText('كود الروم: $code', textAlign: TextAlign.center),
+                  const SizedBox(height: 12),
+                  Align(
+                    alignment: Alignment.center,
+                    child: OutlinedButton.icon(
+                      icon: const Icon(Icons.refresh),
+                      label: const Text('تحديث'),
+                      onPressed: () => _refresh(code),
                     ),
                   ),
                 ],
-              ),
-              const SizedBox(height: 8),
-            ],
 
-            if (_resultStatus == 'pending')
-              Card(
-                color: Colors.orange.withValues(alpha: 0.12),
-                child: Padding(
-                  padding: const EdgeInsets.all(12),
-                  child: Row(
+                const SizedBox(height: 12),
+                // تذكير توزيع الفرق أزيل بطلب المستخدم
+                const SizedBox(height: 12),
+                if (_timerSec != null && _startedAt != null) ...[
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      const Icon(Icons.flag, color: Colors.orange),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: Text(
-                          'النتيجة قيد الموافقة (${_resultVotes.where((v) => v['approve'] == true).length}/$_totalPlayers وافقوا)',
-                          style: const TextStyle(fontWeight: FontWeight.w700),
+                      const Icon(Icons.timer_outlined),
+                      const SizedBox(width: 6),
+                      Text(
+                        _fmt(_remaining),
+                        style: const TextStyle(
+                          fontWeight: FontWeight.w900,
+                          fontSize: 16,
                         ),
                       ),
                     ],
                   ),
-                ),
-              ),
-            if (_resultStatus == 'rejected' && isHost)
-              Card(
-                color: Colors.red.withValues(alpha: 0.12),
-                child: const Padding(
-                  padding: EdgeInsets.all(12),
-                  child: Text('تم رفض النتيجة من أحد اللاعبين. حدّد الفائز من جديد.', style: TextStyle(color: Colors.red)),
-                ),
-              ),
+                  const SizedBox(height: 8),
+                ],
 
-            if (isHost) ...[
-              Card(
-                child: Padding(
-                  padding: const EdgeInsets.all(12),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Text('وضع اللعب', style: TextStyle(fontWeight: FontWeight.w900)),
-                      const SizedBox(height: 8),
-                      SegmentedButton<bool>(
-                        segments: const [
-                          ButtonSegment(value: true, label: Text('فرق')),
-                          ButtonSegment(value: false, label: Text('فردي')),
+                if (_resultStatus == 'pending')
+                  Card(
+                    color: Colors.orange.withValues(alpha: 0.12),
+                    child: Padding(
+                      padding: const EdgeInsets.all(12),
+                      child: Row(
+                        children: [
+                          const Icon(Icons.flag, color: Colors.orange),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              'النتيجة قيد الموافقة (${_resultVotes.where((v) => v['approve'] == true).length}/$_totalPlayers وافقوا)',
+                              style: const TextStyle(fontWeight: FontWeight.w700),
+                            ),
+                          ),
                         ],
-                        selected: {_teamMode},
-                        onSelectionChanged: (s) => setState(() {
-                          _teamMode = s.first;
-                          _winnerTeam = null;
-                          _winnerUserId = null;
-                          if (!_teamMode) {
-                            _teamOf.clear();
-                          }
-                        }),
                       ),
-                    ],
+                    ),
                   ),
-                ),
-              ),
-              const SizedBox(height: 12),
-              Align(
-                alignment: Alignment.center,
-                child: FilledButton.icon(
-                  icon: const Icon(Icons.play_circle_outline),
-                  style: FilledButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
-                    minimumSize: const Size(240, 54),
+                if (_resultStatus == 'rejected' && isHost)
+                  Card(
+                    color: Colors.red.withValues(alpha: 0.12),
+                    child: const Padding(
+                      padding: EdgeInsets.all(12),
+                      child: Text('تم رفض النتيجة من أحد اللاعبين. حدّد الفائز من جديد.', style: TextStyle(color: Colors.red)),
+                    ),
                   ),
-                  label: const Text('بدء عدّاد (10 دقائق)'),
-                  onPressed: () async {
-                    if (code.isEmpty) return;
-                    try {
-                      final data = await ApiRoom.startRoom(
-                        code: code,
-                        token: widget.app.token,
-                        targetWinPoints: null,
-                        allowZeroCredit: true,
-                        timerSec: 600,
-                      );
-                      _locked = data['locked'] == true;
-                      _timerSec = (data['timerSec'] as num?)?.toInt();
-                      final s = data['startedAt'] as String?;
-                      _startedAt =
-                      s != null ? DateTime.tryParse(s) : null;
-                      _startTickerIfNeeded();
-                      Sfx.timerStart(mute: widget.app.soundMuted == true);
-                      _msg('بدأت الجولة ⏱️');
-                      _refresh(code);
-                    } catch (e) {
-                      Sfx.error(mute: widget.app.soundMuted == true);
-                      _msg('خطأ البدء: $e');
-                    }
-                  },
-                ),
-              ),
-              const SizedBox(height: 12),
-            ],
 
-            if (_teamMode && _teamQuorum != null) ...[
-              _TeamQuorumCard(teamQuorum: _teamQuorum!),
-              const SizedBox(height: 16),
-            ],
-
-            if (isHost && _teamMode) ...[
-              _AssignTeamsCard(
-                app: widget.app,
-                code: code,
-                players: players,
-                teamOf: _teamOf,
-                pearlsByUser: _pearlsByUser,
-                isLeader: _isLeader,
-                onChanged: () => _refresh(code),
-              ),
-              const SizedBox(height: 12),
-              _SetLeaderCard(
-                app: widget.app,
-                code: code,
-                players: players,
-                teamOf: _teamOf,
-                isLeader: _isLeader,
-                onChanged: () => _refresh(code),
-              ),
-              const SizedBox(height: 16),
-            ],
-
-            const Text(
-              'اللاعبون',
-              style: TextStyle(fontWeight: FontWeight.w900),
-            ),
-            const SizedBox(height: 6),
-
-            if (players.isEmpty)
-              const Text('لاعب واحد (أنت). إن لم يظهر، حدّث/شّرف من جهاز آخر.')
-            else if (_startedAt == null)
-              const Text('اختر الفائز بعد بدء العداد.', style: TextStyle(color: Colors.white70))
-            else if (_teamMode)
-              Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  ChoiceChip(
-                    selected: _winnerTeam == 'A',
-                    selectedColor: Colors.blue.withValues(alpha: 0.2),
-                    labelStyle: TextStyle(color: _winnerTeam == 'A' ? Colors.blue : null),
-                    label: const Text('الفريق A'),
-                    onSelected: (_) => setState(() => _winnerTeam = 'A'),
-                  ),
-                  const SizedBox(width: 8),
-                  ChoiceChip(
-                    selected: _winnerTeam == 'B',
-                    selectedColor: Colors.red.withValues(alpha: 0.2),
-                    labelStyle: TextStyle(color: _winnerTeam == 'B' ? Colors.red : null),
-                    label: const Text('الفريق B'),
-                    onSelected: (_) => setState(() => _winnerTeam = 'B'),
+                if (isHost) ...[
+                  Card(
+                    child: Padding(
+                      padding: const EdgeInsets.all(12),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text('وضع اللعب', style: TextStyle(fontWeight: FontWeight.w900)),
+                          const SizedBox(height: 8),
+                          if (_currentGameMode == GameMode.both)
+                            SegmentedButton<bool>(
+                              segments: const [
+                                ButtonSegment(value: true, label: Text('فرق')),
+                                ButtonSegment(value: false, label: Text('فردي')),
+                              ],
+                              selected: {_teamMode},
+                            onSelectionChanged: (s) => setState(() {
+                              _teamMode = s.first;
+                              _winnerTeam = null;
+                              _winnerUserId = null;
+                              if (!_teamMode) {
+                                _teamOf.clear();
+                              }
+                              final gameName = (widget.room?['gameId'] ?? widget.app.selectedGame ?? '').toString();
+                              if (_isCardGame(gameName) && _startedAt != null) {
+                                _resetQaid();
+                              }
+                            }),
+                          )
+                          else
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                              decoration: BoxDecoration(
+                                color: Colors.white.withValues(alpha: 0.06),
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              child: Row(
+                                children: [
+                                  Icon(_currentGameMode == GameMode.team ? Icons.groups : Icons.person, size: 18),
+                                  const SizedBox(width: 8),
+                                  Text(
+                                    _currentGameMode == GameMode.team
+                                        ? 'هذه اللعبة تُلعب كفرق فقط'
+                                        : 'هذه اللعبة تُلعب كفردي فقط',
+                                    style: const TextStyle(fontWeight: FontWeight.w700),
+                                  ),
+                                ],
+                              ),
+                            ),
+                        ],
+                      ),
+                    ),
                   ),
                 ],
-              )
-            else
-              Wrap(
-                spacing: 6,
-                runSpacing: 6,
-                children: players.map((p) {
-                  final user = p['user'] as Map<String, dynamic>?;
-                  final name = user?['displayName']?.toString() ??
-                      user?['email']?.toString() ??
-                      p['userId']?.toString() ??
-                      '—';
-                  final uid = p['userId']?.toString() ?? '';
-                  final selected = _winnerUserId == uid;
 
-                  final team = _teamOf[uid] ?? '';
-                  final pearls = _pearlsByUser[uid] ?? 0;
-                  final leader = _isLeader[uid] == true;
-
-                  return ChoiceChip(
-                    selected: selected,
-                    label: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Text(name, overflow: TextOverflow.ellipsis),
-                        if (_teamMode && team.isNotEmpty) ...[
-                          const SizedBox(width: 4),
-                          Text('($team)'),
-                        ],
-                        const SizedBox(width: 6),
-                        _pearlPill(pearls),
-                        if (leader) ...[
-                          const SizedBox(width: 4),
-                          const Icon(Icons.star, size: 16, color: Colors.amber),
-                        ],
-                      ],
+                const SizedBox(height: 12),
+                Align(
+                  alignment: Alignment.center,
+                  child: FilledButton.icon(
+                    icon: const Icon(Icons.play_circle_outline),
+                    style: FilledButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
+                      minimumSize: const Size(240, 54),
                     ),
-                    onSelected: (_) =>
-                        setState(() => _winnerUserId = uid),
-                  );
-                }).toList(),
-              ),
-
-            const SizedBox(height: 12),
-
-            if (isHost)
-              FilledButton.icon(
-                icon: const Icon(Icons.flag),
-                style: FilledButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 18),
-                  minimumSize: const Size.fromHeight(62),
-                  textStyle: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
+                    label: const Text('بدء عدّاد (10 دقائق)'),
+                    onPressed: () async {
+                      if (code.isEmpty) return;
+                      if (_uniquePlayersList.length < 2) {
+                        _msg('ما يصير تبلش بروحك', icon: Icons.close, color: Colors.red, animateIcon: true);
+                        return;
+                      }
+                      final gameName = (widget.room?['gameId'] ?? widget.app.selectedGame ?? '').toString();
+                      if (!_validateSetup(gameName)) return;
+                      try {
+                        final data = await ApiRoom.startRoom(
+                          code: code,
+                          token: widget.app.token,
+                          targetWinPoints: null,
+                          allowZeroCredit: true,
+                          timerSec: 600,
+                        );
+                        _locked = data['locked'] == true;
+                        _lastRemainingSoundTick = null;
+                        _timerSec = (data['timerSec'] as num?)?.toInt();
+                        final s = data['startedAt'] as String?;
+                        _startedAt = s != null ? DateTime.tryParse(s) : null;
+                        if (_isCardGame(gameName)) {
+                          _resetQaid();
+                        }
+                        _startTickerIfNeeded();
+                        Sfx.timerStart(mute: widget.app.soundMuted == true);
+                        _msg('بدأت الجولة ⏱️');
+                        _refresh(code);
+                      } catch (e) {
+                        Sfx.error(mute: widget.app.soundMuted == true);
+                        _msg('خطأ البدء: $e');
+                      }
+                    },
+                  ),
                 ),
-                label: Text(_resultStatus == 'pending' ? 'النتيجة قيد الموافقة' : 'حسم النتيجة'),
-                onPressed: _locked
-                    ? () => _msg('انتظر انتهاء العداد')
-                    : () async {
-                        final codeSafe = code;
-                        if (_startedAt == null) {
-                          Sfx.error(mute: widget.app.soundMuted == true);
-                          _msg('ابدأ العداد أولاً');
-                          return;
-                        }
-                        if (_remaining > 0) {
-                          _msg('انتظر انتهاء العدّاد أولاً');
-                          return;
-                        }
-                        if (players.length < 2) {
-                          Sfx.error(mute: widget.app.soundMuted == true);
-                          _msg('لا يمكن حسم النتيجة بلاعب واحد');
-                          return;
-                        }
 
-                        try {
-                          List<String> losers = [];
-                          List<String> winners = [];
-                          String winnerName;
-                          if (_teamMode) {
-                            if (_winnerTeam == null) {
-                              _msg('اختر الفريق الفائز');
+                const SizedBox(height: 12),
+
+                // تم إخفاء حالة النصاب بناء على طلب المستخدم
+                if (isHost && _teamMode) ...[
+                  _AssignTeamsCard(
+                    app: widget.app,
+                    code: code,
+                    players: players,
+                    teamOf: _teamOf,
+                    pearlsByUser: _pearlsByUser,
+                    onChanged: () => _refresh(code),
+                  ),
+                  const SizedBox(height: 16),
+                ],
+
+                const Text(
+                  'اللاعبون',
+                  style: TextStyle(fontWeight: FontWeight.w900),
+                ),
+                const SizedBox(height: 6),
+                Builder(builder: (context) {
+                  final uniquePlayers = _uniquePlayersList;
+                  if (uniquePlayers.isEmpty) {
+                    return const Text('لاعب واحد (أنت). إن لم يظهر، حدّث/شّرف من جهاز آخر.');
+                  }
+                  return Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: uniquePlayers.map((p) {
+                      final user = p['user'] as Map<String, dynamic>?;
+                      final name = user?['displayName']?.toString() ??
+                          user?['email']?.toString() ??
+                          p['userId']?.toString() ??
+                          '—';
+                      final uid = p['userId']?.toString() ?? '';
+                      final team = _teamOf[uid] ?? '';
+                      final pearls = _pearlsByUser[uid] ?? 0;
+                      return Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withValues(alpha: 0.06),
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(name, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w700)),
+                            if (_teamMode && team.isNotEmpty) ...[
+                              const SizedBox(width: 4),
+                              Text('($team)'),
+                            ],
+                            const SizedBox(width: 8),
+                            _pearlPill(pearls),
+                          ],
+                        ),
+                      );
+                    }).toList(),
+                  );
+                }),
+
+                if (_startedAt == null)
+                  const Padding(
+                    padding: EdgeInsets.only(top: 6.0),
+                    child: Text('اختر الفائز بعد بدء العداد.', style: TextStyle(color: Colors.white70)),
+                  )
+                else if (_teamMode)
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      ChoiceChip(
+                        selected: _winnerTeam == 'A',
+                        selectedColor: Colors.blue.withValues(alpha: 0.2),
+                        labelStyle: TextStyle(color: _winnerTeam == 'A' ? Colors.blue : null),
+                        label: const Text('الفريق A'),
+                        onSelected: (_) => setState(() => _winnerTeam = 'A'),
+                      ),
+                      const SizedBox(width: 8),
+                      ChoiceChip(
+                        selected: _winnerTeam == 'B',
+                        selectedColor: Colors.red.withValues(alpha: 0.2),
+                        labelStyle: TextStyle(color: _winnerTeam == 'B' ? Colors.red : null),
+                        label: const Text('الفريق B'),
+                        onSelected: (_) => setState(() => _winnerTeam = 'B'),
+                      ),
+                    ],
+                  )
+                else
+                  Wrap(
+                    spacing: 6,
+                    runSpacing: 6,
+                    children: _uniquePlayersList.map((p) {
+                      final user = p['user'] as Map<String, dynamic>?;
+                      final name = user?['displayName']?.toString() ??
+                          user?['email']?.toString() ??
+                          p['userId']?.toString() ??
+                          '—';
+                      final uid = p['userId']?.toString() ?? '';
+                      final selected = _winnerUserId == uid;
+                      final team = _teamOf[uid] ?? '';
+                      final pearls = _pearlsByUser[uid] ?? 0;
+                      return ChoiceChip(
+                        selected: selected,
+                        label: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(name, overflow: TextOverflow.ellipsis),
+                            if (_teamMode && team.isNotEmpty) ...[
+                              const SizedBox(width: 4),
+                              Text('($team)'),
+                            ],
+                            const SizedBox(width: 6),
+                            _pearlPill(pearls),
+                          ],
+                        ),
+                        onSelected: (_) => setState(() => _winnerUserId = uid),
+                      );
+                    }).toList(),
+                  ),
+
+                const SizedBox(height: 12),
+
+                if (started && qaidGame && !_locked) ...[
+                  _QaidCard(
+                    teamMode: _teamMode,
+                    target: _qaidTarget,
+                    scoreA: _qaidScoreA,
+                    scoreB: _qaidScoreB,
+                    players: _uniquePlayersList,
+                    playerScores: _qaidPlayerScores,
+                    inputA: _qaidInputA,
+                    inputB: _qaidInputB,
+                    playerInputs: _qaidPlayerInputs,
+                    onSave: () => setState(() => _saveQaidRound(_teamMode)),
+                    onUndo: () => setState(() => _undoQaidRound(_teamMode)),
+                    onReset: () => setState(() => _resetQaid()),
+                  ),
+                  const SizedBox(height: 12),
+                ],
+
+                if (isHost)
+                  FilledButton.icon(
+                    icon: const Icon(Icons.flag),
+                    style: FilledButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 18),
+                      minimumSize: const Size.fromHeight(62),
+                      textStyle: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
+                    ),
+                    label: Text(_resultStatus == 'pending' ? 'النتيجة قيد الموافقة' : 'حسم النتيجة'),
+                    onPressed: _locked
+                        ? () => _msg('انتظر انتهاء العداد')
+                        : () async {
+                            final codeSafe = code;
+                            if (_startedAt == null) {
+                              Sfx.error(mute: widget.app.soundMuted == true);
+                              _msg('ابدأ العداد أولاً');
                               return;
                             }
-                            winners = players
-                                .map((p) => p['userId']?.toString() ?? '')
-                                .where((uid) => uid.isNotEmpty && (_teamOf[uid] ?? '') == _winnerTeam)
-                                .toList();
-                            losers = players
-                                .map((p) => p['userId']?.toString() ?? '')
-                                .where((uid) => uid.isNotEmpty && (_teamOf[uid] ?? '') != _winnerTeam)
-                                .toList();
-                            winnerName = 'الفريق ${_winnerTeam!}';
-                          } else {
-                            if (_winnerUserId == null) {
-                              _msg('اختَر الفائز أولًا');
+                            if (_remaining > 0) {
+                              _msg('انتظر انتهاء العدّاد أولاً');
                               return;
                             }
-                            winners = [_winnerUserId!];
-                            losers = players
-                                .map((p) => p['userId']?.toString() ?? '')
-                                .where((uid) => uid.isNotEmpty && uid != _winnerUserId)
-                                .toList();
-                            winnerName = _nameForUser(_winnerUserId!);
-                          }
+                            if (_uniquePlayersList.length < 2) {
+                              Sfx.error(mute: widget.app.soundMuted == true);
+                              _msg('لا يمكن حسم النتيجة بلاعب واحد');
+                              return;
+                            }
 
-                          final loserNames = losers.map(_nameForUser).join('، ');
-                          final confirm = await showDialog<bool>(
-                            context: context,
-                            builder: (ctx) => AlertDialog(
-                              title: const Text('تأكيد النتيجة'),
-                              content: Text([
-                                'الفائز: $winnerName',
-                                if (loserNames.isNotEmpty) 'الخاسرون: $loserNames',
-                                'سيتم انتظار موافقة كل اللاعبين.',
-                              ].join('\n')),
-                              actions: [
-                                TextButton(
-                                  onPressed: () => Navigator.pop(ctx, false),
-                                  child: const Text('إلغاء'),
+                            try {
+                              List<String> losers = [];
+                              List<String> winners = [];
+                              String winnerName;
+                              if (_teamMode) {
+                                if (_winnerTeam == null) {
+                                  _msg('اختر الفريق الفائز');
+                                  return;
+                                }
+                                winners = _uniquePlayersList
+                                    .map((p) => p['userId']?.toString() ?? '')
+                                    .where((uid) => uid.isNotEmpty && (_teamOf[uid] ?? '') == _winnerTeam)
+                                    .toList();
+                                losers = _uniquePlayersList
+                                    .map((p) => p['userId']?.toString() ?? '')
+                                    .where((uid) => uid.isNotEmpty && (_teamOf[uid] ?? '') != _winnerTeam)
+                                    .toList();
+                                winnerName = 'الفريق ${_winnerTeam!}';
+                              } else {
+                                if (_winnerUserId == null) {
+                                  _msg('اختَر الفائز أولًا');
+                                  return;
+                                }
+                                winners = [_winnerUserId!];
+                                losers = _uniquePlayersList
+                                    .map((p) => p['userId']?.toString() ?? '')
+                                    .where((uid) => uid.isNotEmpty && uid != _winnerUserId)
+                                    .toList();
+                                winnerName = _nameForUser(_winnerUserId!);
+                              }
+
+                              final loserNames = losers.map(_nameForUser).join('، ');
+                              winners = winners.toSet().toList();
+                              losers = losers.toSet().toList();
+                              final confirm = await showDialog<bool>(
+                                context: context,
+                                builder: (ctx) => Directionality(
+                                  textDirection: TextDirection.rtl,
+                                  child: AlertDialog(
+                                    title: const Text('تأكيد النتيجة'),
+                                    content: Text([
+                                      'الفائز: $winnerName',
+                                      if (loserNames.isNotEmpty) 'الخاسرون: $loserNames',
+                                      'سيتم انتظار موافقة كل اللاعبين.',
+                                    ].join('\n')),
+                                    actions: [
+                                      TextButton(
+                                        onPressed: () => Navigator.pop(ctx, false),
+                                        child: const Text('إلغاء'),
+                                      ),
+                                      FilledButton(
+                                        onPressed: () => Navigator.pop(ctx, true),
+                                        child: const Text('إرسال للموافقة'),
+                                      ),
+                                    ],
+                                  ),
                                 ),
-                                FilledButton(
-                                  onPressed: () => Navigator.pop(ctx, true),
-                                  child: const Text('إرسال للموافقة'),
-                                ),
-                              ],
-                            ),
-                          );
-                          if (confirm != true) return;
+                              );
+                              if (confirm != true) return;
 
                           await ApiRoom.submitResult(
                             code: codeSafe,
@@ -743,83 +1111,152 @@ class _MatchPageState extends State<MatchPage> {
                             token: widget.app.token,
                           );
 
+                          // حدّث اللآلئ محلياً مباشرةً (كل فائز +1، كل خاسر -1)
+                          for (final w in winners.toSet()) {
+                            _pearlsByUser[w] = (_pearlsByUser[w] ?? 0) + 1;
+                          }
+                          for (final l in losers.toSet()) {
+                            _pearlsByUser[l] = (_pearlsByUser[l] ?? 0) - 1;
+                          }
+
                           _msg('أُرسلت النتيجة — بانتظار موافقة الجميع');
+                          // حدّث الخط الزمني / الإحصائيات عشان النتائج تظهر فوراً
+                          await widget.app.syncTimelineFromServer().catchError((_) {});
                           setState(() {
                             _resultStatus = 'pending';
                             _resultPayload = {'winners': winners, 'losers': losers};
                             _winnerUserId = null;
                             _winnerTeam = null;
-                          });
-                          _refreshResultState(codeSafe);
-                        } catch (e) {
-                          _msg(e.toString());
-                        }
-                      },
-              ),
+                              });
+                              _refreshResultState(codeSafe);
+                            } catch (e) {
+                              _msg(e.toString());
+                            }
+                          },
+                  ),
 
-            const SizedBox(height: 16),
-            const Text('انضم بالكود (اختبار سريع)'),
-            const SizedBox(height: 6),
-            Row(
-              children: [
-                Expanded(
-                  child: TextField(
-                    controller: _codeCtrl,
-                    decoration: const InputDecoration(
-                      labelText: 'اكتب كود الروم',
+                if (!_iAmInRoom) ...[
+                  const SizedBox(height: 16),
+                  const Text('انضم بالكود (اختبار سريع)'),
+                  const SizedBox(height: 6),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: TextField(
+                          controller: _codeCtrl,
+                          decoration: const InputDecoration(
+                            labelText: 'اكتب كود الروم',
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      IconButton.filled(
+                        tooltip: 'مسح QR',
+                        onPressed: () async {
+                          final scanned = await Navigator.push<String>(
+                            context,
+                            MaterialPageRoute(builder: (_) => const ScanPage()),
+                          );
+                          if (scanned != null && scanned.isNotEmpty) {
+                            setState(() => _codeCtrl.text = scanned);
+                          }
+                        },
+                        icon: const Icon(Icons.qr_code_scanner),
+                      ),
+                      const SizedBox(width: 8),
+                      FilledButton(
+                        onPressed: _locked
+                            ? () => _msg('الشّرف مغلق أثناء العدّاد')
+                            : () async {
+                          final inputCode = _codeCtrl.text.trim().isEmpty
+                              ? code
+                              : _codeCtrl.text.trim();
+                          if (inputCode.isEmpty) {
+                            _msg('اكتب الكود للانضمام');
+                            return;
+                          }
+                          if (!widget.app.isSignedIn) {
+                            _msg('سجّل دخول أول');
+                            return;
+                          }
+                          try {
+                            final pos = await _getLocation();
+                            await ApiRoom.joinByCode(
+                              code: inputCode,
+                              token: widget.app.token,
+                              lat: pos?.latitude,
+                              lng: pos?.longitude,
+                            );
+                            _msg('تم الانضمام ✅');
+                            _refresh(inputCode);
+                          } catch (e) {
+                            _msg('خطأ: $e');
+                          }
+                        },
+                        child: const Text('انضم'),
+                      ),
+                    ],
+                  ),
+                ],
+              ],
+            ),
+          ),
+          if (_locked && _remaining > 0)
+            Positioned.fill(
+              child: AbsorbPointer(
+                absorbing: true,
+                child: BackdropFilter(
+                  filter: ImageFilter.blur(sigmaX: 6, sigmaY: 6),
+                  child: Container(
+                    color: Colors.black.withValues(alpha: 0.55),
+                    alignment: Alignment.center,
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        const Icon(Icons.lock, color: Colors.white, size: 54),
+                        const SizedBox(height: 16),
+                        Text(
+                          _fmt(_remaining),
+                          style: const TextStyle(
+                            fontSize: 56,
+                            fontWeight: FontWeight.w900,
+                            color: Colors.white,
+                            letterSpacing: 2,
+                          ),
+                        ),
+                        const SizedBox(height: 10),
+                        const Text('العدّاد شغّال، انتظر لين يخلص', style: TextStyle(color: Colors.white70)),
+                      ],
                     ),
                   ),
                 ),
-                const SizedBox(width: 8),
-                IconButton.filled(
-                  tooltip: 'مسح QR',
-                  onPressed: () async {
-                    final scanned = await Navigator.push<String>(
-                      context,
-                      MaterialPageRoute(builder: (_) => const ScanPage()),
-                    );
-                    if (scanned != null && scanned.isNotEmpty) {
-                      setState(() => _codeCtrl.text = scanned);
-                    }
-                  },
-                  icon: const Icon(Icons.qr_code_scanner),
-                ),
-                const SizedBox(width: 8),
-                FilledButton(
-                  onPressed: _locked
-                      ? () => _msg('الشّرف مغلق أثناء العدّاد')
-                      : () async {
-                    final inputCode = _codeCtrl.text.trim().isEmpty
-                        ? code
-                        : _codeCtrl.text.trim();
-                    if (inputCode.isEmpty) {
-                      _msg('اكتب الكود للانضمام');
-                      return;
-                    }
-                    if (!widget.app.isSignedIn) {
-                      _msg('سجّل دخول أول');
-                      return;
-                    }
-                    try {
-                      final pos = await _getLocation();
-                      await ApiRoom.joinByCode(
-                        code: inputCode,
-                        token: widget.app.token,
-                        lat: pos?.latitude,
-                        lng: pos?.longitude,
-                      );
-                      _msg('تم الانضمام ✅');
-                      _refresh(inputCode);
-                    } catch (e) {
-                      _msg('خطأ: $e');
-                    }
-                  },
-                  child: const Text('انضم'),
-                ),
-              ],
+              ),
             ),
-          ],
-        ),
+          // أثناء القفل: نسمح باستخدام القيد فقط
+          if (_locked && _remaining > 0 && started && qaidGame)
+            Positioned(
+              left: 12,
+              right: 12,
+              bottom: 12,
+              child: IgnorePointer(
+                ignoring: false,
+                child: _QaidCard(
+                  teamMode: _teamMode,
+                  target: _qaidTarget,
+                  scoreA: _qaidScoreA,
+                  scoreB: _qaidScoreB,
+                  players: _uniquePlayersList,
+                  playerScores: _qaidPlayerScores,
+                  inputA: _qaidInputA,
+                  inputB: _qaidInputB,
+                  playerInputs: _qaidPlayerInputs,
+                  onSave: () => setState(() => _saveQaidRound(_teamMode)),
+                  onUndo: () => setState(() => _undoQaidRound(_teamMode)),
+                  onReset: () => setState(() => _resetQaid()),
+                ),
+              ),
+            ),
+        ],
       ),
     );
   }
@@ -842,61 +1279,12 @@ Widget _pearlPill(int pearls, {Color? color}) {
   );
 }
 
-/* -------------------------- Helper Widgets -------------------------- */
-
-class _TeamQuorumCard extends StatelessWidget {
-  final Map<String, dynamic> teamQuorum;
-  const _TeamQuorumCard({required this.teamQuorum});
-
-  @override
-  Widget build(BuildContext context) {
-    Map<String, dynamic>? qa = teamQuorum['A'] as Map<String, dynamic>?;
-    Map<String, dynamic>? qb = teamQuorum['B'] as Map<String, dynamic>?;
-    qa ??= const {};
-    qb ??= const {};
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(12),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            const Text(
-              'حالة النصاب (اللآلئ)',
-              style: TextStyle(fontWeight: FontWeight.w900),
-            ),
-            const SizedBox(height: 6),
-            _row(
-              'الفريق A',
-              'مطلوب: ${qa['required'] ?? 0} — متاح: ${qa['available'] ?? 0} — ${_ok(qa['quorumMet'])}',
-            ),
-            const SizedBox(height: 4),
-            _row(
-              'الفريق B',
-              'مطلوب: ${qb['required'] ?? 0} — متاح: ${qb['available'] ?? 0} — ${_ok(qb['quorumMet'])}',
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _row(String title, String value) {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-      children: [Text(title), Text(value)],
-    );
-  }
-
-  String _ok(Object? b) => (b == true) ? 'مكتمل ✅' : 'غير مكتمل ❌';
-}
-
 class _AssignTeamsCard extends StatelessWidget {
   final AppState app;
   final String code;
   final List<Map<String, dynamic>> players;
   final Map<String, String?> teamOf;
   final Map<String, int> pearlsByUser;
-  final Map<String, bool> isLeader;
   final VoidCallback onChanged;
 
   const _AssignTeamsCard({
@@ -905,7 +1293,6 @@ class _AssignTeamsCard extends StatelessWidget {
     required this.players,
     required this.teamOf,
     required this.pearlsByUser,
-    required this.isLeader,
     required this.onChanged,
   });
 
@@ -958,7 +1345,6 @@ class _AssignTeamsCard extends StatelessWidget {
                   user?['email']?.toString() ??
                   uid;
               final pearls = pearlsByUser[uid] ?? 0;
-              final leader = isLeader[uid] == true;
 
               final sel = teamOf[uid];
               return Padding(
@@ -968,10 +1354,6 @@ class _AssignTeamsCard extends StatelessWidget {
                     Expanded(child: Text(name, maxLines: 1, overflow: TextOverflow.ellipsis)),
                     const SizedBox(width: 8),
                     _pearlPill(pearls),
-                    if (leader) ...[
-                      const SizedBox(width: 6),
-                      const Icon(Icons.star, size: 16, color: Colors.amber),
-                    ],
                     const SizedBox(width: 8),
                     SizedBox(
                       width: 160,
@@ -1095,70 +1477,177 @@ class _TeamColumn extends StatelessWidget {
   }
 }
 
-class _SetLeaderCard extends StatelessWidget {
-  final AppState app;
-  final String code;
+// --- Qaid widgets (جنجفه) ---
+class _QaidCard extends StatelessWidget {
+  final bool teamMode;
+  final int target;
+  final int scoreA;
+  final int scoreB;
   final List<Map<String, dynamic>> players;
-  final Map<String, String?> teamOf;
-  final Map<String, bool> isLeader;
-  final VoidCallback onChanged;
+  final Map<String, int> playerScores;
+  final TextEditingController inputA;
+  final TextEditingController inputB;
+  final Map<String, TextEditingController> playerInputs;
+  final VoidCallback onSave;
+  final VoidCallback onUndo;
+  final VoidCallback onReset;
 
-  const _SetLeaderCard({
-    required this.app,
-    required this.code,
+  const _QaidCard({
+    required this.teamMode,
+    required this.target,
+    required this.scoreA,
+    required this.scoreB,
     required this.players,
-    required this.teamOf,
-    required this.isLeader,
-    required this.onChanged,
+    required this.playerScores,
+    required this.inputA,
+    required this.inputB,
+    required this.playerInputs,
+    required this.onSave,
+    required this.onUndo,
+    required this.onReset,
   });
 
   @override
   Widget build(BuildContext context) {
-    final teamA = players
-        .where((p) => teamOf[(p['userId'] ?? '').toString()] == 'A')
-        .toList();
-    final teamB = players
-        .where((p) => teamOf[(p['userId'] ?? '').toString()] == 'B')
-        .toList();
-
-    final currentLeaderA = teamA.firstWhere(
-          (p) => isLeader[(p['userId'] ?? '').toString()] == true,
-      orElse: () => {},
-    );
-    final currentLeaderB = teamB.firstWhere(
-          (p) => isLeader[(p['userId'] ?? '').toString()] == true,
-      orElse: () => {},
-    );
-
+    final remainA = (target - scoreA);
+    final remainB = (target - scoreB);
     return Card(
-      child: ExpansionTile(
-        tilePadding: const EdgeInsets.symmetric(horizontal: 12),
-        childrenPadding: const EdgeInsets.all(12),
-        title: const Text(
-          'تعيين القادة (اضغط للفتح)',
-          style: TextStyle(fontWeight: FontWeight.w900),
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: const [
+                Icon(Icons.calculate),
+                SizedBox(width: 8),
+                Text('قيد الجولة (الجنجفه)', style: TextStyle(fontWeight: FontWeight.w900)),
+              ],
+            ),
+            const SizedBox(height: 10),
+            if (teamMode) ...[
+              Row(
+                children: [
+                  Expanded(
+                    child: _QaidTeamBox(
+                      title: 'الفريق A',
+                      score: scoreA,
+                      remain: remainA,
+                      input: inputA,
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: _QaidTeamBox(
+                      title: 'الفريق B',
+                      score: scoreB,
+                      remain: remainB,
+                      input: inputB,
+                    ),
+                  ),
+                ],
+              ),
+            ] else ...[
+              const Text('قيد اللاعبين (فردي)', style: TextStyle(fontWeight: FontWeight.w800)),
+              const SizedBox(height: 8),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: players.map((p) {
+                  final uid = (p['userId'] ?? '').toString();
+                  if (uid.isEmpty) return const SizedBox.shrink();
+                  final user = p['user'] as Map<String, dynamic>?;
+                  final name = user?['displayName']?.toString() ?? user?['email']?.toString() ?? uid;
+                  final score = playerScores[uid] ?? 0;
+                  final remain = (target - score).clamp(-999999, 999999);
+                  final ctrl = playerInputs.putIfAbsent(uid, () => TextEditingController());
+                  return SizedBox(
+                    width: 170,
+                    child: _QaidSoloBox(name: name, score: score, remain: remain, input: ctrl),
+                  );
+                }).toList(),
+              ),
+            ],
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                FilledButton.icon(
+                  onPressed: onSave,
+                  icon: const Icon(Icons.save),
+                  label: const Text('تسجيل الجولة'),
+                ),
+                const SizedBox(width: 8),
+                OutlinedButton.icon(
+                  onPressed: onUndo,
+                  icon: const Icon(Icons.undo),
+                  label: const Text('تراجع'),
+                ),
+                const SizedBox(width: 8),
+                TextButton(
+                  onPressed: onReset,
+                  child: const Text('تصفير القيد'),
+                ),
+              ],
+            ),
+          ],
         ),
+      ),
+    );
+  }
+}
+
+class _QaidTeamBox extends StatelessWidget {
+  final String title;
+  final int score;
+  final int remain;
+  final TextEditingController input;
+  const _QaidTeamBox({
+    required this.title,
+    required this.score,
+    required this.remain,
+    required this.input,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.05),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _LeaderPickerRow(
-            teamLabel: 'الفريق A',
-            team: 'A',
-            code: code,
-            app: app,
-            players: teamA,
-            currentLeaderUserId:
-                (currentLeaderA.isNotEmpty) ? currentLeaderA['userId']?.toString() : null,
-            onChanged: onChanged,
-          ),
-          const SizedBox(height: 10),
-          _LeaderPickerRow(
-            teamLabel: 'الفريق B',
-            team: 'B',
-            code: code,
-            app: app,
-            players: teamB,
-            currentLeaderUserId:
-                (currentLeaderB.isNotEmpty) ? currentLeaderB['userId']?.toString() : null,
-            onChanged: onChanged,
+          Text(title, style: const TextStyle(fontWeight: FontWeight.w900)),
+          const SizedBox(height: 4),
+          Text('المجموع: $score', style: const TextStyle(fontWeight: FontWeight.w700)),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              IconButton(
+                onPressed: () {
+                  final v = int.tryParse(input.text.trim()) ?? 0;
+                  input.text = (v - 1).toString();
+                },
+                icon: const Icon(Icons.remove),
+              ),
+              Expanded(
+                child: TextField(
+                  controller: input,
+                  keyboardType: TextInputType.number,
+                  decoration: const InputDecoration(hintText: 'نقاط الجولة'),
+                ),
+              ),
+              IconButton(
+                onPressed: () {
+                  final v = int.tryParse(input.text.trim()) ?? 0;
+                  input.text = (v + 1).toString();
+                },
+                icon: const Icon(Icons.add),
+              ),
+            ],
           ),
         ],
       ),
@@ -1166,101 +1655,41 @@ class _SetLeaderCard extends StatelessWidget {
   }
 }
 
-class _LeaderPickerRow extends StatefulWidget {
-  final String teamLabel;
-  final String team;
-  final String code;
-  final AppState app;
-  final List<Map<String, dynamic>> players;
-  final String? currentLeaderUserId;
-  final VoidCallback onChanged;
-
-  const _LeaderPickerRow({
-    required this.teamLabel,
-    required this.team,
-    required this.code,
-    required this.app,
-    required this.players,
-    required this.currentLeaderUserId,
-    required this.onChanged,
+class _QaidSoloBox extends StatelessWidget {
+  final String name;
+  final int score;
+  final int remain;
+  final TextEditingController input;
+  const _QaidSoloBox({
+    required this.name,
+    required this.score,
+    required this.remain,
+    required this.input,
   });
 
   @override
-  State<_LeaderPickerRow> createState() => _LeaderPickerRowState();
-}
-
-class _LeaderPickerRowState extends State<_LeaderPickerRow> {
-  String? _selected;
-
-  @override
-  void initState() {
-    super.initState();
-    _selected = widget.currentLeaderUserId;
-  }
-
-  @override
-  void didUpdateWidget(covariant _LeaderPickerRow oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (oldWidget.currentLeaderUserId != widget.currentLeaderUserId) {
-      setState(() => _selected = widget.currentLeaderUserId);
-    }
-  }
-
-  @override
   Widget build(BuildContext context) {
-    final items = widget.players.map((p) {
-      final user = p['user'] as Map<String, dynamic>?;
-      final name = user?['displayName']?.toString() ??
-          user?['email']?.toString() ??
-          p['userId'].toString();
-      final uid = (p['userId'] ?? '').toString();
-      return DropdownMenuItem<String>(
-        value: uid,
-        child: Text(name, overflow: TextOverflow.ellipsis),
-      );
-    }).toList();
-
-    return Row(
-      children: [
-        Expanded(
-          child: Text(
-            widget.teamLabel,
-            style: TextStyle(
-              fontWeight: FontWeight.w700,
-              color: widget.team == 'A' ? Colors.blue.shade700 : Colors.red.shade700,
-            ),
+    return Container(
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.05),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(name, style: const TextStyle(fontWeight: FontWeight.w800)),
+          const SizedBox(height: 4),
+          Text('المجموع: $score', style: const TextStyle(fontWeight: FontWeight.w700)),
+          const SizedBox(height: 8),
+          TextField(
+            controller: input,
+            keyboardType: TextInputType.number,
+            decoration: const InputDecoration(hintText: 'نقاط الجولة'),
           ),
-        ),
-        const SizedBox(width: 8),
-        SizedBox(
-          width: 220,
-          child: DropdownButtonFormField<String>(
-            isExpanded: true,
-            initialValue: _selected,
-            hint: const Text('اختر القائد'),
-            items: items,
-            onChanged: (val) async {
-              if (val == null) return;
-              try {
-                await ApiRoom.setTeamLeader(
-                  code: widget.code,
-                  team: widget.team,
-                  leaderUserId: val,
-                  token: widget.app.token,
-                );
-                if (!mounted) return;
-                setState(() => _selected = val);
-                widget.onChanged();
-              } catch (e) {
-                if (!context.mounted) return;
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text('Leader error: $e')),
-                );
-              }
-            },
-          ),
-        ),
-      ],
+        ],
+      ),
     );
   }
 }

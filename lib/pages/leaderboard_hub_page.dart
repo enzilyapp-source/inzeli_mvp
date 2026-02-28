@@ -1,5 +1,7 @@
 // lib/pages/leaderboard_hub_page.dart
 import 'package:flutter/material.dart';
+import 'dart:convert';
+import '../widgets/avatar_effects.dart';
 import '../state.dart';
 import '../api_leaderboard.dart';
 import '../api_sponsor.dart';
@@ -21,7 +23,6 @@ class LeaderboardHubPage extends StatefulWidget {
 
 class _LeaderboardHubPageState extends State<LeaderboardHubPage> {
   late int tab; // 0 = Regular, 1 = Sponsor, 2 = Dewanyah
-  bool _searchExpanded = false;
 
   // sponsor selection inside sponsor leaderboard
   String? _sponsorCode;
@@ -217,19 +218,19 @@ class _LeaderboardHubPageState extends State<LeaderboardHubPage> {
             children: [
               const Text('جولة سريعة', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 18)),
               const SizedBox(height: 10),
-              _tutorialRow('١) اختر اللعبة', 'من الشريط العلوي: العاب إنزلي / سبونسرات / دواوين.'),
+              _tutorialRow(Icons.sports_esports, '١) اختر اللعبة', 'من الشريط العلوي: العاب إنزلي / سبونسرات / دواوين.'),
               const SizedBox(height: 6),
-              _tutorialRow('٢) اضغط انزلي وبلّش التحدي', 'يُنفتح روم، وانتظر لاعبين ثم شغّل العدّاد.'),
+              _tutorialRow(Icons.play_circle_fill, '٢) اضغط انزلي وبلّش التحدي', 'يُنفتح روم، وانتظر لاعبين ثم شغّل العدّاد.'),
               const SizedBox(height: 6),
-              _tutorialRow('٣) النتيجة بعد انتهاء العدّاد', 'إذا صفّر العداد احسم النتيجة واختر الفائز. اللآلئ تُخصم من الخاسرين فقط.'),
+              _tutorialRow(Icons.flag, '٣) النتيجة بعد انتهاء العدّاد', 'إذا صفّر العداد احسم النتيجة واختر الفائز. اللآلئ تُخصم من الخاسرين فقط.'),
               const SizedBox(height: 6),
-              _tutorialRow('٤) ادخل شسالفة وشوف شسالفة!', 'تابع الخط الزمني والستريك وآخر النتائج.'),
+              _tutorialRow(Icons.trending_up, '٤) ادخل شسالفة وشوف شسالفة!', 'تابع الخط الزمني والستريك وآخر النتائج.'),
               const SizedBox(height: 10),
-              _tutorialRow('🏆 المراتب', 'شوف وين واصل كل لاعب.'),
-              _tutorialRow('🎮 الألعاب', 'الروم والعدّاد والحسم.'),
-              _tutorialRow('❓ شسالفة؟', 'الخطة الزمنية للتحديثات.'),
-              _tutorialRow('📺 سبونسرات', 'لآلئ الرعاة لكل لعبة.'),
-              _tutorialRow('👤 ملفي', 'بياناتك وإعداداتك.'),
+              _tutorialRow(Icons.emoji_events, 'المراتب', 'شوف وين واصل كل لاعب.'),
+              _tutorialRow(Icons.sports_esports, 'الألعاب', 'الروم والعدّاد والحسم.'),
+              _tutorialRow(Icons.help, 'شسالفة؟', 'الخطة الزمنية للتحديثات.'),
+              _tutorialRow(Icons.tv, 'سبونسرات', 'لآلئ الرعاة لكل لعبة.'),
+              _tutorialRow(Icons.person, 'ملفي', 'بياناتك وإعداداتك.'),
               const SizedBox(height: 14),
               SizedBox(
                 width: double.infinity,
@@ -248,12 +249,14 @@ class _LeaderboardHubPageState extends State<LeaderboardHubPage> {
     );
   }
 
-  Widget _tutorialRow(String title, String body) {
+  Widget _tutorialRow(IconData icon, String title, String body) {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Icon(Icons.arrow_back_ios_new, size: 16),
-        const SizedBox(width: 8),
+        Padding(
+          padding: const EdgeInsets.only(top: 2, left: 12),
+          child: Icon(icon, size: 20, color: Colors.white),
+        ),
         Expanded(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -319,22 +322,49 @@ class _LeaderboardHubPageState extends State<LeaderboardHubPage> {
         {"displayName": "Futun", "pearls": basePearls - 3, "streak": 0},
       ];
 
-  void _msg(String text) {
+  void _msg(String text, {bool error = false, bool success = false}) {
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(text)));
+    final Color color = error
+        ? Colors.redAccent
+        : success
+            ? Colors.green
+            : Theme.of(context).colorScheme.secondary;
+    final IconData icon = error
+        ? Icons.close
+        : success
+            ? Icons.check_circle
+            : Icons.info_outline;
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        backgroundColor: Colors.black87,
+        content: Directionality(
+          textDirection: TextDirection.rtl,
+          child: Row(
+            children: [
+              Icon(icon, color: color),
+              const SizedBox(width: 8),
+              Expanded(child: Text(text)),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 
   Future<void> _openPlayerProfile() async {
     final name = _playerSearchCtrl.text.trim();
     if (name.isEmpty) {
-      _msg('اكتب اسم اللاعب للبحث');
+      _msg('اكتب اسم اللاعب للبحث', error: true);
       return;
     }
     try {
       _msg('جارِ البحث ...');
       final results = await searchUsers(name, token: widget.app.token);
       if (results.isEmpty) {
-      _msg('لم يتم العثور على اللاعب');
+      _msg('لم يتم العثور على اللاعب', error: true);
       return;
     }
       Map<String, dynamic> pickExact() {
@@ -356,6 +386,9 @@ class _LeaderboardHubPageState extends State<LeaderboardHubPage> {
         'email': user['email'],
         'phone': user['phone'],
         'displayName': display,
+        'avatarUrl': user['avatarUrl'] ?? user['avatarPath'] ?? user['avatar'],
+        'avatarBase64': user['avatarBase64'],
+        'themeId': user['themeId'],
       });
 
       final uid = (user['id'] ?? user['userId'])?.toString();
@@ -369,7 +402,7 @@ class _LeaderboardHubPageState extends State<LeaderboardHubPage> {
       if (!mounted) return;
       await _showSearchResultsSheet(results);
     } catch (_) {
-      _msg('تعذر إحضار بيانات اللاعب، حاول مرة أخرى');
+      _msg('تعذر إحضار بيانات اللاعب، حاول مرة أخرى', error: true);
     }
   }
 
@@ -404,7 +437,7 @@ class _LeaderboardHubPageState extends State<LeaderboardHubPage> {
     final name = _dewNameCtrl.text.trim();
     final contact = _dewContactCtrl.text.trim();
     if (name.isEmpty || contact.isEmpty) {
-      _msg('عبئ اسم الديوانية ووسيلة التواصل');
+      _msg('عبئ اسم الديوانية ووسيلة التواصل', error: true);
       return;
     }
     final note = _dewNoteCtrl.text.trim();
@@ -430,7 +463,7 @@ class _LeaderboardHubPageState extends State<LeaderboardHubPage> {
     _dewNameCtrl.clear();
     _dewContactCtrl.clear();
     _dewNoteCtrl.clear();
-    _msg('استلمنا طلب الديوانية، سنتواصل معك للتفعيل');
+    _msg('استلمنا طلب الديوانية، سنتواصل معك للتفعيل', success: true);
     if (closeSheet && mounted) Navigator.pop(context);
   }
 
@@ -624,13 +657,6 @@ class _LeaderboardHubPageState extends State<LeaderboardHubPage> {
     return ListView(
       padding: const EdgeInsets.all(12),
       children: [
-        _PlayerSearchBar(
-          controller: _playerSearchCtrl,
-          onSearch: _openPlayerProfile,
-          expanded: _searchExpanded,
-          onToggle: () => setState(() => _searchExpanded = !_searchExpanded),
-        ),
-        const SizedBox(height: 4),
         // Tabs
         Container(
           padding: const EdgeInsets.all(6),
@@ -665,6 +691,13 @@ class _LeaderboardHubPageState extends State<LeaderboardHubPage> {
               ),
             ],
           ),
+        ),
+
+        const SizedBox(height: 10),
+
+        _PlayerSearchBar(
+          controller: _playerSearchCtrl,
+          onSearch: _openPlayerProfile,
         ),
 
         const SizedBox(height: 12),
@@ -987,6 +1020,8 @@ extension _UserResultCard on _LeaderboardHubPageState {
         'displayName': (r['displayName'] ?? r['name'] ?? 'لاعب').toString(),
         'email': r['email']?.toString(),
         'avatarUrl': r['avatarUrl']?.toString(),
+        'avatarBase64': r['avatarBase64']?.toString(),
+        'themeId': r['themeId']?.toString(),
         'id': uid,
         'stats': stats,
       });
@@ -1011,11 +1046,53 @@ extension _UserResultCard on _LeaderboardHubPageState {
               final totalGames = (stats?['wins'] ?? 0) + (stats?['losses'] ?? 0);
               final streak = stats?['streak'] ?? 0;
               final display = u['displayName']?.toString() ?? 'لاعب';
+              final themeId = (u['themeId'] ?? '').toString().isNotEmpty
+                  ? u['themeId'].toString()
+                  : (u['id']?.toString() == widget.app.userId ? widget.app.themeId : null);
+              AvatarEffectType? effectFromId(String? id) {
+                switch (id) {
+                  case 'blueThunder':
+                    return AvatarEffectType.blueThunder;
+                  case 'goldLightning':
+                    return AvatarEffectType.goldLightning;
+                  case 'kuwait':
+                    return AvatarEffectType.kuwaitSparkles;
+                  case 'greenLeaf':
+                    return AvatarEffectType.greenLeaf;
+                  case 'flameBlue':
+                    return AvatarEffectType.flameBlue;
+                  default:
+                    return null;
+                }
+              }
               return Card(
                 child: ListTile(
-                  leading: u['avatarUrl'] != null && (u['avatarUrl'] as String).isNotEmpty
-                      ? CircleAvatar(backgroundImage: NetworkImage(u['avatarUrl']))
-                      : CircleAvatar(child: Text(display.characters.take(2).toString())),
+                  leading: () {
+                    final url = (u['avatarUrl'] ?? '').toString();
+                    final b64 = (u['avatarBase64'] ?? '').toString();
+                    final effect = effectFromId(themeId);
+                    if (url.isNotEmpty) {
+                      return AvatarEffect(
+                        effect: effect ?? AvatarEffectType.blueThunder,
+                        size: 46,
+                        child: CircleAvatar(backgroundImage: NetworkImage(url)),
+                      );
+                    }
+                    if (b64.isNotEmpty) {
+                      try {
+                        return AvatarEffect(
+                          effect: effect ?? AvatarEffectType.blueThunder,
+                          size: 46,
+                          child: CircleAvatar(backgroundImage: MemoryImage(base64Decode(b64))),
+                        );
+                      } catch (_) {}
+                    }
+                    return AvatarEffect(
+                      effect: effect ?? AvatarEffectType.blueThunder,
+                      size: 46,
+                      child: CircleAvatar(child: Text(display.characters.take(2).toString())),
+                    );
+                  }(),
                   title: Text(display, style: const TextStyle(fontWeight: FontWeight.w800)),
                   subtitle: Wrap(
                     spacing: 8,
@@ -1108,7 +1185,7 @@ class _LeaderboardPager extends StatelessWidget {
     return Column(
       children: [
         SizedBox(
-          height: 330,
+          height: 380,
           child: PageView.builder(
             controller: controller,
             onPageChanged: onPageChanged,
@@ -1553,28 +1630,13 @@ class _BoardDetailPageState extends State<_BoardDetailPage> {
 class _PlayerSearchBar extends StatelessWidget {
   final TextEditingController controller;
   final VoidCallback onSearch;
-  final bool expanded;
-  final VoidCallback onToggle;
   const _PlayerSearchBar({
     required this.controller,
     required this.onSearch,
-    required this.expanded,
-    required this.onToggle,
   });
 
   @override
   Widget build(BuildContext context) {
-    if (!expanded) {
-      return Align(
-        alignment: Alignment.centerRight,
-        child: IconButton.filled(
-          onPressed: onToggle,
-          icon: const Icon(Icons.search),
-          tooltip: 'بحث اللاعب',
-        ),
-      );
-    }
-
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(10),
@@ -1593,9 +1655,9 @@ class _PlayerSearchBar extends StatelessWidget {
               ),
             ),
             IconButton(
-              onPressed: onToggle,
+              onPressed: () => controller.clear(),
               icon: const Icon(Icons.close),
-              tooltip: 'إغلاق البحث',
+              tooltip: 'مسح النص',
             ),
             const SizedBox(width: 4),
             IconButton.filled(

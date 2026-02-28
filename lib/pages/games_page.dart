@@ -5,6 +5,7 @@ import '../state.dart';
 import '../api_room.dart';
 // لو حبيتي تستخدمين القواعد لاحقًا
 import '../widgets/room_timer_banner.dart';
+import '../widgets/app_snackbar.dart';
 import '../widgets/primary_pill_button.dart';
 import 'match_page.dart';
 import 'scan_page.dart';
@@ -52,9 +53,8 @@ class _GamesPageState extends State<GamesPage> {
     super.dispose();
   }
 
-  void _msg(String text) {
-    ScaffoldMessenger.of(context)
-        .showSnackBar(SnackBar(content: Text(text)));
+  void _msg(String text, {bool error = false, bool success = false}) {
+    showAppSnack(context, text, error: error, success: success);
   }
 
   String? get _selectedCategory => app.selectedCategory;
@@ -278,77 +278,6 @@ class _GamesPageState extends State<GamesPage> {
 
   // ------------ UI builders ------------
 
-  Widget _buildUserCard() {
-    final name = app.displayName ?? app.name ?? 'لاعب';
-    final email = app.email ?? '';
-    final pearls = app.pearls;
-    final permanent = app.permanentScore ?? 0;
-    final currentGame = _selectedGame;
-    final pearlsForGame = currentGame == null ? null : app.pearlsForGame(currentGame);
-
-    return Card(
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      child: Padding(
-        padding: const EdgeInsets.all(12),
-        child: Row(
-          children: [
-            CircleAvatar(
-              radius: 26,
-              child: Text(
-                name.isNotEmpty ? name.characters.first : '؟',
-                style:
-                const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-              ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    name,
-                    style: const TextStyle(
-                      fontWeight: FontWeight.w900,
-                      fontSize: 16,
-                    ),
-                  ),
-                  if (email.isNotEmpty)
-                    Text(
-                      email,
-                      style: const TextStyle(
-                        fontSize: 12,
-                        color: Colors.grey,
-                      ),
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  const SizedBox(height: 4),
-                  Row(
-                    children: [
-                      const Icon(Icons.circle, size: 12),
-                      const SizedBox(width: 4),
-                      Text('لآلئك: $pearls'),
-                      const SizedBox(width: 12),
-                      const Icon(Icons.stacked_line_chart, size: 12),
-                      const SizedBox(width: 4),
-                      Text('نقاط اللعبة: $permanent'),
-                    ],
-                  ),
-                  if (pearlsForGame != null && pearlsForGame <= 0) ...[
-                    const SizedBox(height: 6),
-                    Text(
-                      'رصيد اللعبة الحالي صفر — يمكنك اللعب لكن لن تُخصم ولن يكسب الخصم منك.',
-                      style: TextStyle(color: Colors.redAccent.shade100, fontSize: 12),
-                    ),
-                  ],
-                ],
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
   Widget _buildCategoryPager() {
     final categories = app.categories;
     if (categories.isEmpty) {
@@ -530,8 +459,9 @@ class _GamesPageState extends State<GamesPage> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                _buildUserCard(),
-                const SizedBox(height: 12),
+                // تم حذف الكرت الإضافي حسب طلبك
+                // _buildUserCard(),
+                // const SizedBox(height: 12),
                 if (app.roomCode != null) _buildCurrentRoomSection(),
                 const SizedBox(height: 8),
 

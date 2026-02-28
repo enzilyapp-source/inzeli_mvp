@@ -1,12 +1,14 @@
 // lib/pages/sponsor_game_page.dart
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:geolocator/geolocator.dart';
 
 import '../state.dart';
 import '../api_sponsor.dart';
 import '../api_room.dart';
+import '../widgets/app_snackbar.dart';
 import 'match_page.dart';
-import 'package:geolocator/geolocator.dart';
+import 'scan_page.dart';
 
 class SponsorGameScreen extends StatefulWidget {
   final AppState app;
@@ -46,8 +48,8 @@ class _SponsorGameScreenState extends State<SponsorGameScreen> {
     super.dispose();
   }
 
-  void _msg(String m) =>
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(m)));
+  void _msg(String m, {bool error = false, bool success = false}) =>
+      showAppSnack(context, m, error: error, success: success);
 
   Future<Position?> _getLocation() async {
     try {
@@ -94,7 +96,7 @@ class _SponsorGameScreenState extends State<SponsorGameScreen> {
       _selectedGameId ??=
       _games.isNotEmpty ? _games.first['gameId']?.toString() : null;
     } catch (e) {
-      _msg('فشل تحميل بيانات الراعي: $e');
+      _msg('فشل تحميل بيانات الراعي: $e', error: true);
     } finally {
       if (mounted) setState(() => _loading = false);
     }
@@ -102,11 +104,11 @@ class _SponsorGameScreenState extends State<SponsorGameScreen> {
 
   Future<void> _createAndOpenRoom(String gameId) async {
     if (!widget.app.isSignedIn) {
-      _msg('سجّل الدخول أولاً');
+      _msg('سجّل الدخول أولاً', error: true);
       return;
     }
     if (widget.app.token == null || widget.app.token!.isEmpty) {
-      _msg('التوكن غير موجود. سجّل الدخول من جديد.');
+      _msg('التوكن غير موجود. سجّل الدخول من جديد.', error: true);
       return;
     }
 
@@ -120,7 +122,7 @@ class _SponsorGameScreenState extends State<SponsorGameScreen> {
         lng: pos?.longitude,
       );
 
-      _msg('تم إنشاء روم للمباراة ✅');
+      _msg('تم إنشاء روم للمباراة ✅', success: true);
       if (!mounted) return;
 
       await Navigator.push(
@@ -136,24 +138,27 @@ class _SponsorGameScreenState extends State<SponsorGameScreen> {
 
       unawaited(_load());
     } catch (e) {
-      _msg('تعذّر إنشاء الغرفة: $e');
+      _msg('تعذّر إنشاء الغرفة: $e', error: true);
     }
   }
 
   Future<void> _joinAndOpenRoom(String code, String gameId) async {
     if (!widget.app.isSignedIn) {
-      _msg('سجّل الدخول أولاً');
+      _msg('سجّل الدخول أولاً', error: true);
       return;
     }
     if (widget.app.token == null || widget.app.token!.isEmpty) {
-      _msg('التوكن غير موجود. سجّل الدخول من جديد.');
+      _msg('التوكن غير موجود. سجّل الدخول من جديد.', error: true);
       return;
     }
 
     try {
+      final pos = await _getLocation();
       await ApiRoom.joinByCode(
         code: code.trim(),
         token: widget.app.token,
+        lat: pos?.latitude,
+        lng: pos?.longitude,
       );
 
       final room = await ApiRoom.getRoomByCode(
@@ -176,7 +181,7 @@ class _SponsorGameScreenState extends State<SponsorGameScreen> {
 
       unawaited(_load());
     } catch (e) {
-      _msg('تعذّر الانضمام: $e');
+      _msg('تعذّر الانضمام: $e', error: true);
     }
   }
 
@@ -201,118 +206,138 @@ class _SponsorGameScreenState extends State<SponsorGameScreen> {
     Future<void> onJoinRoom() async {
       final code = joinCtrl.text.trim();
       if (code.isEmpty) {
-        _msg('اكتب كود الروم للانضمام');
+        _msg('اكتب كود الروم للانضمام', error: true);
         return;
       }
       final gid = _selectedGameId;
       if (gid == null || gid.isEmpty) {
-        _msg('اختَر اللعبة أولًا');
+        _msg('اختَر اللعبة أولًا', error: true);
         return;
       }
       await _joinAndOpenRoom(code, gid);
     }
 
+    const tajawal = TextStyle(fontFamily: 'Tajawal');
     return Scaffold(
       appBar: AppBar(
-        title: Text('راعي: $sponsorName'),
+        title: Text('راعي: $sponsorName', style: const TextStyle(fontFamily: 'Tajawal')),
       ),
-      body: _loading
-          ? const Center(child: CircularProgressIndicator())
-          : RefreshIndicator(
-        onRefresh: _load,
-        child: ListView(
-          padding: const EdgeInsets.all(16),
-          children: [
-            Row(
-              children: [
-                const Icon(Icons.workspace_premium_outlined),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    'الألعاب المدعومة والجوائز',
-                    style: theme.textTheme.titleMedium?.copyWith(
-                      fontWeight: FontWeight.w800,
+      body: DefaultTextStyle.merge(
+        style: tajawal,
+        child: _loading
+            ? const Center(child: CircularProgressIndicator())
+            : RefreshIndicator(
+                onRefresh: _load,
+                child: ListView(
+                  padding: const EdgeInsets.all(16),
+                  children: [
+                    Row(
+                      children: [
+                        const Icon(Icons.workspace_premium_outlined),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            'الألعاب المدعومة والجوائز',
+                            style: theme.textTheme.titleMedium?.copyWith(
+                              fontWeight: FontWeight.w800,
+                              fontFamily: 'Tajawal',
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 8),
-            if (_games.isEmpty)
-              const Text('لا توجد ألعاب مضافة لهذا الراعي بعد.')
-            else
-              Wrap(
-                spacing: 12,
-                runSpacing: 12,
-                children: _games.map((g) {
-                  final gameObj =
-                      (g['game'] as Map<String, dynamic>?) ?? const {};
-                  final gameId =
-                  (g['gameId'] ?? gameObj['id'] ?? '').toString();
-                  final name =
-                  (gameObj['name'] ?? gameId).toString();
-                  final cat =
-                  (gameObj['category'] ?? 'لعبة').toString();
-                  final prize =
-                      (g['prizeAmount'] as num?)?.toInt() ?? 0;
-                  final pearls = _pearlsByGame[gameId] ?? 0;
-                  final selected = _selectedGameId == gameId;
+                    const SizedBox(height: 8),
+                    if (_games.isEmpty)
+                      const Text('لا توجد ألعاب مضافة لهذا الراعي بعد.', style: tajawal)
+                    else
+                      Wrap(
+                        spacing: 12,
+                        runSpacing: 12,
+                        children: _games.map((g) {
+                          final gameObj = (g['game'] as Map<String, dynamic>?) ?? const {};
+                          final gameId = (g['gameId'] ?? gameObj['id'] ?? '').toString();
+                          final name = (gameObj['name'] ?? gameId).toString();
+                          final cat = (gameObj['category'] ?? 'لعبة').toString();
+                          final prize = (g['prizeAmount'] as num?)?.toInt() ?? 0;
+                          final pearls = _pearlsByGame[gameId] ?? 0;
+                          final selected = _selectedGameId == gameId;
 
-                  return _GameCard(
-                    title: name,
-                    subtitle: cat,
-                    prize: prize,
-                    pearls: pearls,
-                    selected: selected,
-                    onTap: () => onSelectGame(gameId),
-                  );
-                }).toList(),
+                          return _GameCard(
+                            title: name,
+                            subtitle: cat,
+                            prize: prize,
+                            pearls: pearls,
+                            selected: selected,
+                            onTap: () => onSelectGame(gameId),
+                          );
+                        }).toList(),
+                      ),
+
+                    const SizedBox(height: 24),
+                    const Divider(),
+                    const SizedBox(height: 12),
+
+                    Text(
+                      'اختر طريقة اللعب',
+                      style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800, fontFamily: 'Tajawal'),
+                    ),
+                    const SizedBox(height: 8),
+
+                    Row(
+                      children: [
+                        Expanded(
+                          child: FilledButton.icon(
+                            onPressed: onCreateRoom,
+                            icon: const Icon(Icons.add_box_outlined),
+                            label: const Text('انزلي', style: TextStyle(fontFamily: 'Tajawal')),
+                            style: FilledButton.styleFrom(
+                              minimumSize: const Size.fromHeight(64),
+                              padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 14),
+                              textStyle: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800, fontFamily: 'Tajawal'),
+                              shape: const StadiumBorder(),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+
+                    Row(
+                      children: [
+                        Expanded(
+                          child: TextField(
+                            controller: joinCtrl,
+                            decoration: const InputDecoration(
+                              labelText: 'كود روم للانضمام',
+                              hintText: 'مثال: ABC123',
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        FilledButton(
+                          onPressed: onJoinRoom,
+                          child: const Text('شرّف', style: TextStyle(fontFamily: 'Tajawal')),
+                        ),
+                        const SizedBox(width: 8),
+                        IconButton.filled(
+                          tooltip: 'مسح QR',
+                          icon: const Icon(Icons.qr_code_scanner),
+                          onPressed: () async {
+                            final scanned = await Navigator.push<String>(
+                              context,
+                              MaterialPageRoute(builder: (_) => const ScanPage()),
+                            );
+                            if (scanned != null && scanned.trim().isNotEmpty) {
+                              joinCtrl.text = scanned.trim();
+                              onJoinRoom();
+                            }
+                          },
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
               ),
-
-            const SizedBox(height: 24),
-            const Divider(),
-            const SizedBox(height: 12),
-
-            Text(
-              'اختر طريقة اللعب',
-              style: theme.textTheme.titleMedium
-                  ?.copyWith(fontWeight: FontWeight.w800),
-            ),
-            const SizedBox(height: 8),
-
-            Row(
-              children: [
-                Expanded(
-                  child: FilledButton.icon(
-                    onPressed: onCreateRoom,
-                    icon: const Icon(Icons.add_box_outlined),
-                    label: const Text('انزلي'),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 12),
-
-            Row(
-              children: [
-                Expanded(
-                  child: TextField(
-                    controller: joinCtrl,
-                    decoration: const InputDecoration(
-                      labelText: 'كود روم للانضمام',
-                      hintText: 'مثال: ABC123',
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 8),
-                FilledButton(
-                  onPressed: onJoinRoom,
-                  child: const Text('شرّف'),
-                ),
-              ],
-            ),
-          ],
-        ),
       ),
     );
   }
