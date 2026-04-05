@@ -61,7 +61,7 @@ class _MyItemsPageState extends State<MyItemsPage> {
             {'id': 'blueThunder', 'name': 'برق أزرق', 'kind': 'theme'},
             {'id': 'goldLightning', 'name': 'برق ذهبي', 'kind': 'theme'},
             {'id': 'kuwait', 'name': 'ألوان العلم', 'kind': 'theme'},
-            {'id': 'greenLeaf', 'name': 'أوراق خضراء', 'kind': 'theme'},
+            {'id': 'greenLeaf', 'name': 'اخضر', 'kind': 'theme'},
             {'id': 'flameBlue', 'name': 'لهب أزرق', 'kind': 'theme'},
             {'id': 'whiteSparkle', 'name': 'سباركل أبيض', 'kind': 'theme'},
           ];

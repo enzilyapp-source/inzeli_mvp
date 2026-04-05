@@ -13,7 +13,8 @@ import 'package:geolocator/geolocator.dart';
 
 class GamesPage extends StatefulWidget {
   final AppState app;
-  const GamesPage({super.key, required this.app});
+  final bool embedded;
+  const GamesPage({super.key, required this.app, this.embedded = false});
 
   @override
   State<GamesPage> createState() => _GamesPageState();
@@ -232,11 +233,16 @@ class _GamesPageState extends State<GamesPage> {
       bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
       if (!serviceEnabled) return null;
       LocationPermission permission = await Geolocator.checkPermission();
-      if (permission == LocationPermission.denied || permission == LocationPermission.deniedForever) {
+      if (permission == LocationPermission.denied ||
+          permission == LocationPermission.deniedForever) {
         permission = await Geolocator.requestPermission();
-        if (permission == LocationPermission.denied || permission == LocationPermission.deniedForever) return null;
+        if (permission == LocationPermission.denied ||
+            permission == LocationPermission.deniedForever) {
+          return null;
+        }
       }
-      return await Geolocator.getCurrentPosition(desiredAccuracy: LocationAccuracy.best);
+      return await Geolocator.getCurrentPosition(
+          desiredAccuracy: LocationAccuracy.best);
     } catch (_) {
       if (force) rethrow;
       return null;
@@ -284,7 +290,8 @@ class _GamesPageState extends State<GamesPage> {
       return const Text('لا توجد تصنيفات متاحة حاليًا');
     }
     final selected = _selectedCategory ?? categories.first;
-    final currentIndex = categories.indexOf(selected).clamp(0, categories.length - 1);
+    final currentIndex =
+        categories.indexOf(selected).clamp(0, categories.length - 1);
 
     return Column(
       children: [
@@ -297,7 +304,9 @@ class _GamesPageState extends State<GamesPage> {
               final cat = categories[idx];
               app.setSelectedGame(null, category: cat);
               final list = app.games[cat] ?? const <String>[];
-              if (list.isNotEmpty) app.setSelectedGame(list.first, category: cat);
+              if (list.isNotEmpty) {
+                app.setSelectedGame(list.first, category: cat);
+              }
               setState(() {});
             },
             itemBuilder: (_, idx) {
@@ -331,7 +340,8 @@ class _GamesPageState extends State<GamesPage> {
 
   Widget _buildGamesGrid() {
     final cat = _selectedCategory;
-    final games = (cat != null) ? (app.games[cat] ?? const <String>[]) : const <String>[];
+    final games =
+        (cat != null) ? (app.games[cat] ?? const <String>[]) : const <String>[];
 
     if (games.isEmpty) {
       return const Padding(
@@ -432,69 +442,127 @@ class _GamesPageState extends State<GamesPage> {
   Widget build(BuildContext context) {
     final cat = _selectedCategory ?? '—';
     final game = _selectedGame ?? 'اختر لعبة';
+    final textDirection = app.isEnglish ? TextDirection.ltr : TextDirection.rtl;
 
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('ألعاب إنزلي'),
+    final scrollContent = SingleChildScrollView(
+      padding: EdgeInsets.only(
+        left: 12,
+        right: 12,
+        top: widget.embedded ? 8 : 12,
+        bottom: 12 + MediaQuery.of(context).viewInsets.bottom,
       ),
-      body: Container(
-        decoration: const BoxDecoration(
-          gradient: LinearGradient(
-            colors: [
-              Color(0xFF34677A), // lighter top
-              Color(0xFF232E4A), // darker bottom
-            ],
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-          ),
-        ),
-        child: SafeArea(
-          child: SingleChildScrollView(
-            padding: EdgeInsets.only(
-              left: 12,
-              right: 12,
-              top: 12,
-              bottom: 12 + MediaQuery.of(context).viewInsets.bottom,
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                // تم حذف الكرت الإضافي حسب طلبك
-                // _buildUserCard(),
-                // const SizedBox(height: 12),
-                if (app.roomCode != null) _buildCurrentRoomSection(),
-                const SizedBox(height: 8),
-
-                // عنوان صغير
-                Align(
-                  alignment: Alignment.centerLeft,
-                  child: Text(
-                    'اختر اللعبة والتصنيف:',
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontWeight: FontWeight.w800,
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 8),
-
-                _buildCategoryPager(),
-                const SizedBox(height: 16),
-                Text('التصنيف: ${app.categoryLabel(cat)} — اللعبة: ${app.gameLabel(game)}',
-                    style: const TextStyle(color: Colors.white70, fontSize: 12)),
-                const SizedBox(height: 12),
-
-                _buildGamesGrid(),
-                const SizedBox(height: 24),
-                const _ProximityHint(),
-                const SizedBox(height: 12),
-                _buildCreateJoinRow(),
-                const SizedBox(height: 32),
-              ],
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          if (widget.embedded) ...[
+            const _EmbeddedGamesTitle(),
+            const SizedBox(height: 10),
+          ],
+          if (app.roomCode != null) _buildCurrentRoomSection(),
+          const SizedBox(height: 8),
+          Align(
+            alignment: AlignmentDirectional.centerStart,
+            child: Text(
+              'اختر اللعبة والتصنيف:',
+              style: const TextStyle(
+                color: Colors.white,
+                fontWeight: FontWeight.w800,
+              ),
             ),
           ),
-        ),
+          const SizedBox(height: 8),
+          _buildCategoryPager(),
+          const SizedBox(height: 16),
+          Text(
+              'التصنيف: ${app.categoryLabel(cat)} — اللعبة: ${app.gameLabel(game)}',
+              style: const TextStyle(color: Colors.white70, fontSize: 12)),
+          const SizedBox(height: 12),
+          _buildGamesGrid(),
+          const SizedBox(height: 24),
+          const _ProximityHint(),
+          const SizedBox(height: 12),
+          _buildCreateJoinRow(),
+          const SizedBox(height: 32),
+        ],
       ),
+    );
+
+    final content = widget.embedded
+        ? ClipRRect(
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(22)),
+            child: scrollContent,
+          )
+        : Container(
+            decoration: const BoxDecoration(
+              gradient: LinearGradient(
+                colors: [
+                  Color(0xFF34677A),
+                  Color(0xFF232E4A),
+                ],
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+              ),
+            ),
+            child: SafeArea(child: scrollContent),
+          );
+
+    if (widget.embedded) {
+      return Directionality(
+        textDirection: textDirection,
+        child: content,
+      );
+    }
+
+    return Directionality(
+      textDirection: textDirection,
+      child: Scaffold(
+        appBar: AppBar(
+          title: const Text('ألعاب إنزلي'),
+          centerTitle: true,
+          elevation: 0,
+        ),
+        body: content,
+      ),
+    );
+  }
+}
+
+class _EmbeddedGamesTitle extends StatelessWidget {
+  const _EmbeddedGamesTitle();
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Expanded(
+          child: Container(
+            height: 2,
+            decoration: BoxDecoration(
+              color: Colors.white24,
+              borderRadius: BorderRadius.circular(999),
+            ),
+          ),
+        ),
+        const SizedBox(width: 12),
+        Text(
+          'ألعاب إنزلي',
+          style: TextStyle(
+            color: Colors.white.withValues(alpha: 0.92),
+            fontWeight: FontWeight.w900,
+            fontSize: 18,
+          ),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Container(
+            height: 2,
+            decoration: BoxDecoration(
+              color: Colors.white24,
+              borderRadius: BorderRadius.circular(999),
+            ),
+          ),
+        ),
+      ],
     );
   }
 }
@@ -517,7 +585,10 @@ class _ProximityHint extends StatelessWidget {
           Expanded(
             child: Text(
               'الانضمام يتم عن قرب: امسح QR أو استخدم الاتصال القريب (بلوتوث/واي‑فاي مباشر) وأنت بنفس المكان مع اللاعبين.',
-              style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 12),
+              style: const TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.w700,
+                  fontSize: 12),
               textDirection: TextDirection.rtl,
               textAlign: TextAlign.right,
             ),

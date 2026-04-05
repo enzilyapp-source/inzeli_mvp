@@ -252,6 +252,46 @@ class _AuraPainter extends CustomPainter {
       );
     }
 
+    // أوراق خفيفة متساقطة على أطراف الهالة (خصوصا اليمين/اليسار).
+    const fallingLeaves = 8;
+    for (int i = 0; i < fallingLeaves; i++) {
+      final t = (progress + (i * 0.13)) % 1.0; // موقع الورقة خلال دورة السقوط
+      final side = i.isEven ? -1.0 : 1.0;
+      final laneOffset = (i % 3) * 0.08;
+      final laneX = center.dx + side * radius * (0.92 - laneOffset);
+      final yStart = center.dy - (radius * 1.28);
+      final y = yStart + (t * radius * 2.65);
+      final swayX = math.sin((t * math.pi * 2) + i) * radius * 0.09;
+      final leafCenter = Offset(laneX + swayX, y);
+
+      if (leafCenter.dy < -radius * 0.2 || leafCenter.dy > size.height + radius * 0.2) {
+        continue;
+      }
+
+      final w = radius * (0.11 + ((i % 3) * 0.02));
+      final h = w * 1.7;
+      final leafColor = Color.lerp(light, dark, 0.28 + ((i % 4) * 0.12))!
+          .withValues(alpha: 0.25 + ((1 - t) * 0.45));
+      final spineColor = dark.withValues(alpha: 0.32 + ((1 - t) * 0.2));
+
+      canvas.save();
+      canvas.translate(leafCenter.dx, leafCenter.dy);
+      canvas.rotate((side * 0.38) + (math.sin((t * math.pi * 2) + i) * 0.24));
+      canvas.drawOval(
+        Rect.fromCenter(center: Offset.zero, width: w, height: h),
+        Paint()..color = leafColor,
+      );
+      canvas.drawLine(
+        Offset(0, -h * 0.42),
+        Offset(0, h * 0.42),
+        Paint()
+          ..color = spineColor
+          ..strokeWidth = 1.1
+          ..strokeCap = StrokeCap.round,
+      );
+      canvas.restore();
+    }
+
     // هالة خضراء خفيفة حول الصورة
     final halo = Paint()
       ..style = PaintingStyle.stroke

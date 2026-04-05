@@ -2,8 +2,10 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'api_base.dart';
 
-Future<Map<String, dynamic>?> getUserStats(String userId, {String? token, String? gameId}) async {
-  final uri = Uri.parse('$apiBase/users/$userId/stats${gameId != null ? '?gameId=$gameId' : ''}');
+Future<Map<String, dynamic>?> getUserStats(String userId,
+    {String? token, String? gameId}) async {
+  final uri = Uri.parse(
+      '$apiBase/users/$userId/stats${gameId != null ? '?gameId=$gameId' : ''}');
   final res = await http.get(uri, headers: {
     if (token != null) 'Authorization': 'Bearer $token',
   });
@@ -16,7 +18,8 @@ Future<Map<String, dynamic>?> getUserStats(String userId, {String? token, String
   }
 }
 
-Future<List<Map<String, dynamic>>> searchUsers(String query, {String? token}) async {
+Future<List<Map<String, dynamic>>> searchUsers(String query,
+    {String? token}) async {
   final uri = Uri.parse('$apiBase/users/search/${Uri.encodeComponent(query)}');
   final res = await http.get(uri, headers: {
     'Content-Type': 'application/json',
@@ -26,8 +29,49 @@ Future<List<Map<String, dynamic>>> searchUsers(String query, {String? token}) as
   final m = jsonDecode(body);
   if (res.statusCode >= 400 || m is! Map || m['ok'] != true) return const [];
   final data = m['data'];
-  if (data is List) return data.map((e) => Map<String, dynamic>.from(e as Map)).toList();
+  if (data is List) {
+    return data.map((e) => Map<String, dynamic>.from(e as Map)).toList();
+  }
   return const [];
+}
+
+Future<Map<String, dynamic>?> updateMyProfile({
+  required String token,
+  String? displayName,
+  String? avatarBase64,
+  String? avatarPath,
+  String? themeId,
+  String? frameId,
+  String? cardId,
+}) async {
+  final uri = Uri.parse('$apiBase/users/me');
+  final body = <String, dynamic>{};
+  if (displayName != null) body['displayName'] = displayName;
+  if (avatarBase64 != null) body['avatarBase64'] = avatarBase64;
+  if (avatarPath != null) body['avatarPath'] = avatarPath;
+  if (themeId != null) body['themeId'] = themeId;
+  if (frameId != null) body['frameId'] = frameId;
+  if (cardId != null) body['cardId'] = cardId;
+  if (body.isEmpty) return null;
+
+  final res = await http.patch(
+    uri,
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': 'Bearer $token',
+    },
+    body: jsonEncode(body),
+  );
+  final raw = res.body.isEmpty ? '{}' : res.body;
+  try {
+    final m = jsonDecode(raw);
+    if (res.statusCode >= 400 || m is! Map || m['ok'] != true) return null;
+    final data = m['data'];
+    if (data is Map) return Map<String, dynamic>.from(data);
+    return null;
+  } catch (_) {
+    return null;
+  }
 }
 
 Future<Map<String, dynamic>> deleteAccount({required String token}) async {

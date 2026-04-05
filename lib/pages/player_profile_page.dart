@@ -5,16 +5,26 @@ import 'package:flutter/material.dart';
 import '../state.dart';
 import '../widgets/avatar_effects.dart';
 
-class PlayerProfilePage extends StatelessWidget {
+class PlayerProfilePage extends StatefulWidget {
   final AppState app;
   final String playerName;
-  const PlayerProfilePage({super.key, required this.app, required this.playerName});
+  const PlayerProfilePage(
+      {super.key, required this.app, required this.playerName});
+
+  @override
+  State<PlayerProfilePage> createState() => _PlayerProfilePageState();
+}
+
+class _PlayerProfilePageState extends State<PlayerProfilePage> {
+  bool _showAllMatches = false;
 
   @override
   Widget build(BuildContext context) {
+    final playerName = widget.playerName;
     const headerBg = Color(0xFF1E2F4D);
     const cardBg = Color(0xFF132339);
     String norm(String? s) => (s ?? '').trim().toLowerCase();
+    final app = widget.app;
     final isMe = norm(playerName) == norm(app.displayName) ||
         norm(playerName) == norm(app.name) ||
         norm(playerName) == norm(app.email) ||
@@ -48,9 +58,12 @@ class PlayerProfilePage extends StatelessWidget {
     final stats = app.userStats[profileKey];
     final game = app.selectedGame ?? '';
     final w = (stats?['wins'] as num?)?.toInt() ?? app.winsOf(profileKey, game);
-    final l = (stats?['losses'] as num?)?.toInt() ?? app.lossesOf(profileKey, game);
-    final matches = app.userMatches(profileKey);
-    final notFound = p == null && stats == null && backendProfile == null && !isMe;
+    final l =
+        (stats?['losses'] as num?)?.toInt() ?? app.lossesOf(profileKey, game);
+    final matches = app.userMatches(profileKey)
+      ..sort((a, b) => b.ts.compareTo(a.ts));
+    final notFound =
+        p == null && stats == null && backendProfile == null && !isMe;
     final displayId = isMe
         ? (app.publicId ?? app.userId ?? '')
         : (stats?['publicId']?.toString() ?? stats?['id']?.toString() ?? '');
@@ -58,7 +71,8 @@ class PlayerProfilePage extends StatelessWidget {
     Map<String, int> pearls = {};
     final gp = stats?['gamePearls'];
     if (gp is Map) {
-      pearls = gp.map((k, v) => MapEntry(k.toString(), (v as num?)?.toInt() ?? 0));
+      pearls =
+          gp.map((k, v) => MapEntry(k.toString(), (v as num?)?.toInt() ?? 0));
     } else {
       pearls = app.gamePearls;
     }
@@ -73,11 +87,16 @@ class PlayerProfilePage extends StatelessWidget {
       if (pearls >= 5) return app.tr(ar: 'عليمي', en: 'Beginner');
       return app.tr(ar: 'بدايات', en: 'New');
     }
+
     final rankLabel = rankLabelForPearls(topPearls);
+    final showMoreVisible = matches.length > 10;
+    final visibleMatches =
+        _showAllMatches ? matches : matches.take(10).toList();
 
     // avatar & theme
     ImageProvider? avatarImage;
-    final avatarB64 = p?.avatarBase64 ?? backendProfile?['avatarBase64']?.toString();
+    final avatarB64 =
+        p?.avatarBase64 ?? backendProfile?['avatarBase64']?.toString();
     final avatarUrl = p?.avatarUrl ?? backendProfile?['avatarUrl']?.toString();
     final themeId = p?.themeId ?? backendProfile?['themeId']?.toString();
     if (avatarB64 != null && avatarB64.isNotEmpty) {
@@ -103,6 +122,7 @@ class PlayerProfilePage extends StatelessWidget {
           return null;
       }
     }
+
     final avatarEffect = effectFromId(themeId) ?? AvatarEffectType.blueThunder;
 
     return Scaffold(
@@ -115,7 +135,8 @@ class PlayerProfilePage extends StatelessWidget {
           Card(
             elevation: 6,
             clipBehavior: Clip.none,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+            shape:
+                RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
             child: SizedBox(
               height: 170,
               child: Stack(
@@ -140,7 +161,8 @@ class PlayerProfilePage extends StatelessWidget {
                     top: 10,
                     left: 12,
                     child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 12, vertical: 6),
                       decoration: BoxDecoration(
                         color: Colors.white.withValues(alpha: 0.10),
                         borderRadius: BorderRadius.circular(14),
@@ -149,9 +171,13 @@ class PlayerProfilePage extends StatelessWidget {
                       child: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          const Icon(Icons.workspace_premium, size: 16, color: Color(0xFFF1A949)),
+                          const Icon(Icons.workspace_premium,
+                              size: 16, color: Color(0xFFF1A949)),
                           const SizedBox(width: 6),
-                          Text(rankLabel, style: const TextStyle(fontWeight: FontWeight.w800, color: Colors.white)),
+                          Text(rankLabel,
+                              style: const TextStyle(
+                                  fontWeight: FontWeight.w800,
+                                  color: Colors.white)),
                         ],
                       ),
                     ),
@@ -175,11 +201,15 @@ class PlayerProfilePage extends StatelessWidget {
                           child: CircleAvatar(
                             radius: 48,
                             backgroundImage: avatarImage,
-                            backgroundColor: Colors.white.withValues(alpha: 0.12),
+                            backgroundColor:
+                                Colors.white.withValues(alpha: 0.12),
                             child: avatarImage == null
                                 ? Text(
                                     _initials(playerName),
-                                    style: const TextStyle(fontSize: 28, fontWeight: FontWeight.bold, color: Colors.white),
+                                    style: const TextStyle(
+                                        fontSize: 28,
+                                        fontWeight: FontWeight.bold,
+                                        color: Colors.white),
                                   )
                                 : null,
                           ),
@@ -216,15 +246,23 @@ class PlayerProfilePage extends StatelessWidget {
 
           Card(
             color: cardBg,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+            shape:
+                RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
             child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                 children: [
-                  _StatPill(icon: Icons.emoji_events_outlined, label: 'فوز', value: '$w'),
-                  _StatPill(icon: Icons.cancel_outlined, label: 'خسارة', value: '$l'),
-                  _StatPill(icon: Icons.sports_esports_outlined, label: 'مباريات', value: '${w + l}'),
+                  _StatPill(
+                      icon: Icons.emoji_events_outlined,
+                      label: 'فوز',
+                      value: '$w'),
+                  _StatPill(
+                      icon: Icons.cancel_outlined, label: 'خسارة', value: '$l'),
+                  _StatPill(
+                      icon: Icons.sports_esports_outlined,
+                      label: 'مباريات',
+                      value: '${w + l}'),
                 ],
               ),
             ),
@@ -235,7 +273,8 @@ class PlayerProfilePage extends StatelessWidget {
           if (pearls.isNotEmpty)
             Card(
               color: cardBg,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(18)),
               child: Padding(
                 padding: const EdgeInsets.all(14),
                 child: _PearlCircleGrid(
@@ -247,23 +286,40 @@ class PlayerProfilePage extends StatelessWidget {
 
           if (!isPrivate && !notFound && matches.isNotEmpty) ...[
             const SizedBox(height: 10),
-            const Text('آخر المباريات', style: TextStyle(fontWeight: FontWeight.w900, color: Colors.white70)),
+            const Text('آخر المباريات',
+                style: TextStyle(
+                    fontWeight: FontWeight.w900, color: Colors.white70)),
             const SizedBox(height: 6),
-            ...matches.map((t)=> Card(
-              color: cardBg,
-              child: ListTile(
-                leading: const Icon(Icons.sports_esports_outlined, color: Colors.white70),
-                title: Text('${t.game} — ${t.roomCode}', style: const TextStyle(color: Colors.white)),
-                subtitle: Directionality(
-                  textDirection: app.isEnglish ? TextDirection.ltr : TextDirection.rtl,
-                  child: Text(
-                    'فائز: ${t.winner} • خاسرون: ${t.losers.join(app.isEnglish ? ', ' : '، ')}\n${t.ts}',
-                    maxLines: 2,
-                    style: TextStyle(color: Colors.white.withValues(alpha: 0.75)),
+            ...visibleMatches.map((t) => Card(
+                  color: cardBg,
+                  child: ListTile(
+                    leading: const Icon(Icons.sports_esports_outlined,
+                        color: Colors.white70),
+                    title: Text('${t.game} — ${t.roomCode}',
+                        style: const TextStyle(color: Colors.white)),
+                    subtitle: Directionality(
+                      textDirection:
+                          app.isEnglish ? TextDirection.ltr : TextDirection.rtl,
+                      child: Text(
+                        'فائز: ${t.winner} • خاسرون: ${t.losers.join(app.isEnglish ? ', ' : '، ')}\n${t.ts}',
+                        maxLines: 2,
+                        style: TextStyle(
+                            color: Colors.white.withValues(alpha: 0.75)),
+                      ),
+                    ),
                   ),
+                )),
+            if (showMoreVisible)
+              Align(
+                alignment: Alignment.center,
+                child: TextButton.icon(
+                  onPressed: () =>
+                      setState(() => _showAllMatches = !_showAllMatches),
+                  icon: Icon(
+                      _showAllMatches ? Icons.expand_less : Icons.expand_more),
+                  label: Text(_showAllMatches ? 'إخفاء' : 'عرض المزيد'),
                 ),
               ),
-            )),
           ],
         ],
       ),
@@ -275,7 +331,8 @@ class _StatPill extends StatelessWidget {
   final IconData icon;
   final String label;
   final String value;
-  const _StatPill({required this.icon, required this.label, required this.value});
+  const _StatPill(
+      {required this.icon, required this.label, required this.value});
 
   @override
   Widget build(BuildContext context) {
@@ -287,15 +344,20 @@ class _StatPill extends StatelessWidget {
           child: Icon(icon, color: Colors.white),
         ),
         const SizedBox(height: 4),
-        Text(value, style: const TextStyle(fontWeight: FontWeight.w900, color: Colors.white)),
-        Text(label, style: TextStyle(color: Colors.white.withValues(alpha: 0.72), fontSize: 12)),
+        Text(value,
+            style: const TextStyle(
+                fontWeight: FontWeight.w900, color: Colors.white)),
+        Text(label,
+            style: TextStyle(
+                color: Colors.white.withValues(alpha: 0.72), fontSize: 12)),
       ],
     );
   }
 }
 
 String _initials(String name) {
-  final parts = name.trim().split(RegExp(r'\s+')).where((s)=>s.isNotEmpty).toList();
+  final parts =
+      name.trim().split(RegExp(r'\s+')).where((s) => s.isNotEmpty).toList();
   if (parts.isEmpty) return '؟';
   if (parts.length == 1) return parts.first.characters.take(2).toString();
   return (parts[0].characters.take(1).toString() +
@@ -311,14 +373,16 @@ String _initials(String name) {
   return (app.gameLabel(fallback), app.pearlsForGame(fallback));
 }
 
-List<(String, DateTime)> _recentWins(List<TimelineEntry> matches, String player, AppState app) {
+List<(String, DateTime)> _recentWins(
+    List<TimelineEntry> matches, String player, AppState app) {
   final wins = matches.where((t) => t.winner == player).toList()
     ..sort((a, b) => b.ts.compareTo(a.ts));
   return wins.take(3).map((t) => (app.gameLabel(t.game), t.ts)).toList();
 }
 
 List<(String, int)> _pearlEntries(Map<String, int> pearls, AppState app) {
-  final list = pearls.entries.map((e) => (app.gameLabel(e.key), e.value)).toList();
+  final list =
+      pearls.entries.map((e) => (app.gameLabel(e.key), e.value)).toList();
   list.sort((a, b) => a.$1.compareTo(b.$1));
   return list;
 }
@@ -326,7 +390,9 @@ List<(String, int)> _pearlEntries(Map<String, int> pearls, AppState app) {
 String _shortId(String id) {
   final clean = id.replaceAll(RegExp(r'[^A-Za-z0-9]'), '');
   if (clean.isEmpty) return '';
-  final short = clean.length > 6 ? clean.substring(clean.length - 6) : clean.padLeft(6, '0');
+  final short = clean.length > 6
+      ? clean.substring(clean.length - 6)
+      : clean.padLeft(6, '0');
   return '#$short';
 }
 
@@ -438,7 +504,12 @@ class _TrophyCircle extends StatelessWidget {
   final bool filled;
   final Color color;
   final double size;
-  const _TrophyCircle({required this.label, required this.date, required this.filled, required this.color, this.size = 46});
+  const _TrophyCircle(
+      {required this.label,
+      required this.date,
+      required this.filled,
+      required this.color,
+      this.size = 46});
 
   @override
   Widget build(BuildContext context) {
@@ -461,7 +532,8 @@ class _TrophyCircle extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(Icons.emoji_events_rounded, size: size * 0.35, color: Colors.amber),
+            Icon(Icons.emoji_events_rounded,
+                size: size * 0.35, color: Colors.amber),
             if (filled) ...[
               SizedBox(height: size * 0.05),
               Text(
@@ -489,7 +561,10 @@ class _PearlCircleGrid extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    if (entries.isEmpty) return const Text('لا توجد بيانات', style: TextStyle(color: Colors.white70));
+    if (entries.isEmpty) {
+      return const Text('لا توجد بيانات',
+          style: TextStyle(color: Colors.white70));
+    }
     const accent = Color(0xFFF1A949);
     return Wrap(
       spacing: 12,
@@ -518,11 +593,15 @@ class _PearlCircleGrid extends StatelessWidget {
                       ),
                     ),
                   ),
-                  Text('$value', style: const TextStyle(fontWeight: FontWeight.w900, color: Colors.white)),
+                  Text('$value',
+                      style: const TextStyle(
+                          fontWeight: FontWeight.w900, color: Colors.white)),
                 ],
               ),
               const SizedBox(height: 6),
-              Text(game, style: const TextStyle(fontWeight: FontWeight.w700, color: Colors.white)),
+              Text(game,
+                  style: const TextStyle(
+                      fontWeight: FontWeight.w700, color: Colors.white)),
             ],
           ),
         );
@@ -537,7 +616,11 @@ class _ArcPainter extends CustomPainter {
   final Color bgColor;
   final double strokeWidth;
 
-  _ArcPainter({required this.progress, required this.color, required this.bgColor, required this.strokeWidth});
+  _ArcPainter(
+      {required this.progress,
+      required this.color,
+      required this.bgColor,
+      required this.strokeWidth});
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -564,7 +647,10 @@ class _ArcPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(covariant _ArcPainter oldDelegate) {
-    return oldDelegate.progress != progress || oldDelegate.color != color || oldDelegate.bgColor != bgColor || oldDelegate.strokeWidth != strokeWidth;
+    return oldDelegate.progress != progress ||
+        oldDelegate.color != color ||
+        oldDelegate.bgColor != bgColor ||
+        oldDelegate.strokeWidth != strokeWidth;
   }
 }
 //pages/player_profile_pages

@@ -23,6 +23,7 @@ class AppState extends ChangeNotifier {
 
   /// "لآلئ" used in UI (monthly/general wallet on the user model)
   int? creditPoints;
+
   /// رصيد الشراء (عملة المتجر) - يظهر لصاحب الحساب فقط
   int? creditBalance;
 
@@ -79,8 +80,25 @@ class AppState extends ChangeNotifier {
   /// Games per category used by LeaderboardPage
   final Map<String, List<String>> games = const <String, List<String>>{
     'جنجفة': ['كوت', 'بلوت', 'تريكس', 'هند', 'سبيتة', 'اونو'],
-    'ألعاب شعبية': ['شطرنج', 'دامه', 'كيرم', 'دومنه', 'طاوله', 'بلياردو'],
-    'رياضة': ['بيبيفوت', 'قدم', 'سله', 'طائره', 'بولنج', 'بادل', 'تنس طاولة', 'تنس ارضي'],
+    'ألعاب شعبية': [
+      'شطرنج',
+      'دامه',
+      'كيرم',
+      'دومنه',
+      'طاوله',
+      'بلياردو',
+      'جاكارو'
+    ],
+    'رياضة': [
+      'بيبيفوت',
+      'قدم',
+      'سله',
+      'طائره',
+      'بولنج',
+      'بادل',
+      'تنس طاولة',
+      'تنس ارضي'
+    ],
   };
 
   /// تحديد وضع اللعب لكل لعبة (solo / team / both)
@@ -97,6 +115,7 @@ class AppState extends ChangeNotifier {
     'دومنه': GameMode.solo,
     'طاوله': GameMode.solo,
     'بلياردو': GameMode.solo,
+    'جاكارو': GameMode.team,
     'بيبيفوت': GameMode.both,
     'قدم': GameMode.team,
     'سله': GameMode.team,
@@ -120,7 +139,10 @@ class AppState extends ChangeNotifier {
   /// key format: "$playerName|$game"
   final Map<String, _LocalStats> _stats = <String, _LocalStats>{};
 
-  bool get isSignedIn => (token != null && token!.isNotEmpty && userId != null && userId!.isNotEmpty);
+  bool get isSignedIn => (token != null &&
+      token!.isNotEmpty &&
+      userId != null &&
+      userId!.isNotEmpty);
   bool get isEnglish => (language ?? 'ar') == 'en';
 
   /// Helper to pick localized strings without a full i18n system.
@@ -141,6 +163,7 @@ class AppState extends ChangeNotifier {
       'دومنه': 'Domino',
       'طاوله': 'Backgammon',
       'بلياردو': 'Billiards',
+      'جاكارو': 'Jackaroo',
       'بيبيفوت': 'Baby Foot',
       'قدم': 'Football',
       'سله': 'Basketball',
@@ -218,10 +241,11 @@ class AppState extends ChangeNotifier {
         freeThemesOwned = rawFreeThemes.map((e) => e.toString()).toSet();
       }
       final rawGamePearls = m['gamePearls'];
-    if (rawGamePearls is Map) {
-      gamePearls = rawGamePearls.map((k, v) => MapEntry(k.toString(), (v as num?)?.toInt() ?? 0));
-    }
-    rulesPromptSeen = m['rulesPromptSeen'] as bool?;
+      if (rawGamePearls is Map) {
+        gamePearls = rawGamePearls
+            .map((k, v) => MapEntry(k.toString(), (v as num?)?.toInt() ?? 0));
+      }
+      rulesPromptSeen = m['rulesPromptSeen'] as bool?;
       pearlsResetMonth = m['pearlsResetMonth'] as String?;
       final rawDew = m['ownedDewanyahs'];
       if (rawDew is List) {
@@ -239,11 +263,13 @@ class AppState extends ChangeNotifier {
       }
       final rawStats = m['userStats'];
       if (rawStats is Map) {
-        userStats = rawStats.map((k, v) => MapEntry(k.toString(), Map<String, dynamic>.from(v as Map)));
+        userStats = rawStats.map((k, v) =>
+            MapEntry(k.toString(), Map<String, dynamic>.from(v as Map)));
       }
       final rawProfiles = m['userProfiles'];
       if (rawProfiles is Map) {
-        userProfiles = rawProfiles.map((k, v) => MapEntry(k.toString(), Map<String, dynamic>.from(v as Map)));
+        userProfiles = rawProfiles.map((k, v) =>
+            MapEntry(k.toString(), Map<String, dynamic>.from(v as Map)));
       }
       final rawTimeline = m['timeline'];
       if (rawTimeline is List) {
@@ -255,10 +281,17 @@ class AppState extends ChangeNotifier {
               game: (e['game'] ?? '').toString(),
               roomCode: (e['roomCode'] ?? '').toString(),
               winner: (e['winner'] ?? '').toString(),
-              winners: (e['winners'] as List?)?.map((x) => x.toString()).toList() ?? const [],
-              losers: (e['losers'] as List?)?.map((x) => x.toString()).toList() ?? const [],
-              ts: DateTime.tryParse((e['ts'] ?? '').toString()) ?? DateTime.now(),
-              meta: e['meta'] is Map ? Map<String, dynamic>.from(e['meta'] as Map) : null,
+              winners:
+                  (e['winners'] as List?)?.map((x) => x.toString()).toList() ??
+                      const [],
+              losers:
+                  (e['losers'] as List?)?.map((x) => x.toString()).toList() ??
+                      const [],
+              ts: DateTime.tryParse((e['ts'] ?? '').toString()) ??
+                  DateTime.now(),
+              meta: e['meta'] is Map
+                  ? Map<String, dynamic>.from(e['meta'] as Map)
+                  : null,
             );
           }));
       }
@@ -363,6 +396,12 @@ class AppState extends ChangeNotifier {
     required String token,
     required Map<String, dynamic> user,
   }) async {
+    String? asNullableString(dynamic value) {
+      if (value == null) return null;
+      final s = value.toString().trim();
+      return s.isEmpty ? null : s;
+    }
+
     final previousUserId = userId;
     this.token = token;
 
@@ -374,7 +413,13 @@ class AppState extends ChangeNotifier {
     email = (user['email'])?.toString();
 
     creditPoints = (user['creditPoints'] as num?)?.toInt();
+    creditBalance = (user['creditBalance'] as num?)?.toInt();
     permanentScore = (user['permanentScore'] as num?)?.toInt();
+    themeId = asNullableString(user['themeId']) ?? themeId;
+    frameId = asNullableString(user['frameId']) ?? frameId;
+    cardId = asNullableString(user['cardId']) ?? cardId;
+    avatarBase64 = asNullableString(user['avatarBase64']) ?? avatarBase64;
+    avatarPath = asNullableString(user['avatarPath']) ?? avatarPath;
 
     // optional fallbacks
     name = displayName ?? name;
@@ -391,6 +436,28 @@ class AppState extends ChangeNotifier {
     // fetch timeline from server (best-effort)
     syncTimelineFromServer();
 
+    final profileSnapshot = <String, dynamic>{
+      if (userId != null && userId!.isNotEmpty) 'id': userId,
+      if (publicId != null && publicId!.isNotEmpty) 'publicId': publicId,
+      if (displayName != null && displayName!.isNotEmpty)
+        'displayName': displayName,
+      if (avatarBase64 != null && avatarBase64!.isNotEmpty)
+        'avatarBase64': avatarBase64,
+      if (avatarPath != null && avatarPath!.isNotEmpty)
+        'avatarPath': avatarPath,
+      if (themeId != null && themeId!.isNotEmpty) 'themeId': themeId,
+      if (frameId != null && frameId!.isNotEmpty) 'frameId': frameId,
+      if (cardId != null && cardId!.isNotEmpty) 'cardId': cardId,
+    };
+    if (profileSnapshot.isNotEmpty) {
+      if (userId != null && userId!.isNotEmpty) {
+        userProfiles[userId!] = Map<String, dynamic>.from(profileSnapshot);
+      }
+      if (publicId != null && publicId!.isNotEmpty) {
+        userProfiles[publicId!] = Map<String, dynamic>.from(profileSnapshot);
+      }
+    }
+
     await _save();
     notifyListeners();
   }
@@ -399,6 +466,7 @@ class AppState extends ChangeNotifier {
     avatarPath = path;
     await _save();
     notifyListeners();
+    await syncProfileToServer();
   }
 
   Future<void> setAvatarBytes(Uint8List bytes, {String? fallbackPath}) async {
@@ -406,6 +474,72 @@ class AppState extends ChangeNotifier {
     if (fallbackPath != null) avatarPath = fallbackPath;
     await _save();
     notifyListeners();
+    await syncProfileToServer();
+  }
+
+  Future<void> syncProfileToServer() async {
+    final auth = token;
+    if (auth == null || auth.isEmpty) return;
+    try {
+      final avatarPathForApi = (avatarPath != null &&
+              (avatarPath!.startsWith('http://') ||
+                  avatarPath!.startsWith('https://')))
+          ? avatarPath
+          : null;
+
+      final updated = await updateMyProfile(
+        token: auth,
+        displayName: displayName,
+        avatarBase64: avatarBase64,
+        avatarPath: avatarPathForApi,
+        themeId: themeId,
+        frameId: frameId,
+        cardId: cardId,
+      );
+      if (updated == null) return;
+
+      String? asNullableString(dynamic value) {
+        if (value == null) return null;
+        final s = value.toString().trim();
+        return s.isEmpty ? null : s;
+      }
+
+      userId = asNullableString(updated['id']) ?? userId;
+      publicId = asNullableString(updated['publicId']) ?? publicId;
+      displayName = asNullableString(updated['displayName']) ?? displayName;
+      themeId = asNullableString(updated['themeId']) ?? themeId;
+      frameId = asNullableString(updated['frameId']) ?? frameId;
+      cardId = asNullableString(updated['cardId']) ?? cardId;
+      avatarBase64 = asNullableString(updated['avatarBase64']) ?? avatarBase64;
+      avatarPath = asNullableString(updated['avatarPath']) ?? avatarPath;
+
+      final profileSnapshot = <String, dynamic>{
+        if (userId != null && userId!.isNotEmpty) 'id': userId,
+        if (publicId != null && publicId!.isNotEmpty) 'publicId': publicId,
+        if (displayName != null && displayName!.isNotEmpty)
+          'displayName': displayName,
+        if (avatarBase64 != null && avatarBase64!.isNotEmpty)
+          'avatarBase64': avatarBase64,
+        if (avatarPath != null && avatarPath!.isNotEmpty)
+          'avatarPath': avatarPath,
+        if (themeId != null && themeId!.isNotEmpty) 'themeId': themeId,
+        if (frameId != null && frameId!.isNotEmpty) 'frameId': frameId,
+        if (cardId != null && cardId!.isNotEmpty) 'cardId': cardId,
+      };
+      if (profileSnapshot.isNotEmpty) {
+        if (userId != null && userId!.isNotEmpty) {
+          userProfiles[userId!] = Map<String, dynamic>.from(profileSnapshot);
+        }
+        if (publicId != null && publicId!.isNotEmpty) {
+          userProfiles[publicId!] = Map<String, dynamic>.from(profileSnapshot);
+        }
+      }
+
+      await _save();
+      notifyListeners();
+    } catch (_) {
+      // ignore backend sync errors and keep local profile state
+    }
   }
 
   Future<void> clearAuth() async {
@@ -450,7 +584,8 @@ class AppState extends ChangeNotifier {
   }
 
   void setSponsorCode(String? code) {
-    activeSponsorCode = (code == null || code.trim().isEmpty) ? null : code.trim();
+    activeSponsorCode =
+        (code == null || code.trim().isEmpty) ? null : code.trim();
     _save();
     notifyListeners();
   }
@@ -679,9 +814,12 @@ class AppState extends ChangeNotifier {
   /// ------------------------------
   PlayerProfile? profile(String playerName) => _profiles[playerName];
 
-  int pointsOf(String playerName, String game) => _stats[_key(playerName, game)]?.points ?? 0;
-  int winsOf(String playerName, String game) => _stats[_key(playerName, game)]?.wins ?? 0;
-  int lossesOf(String playerName, String game) => _stats[_key(playerName, game)]?.losses ?? 0;
+  int pointsOf(String playerName, String game) =>
+      _stats[_key(playerName, game)]?.points ?? 0;
+  int winsOf(String playerName, String game) =>
+      _stats[_key(playerName, game)]?.wins ?? 0;
+  int lossesOf(String playerName, String game) =>
+      _stats[_key(playerName, game)]?.losses ?? 0;
   int totalGamesPlayed(String playerName) {
     var total = 0;
     _stats.forEach((k, v) {
@@ -695,7 +833,9 @@ class AppState extends ChangeNotifier {
   /// streak الحالية (عدد الانتصارات المتتالية الأخيرة) للاعب في لعبة معيّنة
   int streakOf(String playerName, String game) {
     final matches = timeline
-        .where((t) => t.game == game && (t.winner == playerName || t.losers.contains(playerName)))
+        .where((t) =>
+            t.game == game &&
+            (t.winner == playerName || t.losers.contains(playerName)))
         .toList()
       ..sort((a, b) => a.ts.compareTo(b.ts)); // قديم -> جديد
     int streak = 0;
@@ -710,8 +850,9 @@ class AppState extends ChangeNotifier {
     return streak;
   }
 
-  List<TimelineEntry> userMatches(String playerName) =>
-      timeline.where((t) => t.winner == playerName || t.losers.contains(playerName)).toList();
+  List<TimelineEntry> userMatches(String playerName) => timeline
+      .where((t) => t.winner == playerName || t.losers.contains(playerName))
+      .toList();
 
   /// This is used by your old LeaderboardPage:
   /// `FutureBuilder(future: app.getLeaderboard(selectedGame))`
@@ -797,7 +938,8 @@ class AppState extends ChangeNotifier {
 
   /// Fetch timeline from server and store locally (requires auth token).
   /// By default we fetch all games so "شسالفه" always shows full results feed.
-  Future<void> syncTimelineFromServer({String? gameId, bool global = true}) async {
+  Future<void> syncTimelineFromServer(
+      {String? gameId, bool global = true}) async {
     if (token == null || token!.isEmpty) return;
     try {
       List<String> asStrings(dynamic v) {
@@ -881,6 +1023,7 @@ class AppState extends ChangeNotifier {
           if (looksLikeUserId(v)) ids.add(v);
         }
       }
+
       for (final e in list) {
         final meta = metaOf(e);
         addMaybeIds(asStrings(e['winners']));
@@ -892,7 +1035,8 @@ class AppState extends ChangeNotifier {
       // إذا API يسمح بجلب متعدد /users?ids=...
       if (ids.isNotEmpty) {
         try {
-          final fetched = await ApiUsers.getMany(ids: ids.toList(), token: token);
+          final fetched =
+              await ApiUsers.getMany(ids: ids.toList(), token: token);
           for (final u in fetched) {
             cacheProfile(Map<String, dynamic>.from(u));
           }
@@ -901,10 +1045,8 @@ class AppState extends ChangeNotifier {
         }
 
         // Fallback if batch endpoint is unavailable: resolve unresolved ids one-by-one.
-        final unresolved = ids
-            .where((id) => !userNameById.containsKey(id))
-            .take(12)
-            .toList();
+        final unresolved =
+            ids.where((id) => !userNameById.containsKey(id)).take(12).toList();
         if (unresolved.isNotEmpty) {
           await Future.wait(
             unresolved.map((id) async {
@@ -993,11 +1135,10 @@ class AppState extends ChangeNotifier {
           }
           winnerResolved = resolveUserLabel(winnerResolved);
 
-          final winnersForUi = (winnersNames.isNotEmpty
-                  ? winnersNames
-                  : winnersIds)
-              .map(resolveUserLabel)
-              .toList();
+          final winnersForUi =
+              (winnersNames.isNotEmpty ? winnersNames : winnersIds)
+                  .map(resolveUserLabel)
+                  .toList();
           final losersForUi = (losersNames.isNotEmpty ? losersNames : losersIds)
               .map(resolveUserLabel)
               .toList();
@@ -1080,7 +1221,12 @@ class PlayerProfile {
   final String? avatarUrl;
   final String? avatarBase64;
   final String? themeId;
-  const PlayerProfile({this.phone, this.displayName, this.avatarUrl, this.avatarBase64, this.themeId});
+  const PlayerProfile(
+      {this.phone,
+      this.displayName,
+      this.avatarUrl,
+      this.avatarBase64,
+      this.themeId});
 }
 
 class GameLevel {

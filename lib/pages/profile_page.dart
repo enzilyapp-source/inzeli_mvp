@@ -31,12 +31,12 @@ class _ProfilePageState extends State<ProfilePage> {
   AvatarEffectType? _avatarEffect; // default: no theme until user picks
   int _cardThemeIndex = 0; // 0: blue, 1: navy, 2: violet
   List<String> _labels(AppState app) => [
-    app.tr(ar: 'عليمي', en: 'Beginner'),
-    app.tr(ar: 'يمشي حاله', en: 'Advance'),
-    app.tr(ar: 'زين', en: 'Professional'),
-    app.tr(ar: 'فنان', en: 'Legend'),
-    app.tr(ar: 'فلتة', en: 'GOAT'),
-  ];
+        app.tr(ar: 'عليمي', en: 'Beginner'),
+        app.tr(ar: 'يمشي حاله', en: 'Advance'),
+        app.tr(ar: 'زين', en: 'Professional'),
+        app.tr(ar: 'فنان', en: 'Legend'),
+        app.tr(ar: 'فلتة', en: 'GOAT'),
+      ];
 
   final ImagePicker _picker = ImagePicker();
   int _wins = 0;
@@ -63,7 +63,8 @@ class _ProfilePageState extends State<ProfilePage> {
   String _currentGame() {
     String game = widget.app.selectedGame ?? '—';
     if (widget.app.gamePearls.isNotEmpty) {
-      final top = widget.app.gamePearls.entries.reduce((a, b) => a.value >= b.value ? a : b);
+      final top = widget.app.gamePearls.entries
+          .reduce((a, b) => a.value >= b.value ? a : b);
       game = top.key;
     }
     return game;
@@ -71,28 +72,35 @@ class _ProfilePageState extends State<ProfilePage> {
 
   (String, int) _topPearlGame(AppState app) {
     if (app.gamePearls.isNotEmpty) {
-      final top = app.gamePearls.entries.reduce((a, b) => a.value >= b.value ? a : b);
+      final top =
+          app.gamePearls.entries.reduce((a, b) => a.value >= b.value ? a : b);
       return (app.gameLabel(top.key), top.value);
     }
     if (app.selectedGame != null && app.selectedGame!.isNotEmpty) {
-      return (app.gameLabel(app.selectedGame!), app.pearlsForGame(app.selectedGame!));
+      return (
+        app.gameLabel(app.selectedGame!),
+        app.pearlsForGame(app.selectedGame!)
+      );
     }
     return (app.tr(ar: 'بدون لعبة', en: 'No game'), 0);
   }
 
   List<(String, DateTime)> _recentWins(String player) {
-    final wins = widget.app.timeline
-        .where((t) => t.winner == player)
-        .toList()
+    final wins = widget.app.timeline.where((t) => t.winner == player).toList()
       ..sort((a, b) => b.ts.compareTo(a.ts));
 
-    return wins.take(3).map((t) => (widget.app.gameLabel(t.game), t.ts)).toList();
+    return wins
+        .take(3)
+        .map((t) => (widget.app.gameLabel(t.game), t.ts))
+        .toList();
   }
 
   String _shortId(String id) {
     final clean = id.replaceAll(RegExp(r'[^A-Za-z0-9]'), '');
     if (clean.isEmpty) return '';
-    final short = clean.length > 6 ? clean.substring(clean.length - 6) : clean.padLeft(6, '0');
+    final short = clean.length > 6
+        ? clean.substring(clean.length - 6)
+        : clean.padLeft(6, '0');
     return '#$short';
   }
 
@@ -166,7 +174,8 @@ class _ProfilePageState extends State<ProfilePage> {
       });
       final gp = stats['gamePearls'];
       if (gp is Map) {
-        widget.app.gamePearls = gp.map((k, v) => MapEntry(k.toString(), (v as num?)?.toInt() ?? 0));
+        widget.app.gamePearls =
+            gp.map((k, v) => MapEntry(k.toString(), (v as num?)?.toInt() ?? 0));
         await widget.app.saveState();
         if (mounted) setState(() {});
       }
@@ -175,7 +184,8 @@ class _ProfilePageState extends State<ProfilePage> {
 
   Future<void> _pickAvatar() async {
     try {
-      final picked = await _picker.pickImage(source: ImageSource.gallery, imageQuality: 85);
+      final picked = await _picker.pickImage(
+          source: ImageSource.gallery, imageQuality: 85);
       if (picked == null) return;
       final bytes = await picked.readAsBytes();
       if (kIsWeb) {
@@ -210,7 +220,10 @@ class _ProfilePageState extends State<ProfilePage> {
     final app = widget.app;
     final uri = Uri.parse(_deleteUrl);
     final ok = await launchUrl(uri, mode: LaunchMode.externalApplication);
-    if (!ok) _msg(app.tr(ar: 'تعذّر فتح رابط الحذف', en: 'Could not open delete link'));
+    if (!ok) {
+      _msg(
+          app.tr(ar: 'تعذّر فتح رابط الحذف', en: 'Could not open delete link'));
+    }
   }
 
   Future<void> _confirmDelete(AppState app) async {
@@ -225,7 +238,8 @@ class _ProfilePageState extends State<ProfilePage> {
         bool confirmed = false;
         return StatefulBuilder(
           builder: (ctx, setDialog) => AlertDialog(
-            title: Text(app.tr(ar: 'تأكيد حذف الحساب', en: 'Confirm account deletion')),
+            title: Text(
+                app.tr(ar: 'تأكيد حذف الحساب', en: 'Confirm account deletion')),
             content: Column(
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -247,14 +261,17 @@ class _ProfilePageState extends State<ProfilePage> {
                 ),
                 const SizedBox(height: 6),
                 TextButton(
-                  style: TextButton.styleFrom(padding: EdgeInsets.zero, alignment: Alignment.centerLeft),
+                  style: TextButton.styleFrom(
+                      padding: EdgeInsets.zero,
+                      alignment: Alignment.centerLeft),
                   onPressed: () => _openDeleteWeb(),
                   child: Text(
                     app.tr(
                       ar: 'بدلاً من ذلك، احذف الحساب عبر الويب',
                       en: 'Alternatively, delete your account on the web',
                     ),
-                    style: TextStyle(color: Theme.of(context).colorScheme.primary),
+                    style:
+                        TextStyle(color: Theme.of(context).colorScheme.primary),
                   ),
                 ),
               ],
@@ -303,7 +320,8 @@ class _ProfilePageState extends State<ProfilePage> {
       _msg(app.tr(ar: 'تم حذف الحساب', en: 'Account deleted'));
     } else {
       if (!mounted) return;
-      _msg(res['message']?.toString() ?? app.tr(ar: 'فشل الحذف', en: 'Deletion failed'));
+      _msg(res['message']?.toString() ??
+          app.tr(ar: 'فشل الحذف', en: 'Deletion failed'));
     }
   }
 
@@ -354,9 +372,10 @@ class _ProfilePageState extends State<ProfilePage> {
                   mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    const Text('إعدادات الحساب', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 16)),
+                    const Text('إعدادات الحساب',
+                        style: TextStyle(
+                            fontWeight: FontWeight.w900, fontSize: 16)),
                     const SizedBox(height: 10),
-
                     TextField(
                       controller: _nameCtrl,
                       decoration: const InputDecoration(labelText: 'الاسم'),
@@ -370,7 +389,8 @@ class _ProfilePageState extends State<ProfilePage> {
                     const SizedBox(height: 8),
                     TextField(
                       controller: _phoneCtrl,
-                      decoration: const InputDecoration(labelText: 'رقم الجوال'),
+                      decoration:
+                          const InputDecoration(labelText: 'رقم الجوال'),
                       keyboardType: TextInputType.phone,
                     ),
                     const SizedBox(height: 10),
@@ -379,11 +399,13 @@ class _ProfilePageState extends State<ProfilePage> {
                       label: const Text('تغيير الصورة'),
                       onPressed: _pickAvatar,
                     ),
-
                     const SizedBox(height: 16),
-                    const Text('إعدادات التطبيق', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 15)),
+                    const Text('إعدادات التطبيق',
+                        style: TextStyle(
+                            fontWeight: FontWeight.w900, fontSize: 15)),
                     const SizedBox(height: 10),
-                    const Text('اللغة', style: TextStyle(fontWeight: FontWeight.w800)),
+                    const Text('اللغة',
+                        style: TextStyle(fontWeight: FontWeight.w800)),
                     const SizedBox(height: 8),
                     SegmentedButton<String>(
                       segments: const [
@@ -419,9 +441,9 @@ class _ProfilePageState extends State<ProfilePage> {
                         setSheet(() {});
                       },
                       title: const Text('إخفاء الملف الشخصي'),
-                      subtitle: const Text('عند الإخفاء يظهر في البحث الثيم + أفضل لعبة + فوز/خسارة فقط'),
+                      subtitle: const Text(
+                          'عند الإخفاء يظهر في البحث الثيم + أفضل لعبة + فوز/خسارة فقط'),
                     ),
-
                     const SizedBox(height: 14),
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -435,17 +457,23 @@ class _ProfilePageState extends State<ProfilePage> {
                           icon: const Icon(Icons.save),
                           label: const Text('حفظ التغييرات'),
                           onPressed: () async {
-                            app.displayName = _nameCtrl.text.trim().isEmpty ? app.displayName : _nameCtrl.text.trim();
-                            app.email = _emailCtrl.text.trim().isEmpty ? app.email : _emailCtrl.text.trim();
-                            app.phone = _phoneCtrl.text.trim().isEmpty ? app.phone : _phoneCtrl.text.trim();
+                            app.displayName = _nameCtrl.text.trim().isEmpty
+                                ? app.displayName
+                                : _nameCtrl.text.trim();
+                            app.email = _emailCtrl.text.trim().isEmpty
+                                ? app.email
+                                : _emailCtrl.text.trim();
+                            app.phone = _phoneCtrl.text.trim().isEmpty
+                                ? app.phone
+                                : _phoneCtrl.text.trim();
                             await app.saveState();
+                            await app.syncProfileToServer();
                             if (mounted) setState(() {});
                             if (ctx.mounted) Navigator.pop(ctx);
                           },
                         ),
                       ],
                     ),
-
                     if (app.isSignedIn) ...[
                       const SizedBox(height: 12),
                       const Divider(),
@@ -453,7 +481,8 @@ class _ProfilePageState extends State<ProfilePage> {
                         icon: const Icon(Icons.logout, color: Colors.red),
                         label: Text(
                           app.tr(ar: 'تسجيل خروج', en: 'Log out'),
-                          style: const TextStyle(color: Colors.red, fontWeight: FontWeight.w700),
+                          style: const TextStyle(
+                              color: Colors.red, fontWeight: FontWeight.w700),
                         ),
                         onPressed: () async {
                           await app.clearAuth();
@@ -463,17 +492,20 @@ class _ProfilePageState extends State<ProfilePage> {
                           setState(() {});
                           Navigator.pushAndRemoveUntil(
                             context,
-                            MaterialPageRoute(builder: (_) => SignInPage(app: app)),
+                            MaterialPageRoute(
+                                builder: (_) => SignInPage(app: app)),
                             (route) => false,
                           );
                         },
                       ),
                       const SizedBox(height: 4),
                       TextButton.icon(
-                        icon: const Icon(Icons.delete_forever, color: Colors.red),
+                        icon:
+                            const Icon(Icons.delete_forever, color: Colors.red),
                         label: Text(
                           app.tr(ar: 'حذف الحساب', en: 'Delete account'),
-                          style: const TextStyle(color: Colors.red, fontWeight: FontWeight.w800),
+                          style: const TextStyle(
+                              color: Colors.red, fontWeight: FontWeight.w800),
                         ),
                         onPressed: () => _confirmDelete(app),
                       ),
@@ -498,7 +530,7 @@ class _ProfilePageState extends State<ProfilePage> {
           (AvatarEffectType.blueThunder, 'برق أزرق'),
           (AvatarEffectType.goldLightning, 'برق ذهبي'),
           (AvatarEffectType.kuwaitSparkles, 'ألوان العلم'),
-          (AvatarEffectType.greenLeaf, 'أوراق خضراء'),
+          (AvatarEffectType.greenLeaf, 'اخضر'),
         ];
         final cardThemes = [
           ('أزرق', 0),
@@ -512,7 +544,9 @@ class _ProfilePageState extends State<ProfilePage> {
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text('تعديل الصورة والثيم', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 16)),
+                const Text('تعديل الصورة والثيم',
+                    style:
+                        TextStyle(fontWeight: FontWeight.w900, fontSize: 16)),
                 const SizedBox(height: 12),
                 FilledButton.icon(
                   onPressed: _pickAvatar,
@@ -520,7 +554,8 @@ class _ProfilePageState extends State<ProfilePage> {
                   label: const Text('تغيير الصورة'),
                 ),
                 const SizedBox(height: 12),
-                const Text('ثيم الهالة حول الصورة', style: TextStyle(fontWeight: FontWeight.w800)),
+                const Text('ثيم الهالة حول الصورة',
+                    style: TextStyle(fontWeight: FontWeight.w800)),
                 const SizedBox(height: 8),
                 SingleChildScrollView(
                   scrollDirection: Axis.horizontal,
@@ -541,7 +576,9 @@ class _ProfilePageState extends State<ProfilePage> {
                                 child: CircleAvatar(
                                   radius: 26,
                                   backgroundColor: Colors.white24,
-                                  child: Text(e.$2.characters.first, style: const TextStyle(color: Colors.white)),
+                                  child: Text(e.$2.characters.first,
+                                      style:
+                                          const TextStyle(color: Colors.white)),
                                 ),
                               ),
                               const SizedBox(height: 4),
@@ -549,8 +586,12 @@ class _ProfilePageState extends State<ProfilePage> {
                                 e.$2,
                                 style: TextStyle(
                                   fontSize: 11,
-                                  color: selected ? Theme.of(context).colorScheme.primary : Colors.white70,
-                                  fontWeight: selected ? FontWeight.w800 : FontWeight.w600,
+                                  color: selected
+                                      ? Theme.of(context).colorScheme.primary
+                                      : Colors.white70,
+                                  fontWeight: selected
+                                      ? FontWeight.w800
+                                      : FontWeight.w600,
                                 ),
                               ),
                             ],
@@ -561,7 +602,8 @@ class _ProfilePageState extends State<ProfilePage> {
                   ),
                 ),
                 const SizedBox(height: 16),
-                const Text('ثيم كرت الملف', style: TextStyle(fontWeight: FontWeight.w800)),
+                const Text('ثيم كرت الملف',
+                    style: TextStyle(fontWeight: FontWeight.w800)),
                 const SizedBox(height: 8),
                 Wrap(
                   spacing: 8,
@@ -582,6 +624,7 @@ class _ProfilePageState extends State<ProfilePage> {
                       widget.app.themeId = _effectId(_avatarEffect);
                       widget.app.cardId = _cardId(_cardThemeIndex);
                       await widget.app.saveState();
+                      await widget.app.syncProfileToServer();
                       if (!ctx.mounted) return;
                       Navigator.pop(ctx);
                       setState(() {});
@@ -605,7 +648,8 @@ class _ProfilePageState extends State<ProfilePage> {
     // أفضل لعبة = أعلى رصيد لآلئ، وإلا المختارة/أول لعبة
     String game = app.selectedGame ?? '—';
     if (app.gamePearls.isNotEmpty) {
-      final top = app.gamePearls.entries.reduce((a, b) => a.value >= b.value ? a : b);
+      final top =
+          app.gamePearls.entries.reduce((a, b) => a.value >= b.value ? a : b);
       game = top.key;
     }
     final gameLabel = app.gameLabel(game);
@@ -620,8 +664,20 @@ class _ProfilePageState extends State<ProfilePage> {
       }
       return _rankName(_labelFor(milestone));
     }
+
     final currentRank = currentRankLabelForPearls(topPearls);
     final recentWins = _recentWins(meName);
+    final screenWidth = MediaQuery.of(context).size.width;
+    final compactHeader = screenWidth < 390;
+    final headerHeight = compactHeader ? 184.0 : 192.0;
+    final avatarEffectSize = compactHeader ? 96.0 : 108.0;
+    final avatarRadius = compactHeader ? 38.0 : 42.0;
+    final pearlBadgeSize = compactHeader ? 54.0 : 60.0;
+    final trophySize = compactHeader ? 36.0 : 42.0;
+    final badgeTopGap = compactHeader ? 0.0 : 2.0;
+    final badgeRowLift = compactHeader ? -24.0 : -22.0;
+    final badgeRowSlotHeight = compactHeader ? 32.0 : 34.0;
+    final badgeRowMaxHeight = compactHeader ? 88.0 : 96.0;
     final headerBg = _cardThemeIndex == 0
         ? const Color(0xFF1E2F4D)
         : _cardThemeIndex == 1
@@ -642,151 +698,185 @@ class _ProfilePageState extends State<ProfilePage> {
       padding: const EdgeInsets.all(16),
       children: [
         // Header (hero with avatar, top game pearls, and recent trophies)
-          Card(
-            elevation: 6,
-            clipBehavior: Clip.none,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-            child: SizedBox(
-              height: 176,
-              child: Stack(
-                clipBehavior: Clip.none,
-                children: [
-                  Container(
+        Card(
+          elevation: 6,
+          clipBehavior: Clip.antiAlias,
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+          child: SizedBox(
+            height: headerHeight,
+            child: Stack(
+              children: [
+                Container(
+                  decoration: BoxDecoration(
+                    color: headerBg,
+                    borderRadius: BorderRadius.circular(24),
+                  ),
+                ),
+                PositionedDirectional(
+                  top: 12,
+                  start: 12,
+                  child: Container(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                     decoration: BoxDecoration(
-                      color: headerBg,
-                      borderRadius: BorderRadius.circular(24),
+                      color: Colors.white.withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(14),
+                      border: Border.all(color: Colors.white24, width: 1),
                     ),
-                  ),
-                  Positioned(
-                    top: 12,
-                    left: 12,
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                      decoration: BoxDecoration(
-                        color: Colors.white.withValues(alpha: 0.12),
-                        borderRadius: BorderRadius.circular(14),
-                        border: Border.all(color: Colors.white24, width: 1),
-                      ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          const Icon(Icons.workspace_premium, size: 16, color: Color(0xFFF1A949)),
-                          const SizedBox(width: 6),
-                          Text(
-                            currentRank,
-                            style: const TextStyle(fontWeight: FontWeight.w800, color: Colors.white),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                  Positioned(
-                    left: 12,
-                    bottom: -12,
-                    child: _PearlBadge(
-                      game: topGameName,
-                      pearls: topPearls,
-                      size: 60,
-                    ),
-                  ),
-                  Positioned(
-                    right: 12,
-                    bottom: -12,
-                    child: _TrophyStrip(
-                      recentWins: recentWins,
-                      size: 42,
-                    ),
-                  ),
-                  Center(
-                    child: Column(
+                    child: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        Stack(
-                          alignment: Alignment.bottomRight,
-                          children: [
-                            if (_avatarEffect != null)
-                              AvatarEffect(
-                                effect: _avatarEffect!,
-                                size: 108,
-                                animate: true,
-                                child: CircleAvatar(
-                                  radius: 42,
-                                  backgroundImage: avatarImage,
-                                  backgroundColor: Colors.white.withValues(alpha: 0.12),
-                                  child: avatarImage == null
-                                      ? Text(
-                                          meName.isNotEmpty ? meName.characters.first : '؟',
-                                          style: const TextStyle(fontSize: 26, fontWeight: FontWeight.bold, color: Colors.white),
-                                        )
-                                      : null,
-                                ),
-                              )
-                            else
-                              CircleAvatar(
-                                radius: 42,
-                                backgroundImage: avatarImage,
-                                backgroundColor: Colors.white.withValues(alpha: 0.12),
-                                child: avatarImage == null
-                                    ? Text(
-                                        meName.isNotEmpty ? meName.characters.first : '؟',
-                                        style: const TextStyle(fontSize: 26, fontWeight: FontWeight.bold, color: Colors.white),
-                                      )
-                                    : null,
-                              ),
-                            Positioned(
-                              bottom: 2,
-                              right: 4,
-                              child: InkWell(
-                                onTap: _openAvatarThemePicker,
-                                borderRadius: BorderRadius.circular(14),
-                                child: Container(
-                                  padding: const EdgeInsets.all(6),
-                                  decoration: BoxDecoration(
-                                    color: Colors.black.withValues(alpha: 0.35),
-                                    shape: BoxShape.circle,
-                                  ),
-                                  child: const Icon(Icons.edit, size: 16, color: Colors.white),
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 10),
+                        const Icon(Icons.workspace_premium,
+                            size: 16, color: Color(0xFFF1A949)),
+                        const SizedBox(width: 6),
                         Text(
-                          meName,
+                          currentRank,
                           style: const TextStyle(
-                            fontWeight: FontWeight.w900,
-                            fontSize: 18,
-                            color: Colors.white,
-                          ),
+                              fontWeight: FontWeight.w800, color: Colors.white),
                         ),
-                        if (displayUserId.isNotEmpty) ...[
-                          const SizedBox(height: 4),
-                          Text(
-                            _shortId(displayUserId),
-                            style: TextStyle(
-                              color: Colors.white.withValues(alpha: .72),
-                              fontSize: 12,
-                              letterSpacing: 0.3,
-                            ),
-                          ),
-                        ],
                       ],
                     ),
                   ),
-                ],
+                ),
+                Align(
+                  alignment: Alignment.center,
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Stack(
+                        alignment: Alignment.bottomRight,
+                        children: [
+                          if (_avatarEffect != null)
+                            AvatarEffect(
+                              effect: _avatarEffect!,
+                              size: avatarEffectSize,
+                              animate: true,
+                              child: CircleAvatar(
+                                radius: avatarRadius,
+                                backgroundImage: avatarImage,
+                                backgroundColor:
+                                    Colors.white.withValues(alpha: 0.12),
+                                child: avatarImage == null
+                                    ? Text(
+                                        meName.isNotEmpty
+                                            ? meName.characters.first
+                                            : '؟',
+                                        style: const TextStyle(
+                                            fontSize: 26,
+                                            fontWeight: FontWeight.bold,
+                                            color: Colors.white),
+                                      )
+                                    : null,
+                              ),
+                            )
+                          else
+                            CircleAvatar(
+                              radius: avatarRadius,
+                              backgroundImage: avatarImage,
+                              backgroundColor:
+                                  Colors.white.withValues(alpha: 0.12),
+                              child: avatarImage == null
+                                  ? Text(
+                                      meName.isNotEmpty
+                                          ? meName.characters.first
+                                          : '؟',
+                                      style: const TextStyle(
+                                          fontSize: 26,
+                                          fontWeight: FontWeight.bold,
+                                          color: Colors.white),
+                                    )
+                                  : null,
+                            ),
+                          Positioned(
+                            bottom: 2,
+                            right: 4,
+                            child: InkWell(
+                              onTap: _openAvatarThemePicker,
+                              borderRadius: BorderRadius.circular(14),
+                              child: Container(
+                                padding: const EdgeInsets.all(6),
+                                decoration: BoxDecoration(
+                                  color: Colors.black.withValues(alpha: 0.35),
+                                  shape: BoxShape.circle,
+                                ),
+                                child: const Icon(Icons.edit,
+                                    size: 16, color: Colors.white),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 10),
+                      Text(
+                        meName,
+                        style: const TextStyle(
+                          fontWeight: FontWeight.w900,
+                          fontSize: 18,
+                          color: Colors.white,
+                        ),
+                      ),
+                      if (displayUserId.isNotEmpty) ...[
+                        const SizedBox(height: 4),
+                        Text(
+                          _shortId(displayUserId),
+                          style: TextStyle(
+                            color: Colors.white.withValues(alpha: .72),
+                            fontSize: 12,
+                            letterSpacing: 0.3,
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+        SizedBox(height: badgeTopGap),
+        SizedBox(
+          height: badgeRowSlotHeight,
+          child: OverflowBox(
+            minHeight: 0,
+            maxHeight: badgeRowMaxHeight,
+            alignment: Alignment.topCenter,
+            child: Transform.translate(
+              offset: Offset(0, badgeRowLift),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 2),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    _PearlBadge(
+                      game: topGameName,
+                      pearls: topPearls,
+                      size: pearlBadgeSize,
+                    ),
+                    _TrophyStrip(
+                      recentWins: recentWins,
+                      size: trophySize,
+                    ),
+                  ],
+                ),
               ),
             ),
           ),
-
-        const SizedBox(height: 10),
+        ),
+        SizedBox(height: compactHeader ? 0 : 2),
 
         // Stats row (icons فقط)
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceEvenly,
           children: [
-            _IconStat(icon: Icons.emoji_events_outlined, value: _wins, sparkleColor: Colors.greenAccent),
-            _IconStat(icon: Icons.cancel_outlined, value: _losses, sparkleColor: Colors.redAccent),
+            _IconStat(
+                icon: Icons.emoji_events_outlined,
+                value: _wins,
+                sparkleColor: Colors.greenAccent),
+            _IconStat(
+                icon: Icons.cancel_outlined,
+                value: _losses,
+                sparkleColor: Colors.redAccent),
             _IconStat(icon: Icons.sports_esports_outlined, value: _games),
           ],
         ),
@@ -832,53 +922,55 @@ class _ProfilePageState extends State<ProfilePage> {
           ],
         ),
 
-      if (app.ownedDewanyahs.isNotEmpty) ...[
-        const SizedBox(height: 12),
-        Card(
-          child: Padding(
-            padding: const EdgeInsets.all(12),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  app.tr(ar: 'ديوانياتي', en: 'My Dewanyahs'),
-                  style: const TextStyle(
-                    fontWeight: FontWeight.w900,
-                    fontSize: 16,
-                  ),
-                ),
-                const SizedBox(height: 8),
-                ...app.ownedDewanyahs.map<Widget>((d) {
-                  final name = (d['name'] ?? 'ديوانية').toString();
-                  final gameId = (d['gameId'] ?? '—').toString();
-                  final status = (d['status'] ?? 'pending').toString();
-                  final pearls = (d['startingPearls'] ?? 5).toString();
-                  return Padding(
-                    padding: const EdgeInsets.only(bottom: 6),
-                    child: ListTile(
-                      contentPadding: EdgeInsets.zero,
-                      leading: const Icon(Icons.groups_3_outlined),
-                      title: Text(name, style: const TextStyle(fontWeight: FontWeight.w800)),
-                      subtitle: Text(app.tr(
-                        ar: 'اللعبة: $gameId • يبدأ بـ $pearls لؤلؤة',
-                        en: 'Game: $gameId • Starts with $pearls pearls',
-                      )),
-                      trailing: _StatusBadge(label: status),
+        if (app.ownedDewanyahs.isNotEmpty) ...[
+          const SizedBox(height: 12),
+          Card(
+            child: Padding(
+              padding: const EdgeInsets.all(12),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    app.tr(ar: 'ديوانياتي', en: 'My Dewanyahs'),
+                    style: const TextStyle(
+                      fontWeight: FontWeight.w900,
+                      fontSize: 16,
                     ),
-                  );
-                }),
-              ],
+                  ),
+                  const SizedBox(height: 8),
+                  ...app.ownedDewanyahs.map<Widget>((d) {
+                    final name = (d['name'] ?? 'ديوانية').toString();
+                    final gameId = (d['gameId'] ?? '—').toString();
+                    final status = (d['status'] ?? 'pending').toString();
+                    final pearls = (d['startingPearls'] ?? 5).toString();
+                    return Padding(
+                      padding: const EdgeInsets.only(bottom: 6),
+                      child: ListTile(
+                        contentPadding: EdgeInsets.zero,
+                        leading: const Icon(Icons.groups_3_outlined),
+                        title: Text(name,
+                            style:
+                                const TextStyle(fontWeight: FontWeight.w800)),
+                        subtitle: Text(app.tr(
+                          ar: 'اللعبة: $gameId • يبدأ بـ $pearls لؤلؤة',
+                          en: 'Game: $gameId • Starts with $pearls pearls',
+                        )),
+                        trailing: _StatusBadge(label: status),
+                      ),
+                    );
+                  }),
+                ],
+              ),
             ),
           ),
-        ),
-      ],
+        ],
 
-      const SizedBox(height: 12),
+        const SizedBox(height: 12),
 
-      // Milestones (الأنواط) row as animated orbs
-      Card(
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(12, 12, 12, 4),
+        // Milestones (الأنواط) row as animated orbs
+        Card(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(12, 12, 12, 4),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -942,7 +1034,9 @@ class _ProfilePageState extends State<ProfilePage> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        app.tr(ar: 'اللعبة الحالية: $gameLabel', en: 'Current game: $gameLabel'),
+                        app.tr(
+                            ar: 'اللعبة الحالية: $gameLabel',
+                            en: 'Current game: $gameLabel'),
                         style: const TextStyle(
                           fontWeight: FontWeight.w700,
                         ),
@@ -971,7 +1065,6 @@ class _ProfilePageState extends State<ProfilePage> {
         ),
 
         const SizedBox(height: 12),
-
       ],
     );
   }
@@ -1034,7 +1127,6 @@ class _ProfilePageState extends State<ProfilePage> {
     }
     return streak;
   }
-
 }
 
 /* ---------------- painters / small widgets ---------------- */
@@ -1060,8 +1152,7 @@ class _RingPainter extends CustomPainter {
       ..color = const Color(0xFF29B6F6);
 
     canvas.drawCircle(c, r, bg);
-    final sweep =
-        (fill01.clamp(0, 1) as double) * 2 * math.pi;
+    final sweep = (fill01.clamp(0, 1) as double) * 2 * math.pi;
     canvas.drawArc(
       Rect.fromCircle(center: c, radius: r),
       -math.pi / 2,
@@ -1194,7 +1285,12 @@ class _TrophyCircle extends StatelessWidget {
   final bool filled;
   final Color color;
   final double size;
-  const _TrophyCircle({required this.label, required this.date, required this.filled, required this.color, this.size = 46});
+  const _TrophyCircle(
+      {required this.label,
+      required this.date,
+      required this.filled,
+      required this.color,
+      this.size = 46});
 
   @override
   Widget build(BuildContext context) {
@@ -1217,7 +1313,8 @@ class _TrophyCircle extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(Icons.emoji_events_rounded, size: size * 0.35, color: Colors.amber),
+            Icon(Icons.emoji_events_rounded,
+                size: size * 0.35, color: Colors.amber),
             if (filled) ...[
               SizedBox(height: size * 0.05),
               Text(
@@ -1242,7 +1339,8 @@ class _RankOrb extends StatelessWidget {
   final String label;
   final int count;
   final bool achieved;
-  const _RankOrb({required this.label, required this.count, required this.achieved});
+  const _RankOrb(
+      {required this.label, required this.count, required this.achieved});
 
   @override
   Widget build(BuildContext context) {
@@ -1267,7 +1365,8 @@ class _RankOrb extends StatelessWidget {
                 gradient: style.gradient,
                 boxShadow: [
                   BoxShadow(
-                    color: (style.shadow ?? Colors.black26).withValues(alpha: achieved ? 0.35 : 0.2),
+                    color: (style.shadow ?? Colors.black26)
+                        .withValues(alpha: achieved ? 0.35 : 0.2),
                     blurRadius: achieved ? 14 : 8,
                     offset: const Offset(0, 6),
                   ),
@@ -1323,7 +1422,9 @@ class _RankOrb extends StatelessWidget {
                         letterSpacing: 0.2,
                         color: style.text ?? Colors.white,
                         shadows: [
-                          Shadow(color: Colors.black.withValues(alpha: 0.35), blurRadius: 6),
+                          Shadow(
+                              color: Colors.black.withValues(alpha: 0.35),
+                              blurRadius: 6),
                         ],
                       ),
                     ),
@@ -1401,7 +1502,8 @@ class _RankOrb extends StatelessWidget {
         );
       default:
         return _RankStyle(
-          gradient: const LinearGradient(colors: [Color(0xFF607D8B), Color(0xFF455A64)]),
+          gradient: const LinearGradient(
+              colors: [Color(0xFF607D8B), Color(0xFF455A64)]),
           sparkle: const Color(0xFF90A4AE),
         );
     }
@@ -1415,6 +1517,7 @@ class _RankStyle {
   final Color? shadow;
   _RankStyle({required this.gradient, this.sparkle, this.text, this.shadow});
 }
+
 class _SparkleOnce extends StatefulWidget {
   final Color color;
   final double size;
@@ -1429,13 +1532,15 @@ class _SparkleOnce extends StatefulWidget {
   State<_SparkleOnce> createState() => _SparkleOnceState();
 }
 
-class _SparkleOnceState extends State<_SparkleOnce> with SingleTickerProviderStateMixin {
+class _SparkleOnceState extends State<_SparkleOnce>
+    with SingleTickerProviderStateMixin {
   late final AnimationController _ctrl;
 
   @override
   void initState() {
     super.initState();
-    _ctrl = AnimationController(vsync: this, duration: widget.duration)..forward();
+    _ctrl = AnimationController(vsync: this, duration: widget.duration)
+      ..forward();
   }
 
   @override
@@ -1541,15 +1646,18 @@ class _IconStat extends StatefulWidget {
   State<_IconStat> createState() => _IconStatState();
 }
 
-class _IconStatState extends State<_IconStat> with SingleTickerProviderStateMixin {
+class _IconStatState extends State<_IconStat>
+    with SingleTickerProviderStateMixin {
   late final AnimationController _ctrl;
   late final Animation<double> _scale;
 
   @override
   void initState() {
     super.initState();
-    _ctrl = AnimationController(vsync: this, duration: const Duration(milliseconds: 250));
-    _scale = Tween<double>(begin: 1, end: 0.9).animate(CurvedAnimation(parent: _ctrl, curve: Curves.easeInOut));
+    _ctrl = AnimationController(
+        vsync: this, duration: const Duration(milliseconds: 250));
+    _scale = Tween<double>(begin: 1, end: 0.9)
+        .animate(CurvedAnimation(parent: _ctrl, curve: Curves.easeInOut));
   }
 
   @override
@@ -1588,7 +1696,8 @@ class _IconStatState extends State<_IconStat> with SingleTickerProviderStateMixi
               ],
             ),
             const SizedBox(height: 4),
-            Text('${widget.value}', style: const TextStyle(fontWeight: FontWeight.w800)),
+            Text('${widget.value}',
+                style: const TextStyle(fontWeight: FontWeight.w800)),
           ],
         ),
       ),
@@ -1600,7 +1709,8 @@ class _QuickActionChip extends StatelessWidget {
   final IconData icon;
   final String label;
   final VoidCallback onTap;
-  const _QuickActionChip({required this.icon, required this.label, required this.onTap});
+  const _QuickActionChip(
+      {required this.icon, required this.label, required this.onTap});
 
   @override
   Widget build(BuildContext context) {
@@ -1615,7 +1725,8 @@ class _QuickActionChip extends StatelessWidget {
           color: accent,
         ),
       ),
-      shape: StadiumBorder(side: BorderSide(color: accent.withValues(alpha: 0.35))),
+      shape: StadiumBorder(
+          side: BorderSide(color: accent.withValues(alpha: 0.35))),
       backgroundColor: Colors.white,
       elevation: 2,
       shadowColor: Colors.black12,
@@ -1629,54 +1740,88 @@ class _PearlCircleGrid extends StatelessWidget {
   final List<int> milestones;
   final String Function(int) rankLabel;
   final String Function(String) rankName;
-  const _PearlCircleGrid({required this.entries, required this.maxValue, required this.milestones, required this.rankLabel, required this.rankName});
+  const _PearlCircleGrid(
+      {required this.entries,
+      required this.maxValue,
+      required this.milestones,
+      required this.rankLabel,
+      required this.rankName});
 
   @override
   Widget build(BuildContext context) {
     if (entries.isEmpty) return const Text('لا توجد بيانات');
     final color = Theme.of(context).colorScheme.primary;
-    return Wrap(
-      spacing: 12,
-      runSpacing: 12,
-      children: entries.map((e) {
-        final game = e.$1;
-        final value = e.$2.clamp(0, maxValue);
-        final pct = value / maxValue;
-        return SizedBox(
-          width: 88,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Stack(
-                alignment: Alignment.center,
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        const columns = 3;
+        const hGap = 8.0;
+        const vGap = 12.0;
+        final tileWidth =
+            (constraints.maxWidth - ((columns - 1) * hGap)) / columns;
+        final ringSize = math.min(74.0, math.max(66.0, tileWidth * 0.84));
+        final gameFont = tileWidth < 90 ? 11.5 : 12.5;
+        final rankFont = tileWidth < 90 ? 10.0 : 11.0;
+
+        return Wrap(
+          alignment: WrapAlignment.spaceBetween,
+          runSpacing: vGap,
+          children: entries.map((e) {
+            final game = e.$1;
+            final value = e.$2.clamp(0, maxValue);
+            final pct = value / maxValue;
+            return SizedBox(
+              width: tileWidth,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
                 children: [
-                  TweenAnimationBuilder<double>(
-                    tween: Tween(begin: 0, end: pct),
-                    duration: const Duration(milliseconds: 700),
-                    curve: Curves.easeOutCubic,
-                    builder: (_, v, __) => SizedBox(
-                      width: 74,
-                      height: 74,
-                      child: CustomPaint(
-                        painter: _ArcPainter(
-                          progress: v,
-                          color: color,
-                          bgColor: Colors.grey.shade800,
-                          strokeWidth: 7,
+                  Stack(
+                    alignment: Alignment.center,
+                    children: [
+                      TweenAnimationBuilder<double>(
+                        tween: Tween(begin: 0, end: pct),
+                        duration: const Duration(milliseconds: 700),
+                        curve: Curves.easeOutCubic,
+                        builder: (_, v, __) => SizedBox(
+                          width: ringSize,
+                          height: ringSize,
+                          child: CustomPaint(
+                            painter: _ArcPainter(
+                              progress: v,
+                              color: color,
+                              bgColor: Colors.grey.shade800,
+                              strokeWidth: 7,
+                            ),
+                          ),
                         ),
                       ),
+                      Text('$value',
+                          style: const TextStyle(fontWeight: FontWeight.w900)),
+                    ],
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    game,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      fontWeight: FontWeight.w700,
+                      fontSize: gameFont,
                     ),
                   ),
-                  Text('$value', style: const TextStyle(fontWeight: FontWeight.w900)),
+                  Text(
+                    rankLabel(_nearestRank(value)),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    textAlign: TextAlign.center,
+                    style: TextStyle(fontSize: rankFont, color: Colors.white70),
+                  ),
                 ],
               ),
-              const SizedBox(height: 6),
-              Text(game, style: const TextStyle(fontWeight: FontWeight.w700)),
-              Text(rankLabel(_nearestRank(value)), style: TextStyle(fontSize: 11, color: Colors.white70)),
-            ],
-          ),
+            );
+          }).toList(),
         );
-      }).toList(),
+      },
     );
   }
 
@@ -1694,7 +1839,11 @@ class _ArcPainter extends CustomPainter {
   final Color bgColor;
   final double strokeWidth;
 
-  _ArcPainter({required this.progress, required this.color, required this.bgColor, required this.strokeWidth});
+  _ArcPainter(
+      {required this.progress,
+      required this.color,
+      required this.bgColor,
+      required this.strokeWidth});
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -1723,7 +1872,10 @@ class _ArcPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(covariant _ArcPainter oldDelegate) {
-    return oldDelegate.progress != progress || oldDelegate.color != color || oldDelegate.bgColor != bgColor || oldDelegate.strokeWidth != strokeWidth;
+    return oldDelegate.progress != progress ||
+        oldDelegate.color != color ||
+        oldDelegate.bgColor != bgColor ||
+        oldDelegate.strokeWidth != strokeWidth;
   }
 }
 //profile_page.dart

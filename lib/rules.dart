@@ -1,21 +1,20 @@
-
 /// نوع اللعب
 enum PlayMode {
-  solo,     // فردي (1 ضد 1 أو 1 ضد كثير)
-  team2v2,  // 2 ضد 2
-  team3v3,  // 3 ضد 3
-  team5v5,  // 5 ضد 5
-  team6v6,  // 6 ضد 6
-  team9v9,  // 9 ضد 9
-  duo2v2,   // synonym for 2v2 (للتوضيح في بعض الألعاب)
+  solo, // فردي (1 ضد 1 أو 1 ضد كثير)
+  team2v2, // 2 ضد 2
+  team3v3, // 3 ضد 3
+  team5v5, // 5 ضد 5
+  team6v6, // 6 ضد 6
+  team9v9, // 9 ضد 9
+  duo2v2, // synonym for 2v2 (للتوضيح في بعض الألعاب)
 }
 
 /// تعريف قاعدة لعبة واحدة
 class GameRule {
   final String name;
   final int timerMinutes;
-  final int minPlayers;     // أقل عدد لاعبين لإطلاق المباراة
-  final int maxPlayers;     // أقصى عدد
+  final int minPlayers; // أقل عدد لاعبين لإطلاق المباراة
+  final int maxPlayers; // أقصى عدد
   final List<PlayMode> modes; // أنماط اللعب المدعومة
   final bool pointsPerPlayer; // النقاط +1/-1 لكل لاعب (صحيح هنا)
   final bool allowFreeForAll; // لبعض الفردي (4 أو 5 لاعبين مثلاً سبيتة)
@@ -31,7 +30,8 @@ class GameRule {
   });
 
   @override
-  String toString() => 'GameRule($name m:$timerMinutes p:$minPlayers..$maxPlayers modes:$modes)';
+  String toString() =>
+      'GameRule($name m:$timerMinutes p:$minPlayers..$maxPlayers modes:$modes)';
 }
 
 /// القواعد لكل لعبة حسب وصفك
@@ -41,7 +41,7 @@ const Map<String, GameRule> kGameRules = {
     name: 'كوت',
     timerMinutes: 30,
     minPlayers: 4,
-    maxPlayers: 6,   // وإذا ضغط Plus يزيد لاعبين 2 إجباري
+    maxPlayers: 6, // وإذا ضغط Plus يزيد لاعبين 2 إجباري
     modes: [PlayMode.team2v2, PlayMode.team3v3],
     pointsPerPlayer: true,
   ),
@@ -65,7 +65,7 @@ const Map<String, GameRule> kGameRules = {
   'هند': GameRule(
     name: 'هند',
     timerMinutes: 30,
-    minPlayers: 2,  // فردي يبدأ 2 ويزيد حتى 5، أو 2×2
+    minPlayers: 2, // فردي يبدأ 2 ويزيد حتى 5، أو 2×2
     maxPlayers: 5,
     modes: [PlayMode.solo, PlayMode.team2v2],
     pointsPerPlayer: true,
@@ -109,7 +109,7 @@ const Map<String, GameRule> kGameRules = {
   'دومنه': GameRule(
     name: 'دومنه',
     timerMinutes: 15,
-    minPlayers: 2,  // 1 ضد 1 إلى 4 ضد بعض
+    minPlayers: 2, // 1 ضد 1 إلى 4 ضد بعض
     maxPlayers: 4,
     modes: [PlayMode.solo],
     pointsPerPlayer: true,
@@ -121,6 +121,14 @@ const Map<String, GameRule> kGameRules = {
     minPlayers: 2,
     maxPlayers: 2,
     modes: [PlayMode.solo],
+    pointsPerPlayer: true,
+  ),
+  'جاكارو': GameRule(
+    name: 'جاكارو',
+    timerMinutes: 30,
+    minPlayers: 4,
+    maxPlayers: 4,
+    modes: [PlayMode.team2v2],
     pointsPerPlayer: true,
   ),
 
@@ -192,10 +200,10 @@ const Map<String, GameRule> kGameRules = {
   'بلياردو': GameRule(
     name: 'بلياردو',
     timerMinutes: 30,
-    minPlayers: 2,   // فردي 1 ضد 1
+    minPlayers: 2, // فردي 1 ضد 1
     maxPlayers: 2,
     modes: [PlayMode.solo],
-    pointsPerPlayer: true,   // الفايز +1، الخاسر -1
+    pointsPerPlayer: true, // الفايز +1، الخاسر -1
   ),
 };
 

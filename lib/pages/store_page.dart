@@ -30,7 +30,7 @@ class _StorePageState extends State<StorePage> {
       {'id': 'blueThunder', 'name': 'برق أزرق', 'kind': 'theme', 'price': 0, 'preview': 'هالة برق أزرق'},
       {'id': 'goldLightning', 'name': 'برق ذهبي', 'kind': 'theme', 'price': 0, 'preview': 'هالة برق ذهبي'},
       {'id': 'kuwait', 'name': 'ألوان العلم', 'kind': 'theme', 'price': 0, 'preview': 'هالة العلم'},
-      {'id': 'greenLeaf', 'name': 'أوراق خضراء', 'kind': 'theme', 'price': 0, 'preview': 'أوراق متحركة'},
+      {'id': 'greenLeaf', 'name': 'اخضر', 'kind': 'theme', 'price': 0, 'preview': 'أوراق متساقطة'},
       {'id': 'flameBlue', 'name': 'لهب أزرق', 'kind': 'theme', 'price': 0, 'preview': 'هالة لهب أزرق'},
       {'id': 'whiteSparkle', 'name': 'سباركل أبيض', 'kind': 'theme', 'price': 0, 'preview': 'هالة بريق أبيض'},
     ];

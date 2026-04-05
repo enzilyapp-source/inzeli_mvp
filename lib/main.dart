@@ -176,9 +176,12 @@ class _HomePageState extends State<HomePage> {
     // ✅ New order: Leaderboards first
     final pages = [
       LeaderboardHubPage(key: const ValueKey('lb-regular'), app: app),
-      GamesPage(app: app),
+      GamesPage(app: app, embedded: true),
       TimelinePage(app: app),
-      LeaderboardHubPage(key: const ValueKey('lb-sponsor'), app: app, initialTab: 1), // الراعي جنب شسالفه؟
+      LeaderboardHubPage(
+          key: const ValueKey('lb-sponsor'),
+          app: app,
+          initialTab: 1), // الراعي جنب شسالفه؟
       ProfilePage(app: app), // الملف آخر أيقونة (يمين)
     ];
 
@@ -197,16 +200,7 @@ class _HomePageState extends State<HomePage> {
         child: SafeArea(
           child: Column(
             children: [
-              const SizedBox(height: 8),
-              Text(
-                '',
-                style: const TextStyle(
-                  fontSize: 20,
-                  fontWeight: FontWeight.w900,
-                  color: Colors.white,
-                ),
-              ),
-              const SizedBox(height: 8),
+              const SizedBox(height: 6),
               if (_index != 4) ...[
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -215,7 +209,7 @@ class _HomePageState extends State<HomePage> {
                     onTap: () => setState(() => _index = 4),
                   ),
                 ),
-                const SizedBox(height: 12),
+                const SizedBox(height: 4),
               ],
               Expanded(
                 child: Padding(
@@ -274,6 +268,19 @@ class _TopProfileCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final name = app.displayName ?? app.name ?? '—';
     final id = app.publicId ?? app.userId ?? '';
+    final (topGame, topPearls) = _topPearlGame(app);
+    final rank = _rankLabelForPearls(topPearls);
+    final recentWins = _recentWins(name);
+    final screenWidth = MediaQuery.of(context).size.width;
+    final compact = screenWidth < 430;
+    final cardHeight = compact ? 156.0 : 164.0;
+    final avatarEffectSize = compact ? 98.0 : 102.0;
+    final avatarRadius = compact ? 37.0 : 39.0;
+    final badgeLift = compact ? -22.0 : -20.0;
+    final pearlSize = compact ? 58.0 : 62.0;
+    final trophySize = compact ? 38.0 : 40.0;
+    final badgeRowSlotHeight = compact ? 32.0 : 34.0;
+    final badgeRowMaxHeight = compact ? 90.0 : 96.0;
     final cardColor = _cardColor(app.cardId);
     final effect = _effectFromId(app.themeId);
     ImageProvider? avatarImage;
@@ -285,94 +292,183 @@ class _TopProfileCard extends StatelessWidget {
     }
 
     return InkWell(
-      borderRadius: BorderRadius.circular(20),
+      borderRadius: BorderRadius.circular(24),
       onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-        decoration: BoxDecoration(
-          color: cardColor,
-          borderRadius: BorderRadius.circular(20),
-          boxShadow: const [
-            BoxShadow(
-              color: Colors.black26,
-              blurRadius: 10,
-              offset: Offset(0, 6),
-            ),
-          ],
-        ),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                if (effect != null)
-                  AvatarEffect(
-                    effect: effect,
-                    size: 82,
-                    animate: true,
-                    child: CircleAvatar(
-                      radius: 28,
-                      backgroundImage: avatarImage,
-                      backgroundColor: const Color(0xFF273347),
-                      child: avatarImage == null
-                          ? Text(
-                              name.isNotEmpty ? name.characters.first : '؟',
-                              style: const TextStyle(
-                                fontWeight: FontWeight.w900,
-                                fontSize: 20,
-                                color: Colors.white,
-                              ),
-                            )
-                          : null,
-                    ),
-                  )
-                else
-                  CircleAvatar(
-                    radius: 28,
-                    backgroundImage: avatarImage,
-                    backgroundColor: const Color(0xFF273347),
-                    child: avatarImage == null
-                        ? Text(
-                            name.isNotEmpty ? name.characters.first : '؟',
-                            style: const TextStyle(
-                              fontWeight: FontWeight.w900,
-                              fontSize: 20,
-                              color: Colors.white,
-                            ),
-                          )
-                        : null,
-                  ),
-                const SizedBox(height: 8),
-                Text(
-                  name,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 16,
-                    fontWeight: FontWeight.w900,
-                  ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            height: cardHeight,
+            decoration: BoxDecoration(
+              color: cardColor,
+              borderRadius: BorderRadius.circular(24),
+              boxShadow: const [
+                BoxShadow(
+                  color: Colors.black26,
+                  blurRadius: 10,
+                  offset: Offset(0, 6),
                 ),
-                if (id.isNotEmpty)
-                  Text(
-                    _shortId(id),
-                    style: TextStyle(
-                      color: Colors.white.withValues(alpha: 0.7),
-                      fontSize: 12,
-                      letterSpacing: 0.2,
-                    ),
-                  ),
               ],
             ),
-          ],
-        ),
+            child: Stack(
+              children: [
+                PositionedDirectional(
+                  top: 8,
+                  start: 10,
+                  child: Container(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(14),
+                      border: Border.all(color: Colors.white24, width: 1),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(Icons.workspace_premium,
+                            size: 16, color: Color(0xFFF1A949)),
+                        const SizedBox(width: 6),
+                        Text(
+                          rank,
+                          style: const TextStyle(
+                              fontWeight: FontWeight.w800, color: Colors.white),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                Center(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      if (effect != null)
+                        AvatarEffect(
+                          effect: effect,
+                          size: avatarEffectSize,
+                          animate: true,
+                          child: CircleAvatar(
+                            radius: avatarRadius,
+                            backgroundImage: avatarImage,
+                            backgroundColor: const Color(0xFF273347),
+                            child: avatarImage == null
+                                ? Text(
+                                    name.isNotEmpty
+                                        ? name.characters.first
+                                        : '؟',
+                                    style: const TextStyle(
+                                      fontWeight: FontWeight.w900,
+                                      fontSize: 24,
+                                      color: Colors.white,
+                                    ),
+                                  )
+                                : null,
+                          ),
+                        )
+                      else
+                        CircleAvatar(
+                          radius: avatarRadius,
+                          backgroundImage: avatarImage,
+                          backgroundColor: const Color(0xFF273347),
+                          child: avatarImage == null
+                              ? Text(
+                                  name.isNotEmpty ? name.characters.first : '؟',
+                                  style: const TextStyle(
+                                    fontWeight: FontWeight.w900,
+                                    fontSize: 24,
+                                    color: Colors.white,
+                                  ),
+                                )
+                              : null,
+                        ),
+                      const SizedBox(height: 6),
+                      Text(
+                        name,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 18,
+                          fontWeight: FontWeight.w900,
+                        ),
+                      ),
+                      if (id.isNotEmpty)
+                        Text(
+                          _shortId(id),
+                          style: TextStyle(
+                            color: Colors.white.withValues(alpha: 0.7),
+                            fontSize: 12,
+                            letterSpacing: 0.2,
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+          SizedBox(
+            height: badgeRowSlotHeight,
+            child: OverflowBox(
+              minHeight: 0,
+              maxHeight: badgeRowMaxHeight,
+              alignment: Alignment.topCenter,
+              child: Transform.translate(
+                offset: Offset(0, badgeLift),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    _MainPearlBadge(
+                      game: topGame,
+                      pearls: topPearls,
+                      size: pearlSize,
+                    ),
+                    _MainTrophyStrip(recentWins: recentWins, size: trophySize),
+                  ],
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(height: 0),
+        ],
       ),
     );
+  }
+
+  (String, int) _topPearlGame(AppState app) {
+    if (app.gamePearls.isNotEmpty) {
+      final top =
+          app.gamePearls.entries.reduce((a, b) => a.value >= b.value ? a : b);
+      return (app.gameLabel(top.key), top.value);
+    }
+    if (app.selectedGame != null && app.selectedGame!.isNotEmpty) {
+      return (
+        app.gameLabel(app.selectedGame!),
+        app.pearlsForGame(app.selectedGame!)
+      );
+    }
+    return (app.tr(ar: 'بدون لعبة', en: 'No game'), 0);
+  }
+
+  List<(String, DateTime)> _recentWins(String player) {
+    final wins = app.timeline.where((t) => t.winner == player).toList()
+      ..sort((a, b) => b.ts.compareTo(a.ts));
+    return wins.take(3).map((t) => (app.gameLabel(t.game), t.ts)).toList();
+  }
+
+  String _rankLabelForPearls(int pearls) {
+    if (pearls >= 30) return app.tr(ar: 'فلتة', en: 'GOAT');
+    if (pearls >= 20) return app.tr(ar: 'فنان', en: 'Legend');
+    if (pearls >= 15) return app.tr(ar: 'زين', en: 'Professional');
+    if (pearls >= 10) return app.tr(ar: 'يمشي حاله', en: 'Advance');
+    if (pearls >= 5) return app.tr(ar: 'عليمي', en: 'Beginner');
+    return app.tr(ar: 'بدايات', en: 'New');
   }
 
   String _shortId(String raw) {
     final clean = raw.replaceAll(RegExp(r'[^A-Za-z0-9]'), '');
     if (clean.isEmpty) return '';
-    final short = clean.length > 6 ? clean.substring(clean.length - 6) : clean.padLeft(6, '0');
+    final short = clean.length > 6
+        ? clean.substring(clean.length - 6)
+        : clean.padLeft(6, '0');
     return '#$short';
   }
 
@@ -403,5 +499,133 @@ class _TopProfileCard extends StatelessWidget {
       default:
         return null;
     }
+  }
+}
+
+class _MainPearlBadge extends StatelessWidget {
+  final String game;
+  final int pearls;
+  final double size;
+  const _MainPearlBadge({
+    required this.game,
+    required this.pearls,
+    this.size = 56,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final valueFont = size * 0.28;
+    final labelFont = size * 0.17;
+    final topOffset = size * 0.2;
+    final bottomOffset = size * 0.18;
+    return Container(
+      width: size,
+      height: size,
+      decoration: BoxDecoration(
+        color: Colors.white,
+        shape: BoxShape.circle,
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.12),
+            blurRadius: 10,
+            offset: const Offset(0, 6),
+          ),
+        ],
+      ),
+      child: Stack(
+        alignment: Alignment.center,
+        children: [
+          Positioned(
+            top: topOffset,
+            left: 0,
+            right: 0,
+            child: Text(
+              '$pearls',
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                color: const Color(0xFF1E2F4D),
+                fontWeight: FontWeight.w900,
+                fontSize: valueFont,
+              ),
+            ),
+          ),
+          Positioned(
+            bottom: bottomOffset,
+            left: 8,
+            right: 8,
+            child: Text(
+              game,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                color: Colors.black87,
+                fontWeight: FontWeight.w700,
+                fontSize: labelFont,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _MainTrophyStrip extends StatelessWidget {
+  final List<(String, DateTime)> recentWins;
+  final double size;
+  const _MainTrophyStrip({
+    required this.recentWins,
+    this.size = 36,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: List.generate(3, (i) {
+        final filled = i < recentWins.length;
+        return Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 3),
+          child: _MainTrophyCircle(
+            filled: filled,
+            size: size,
+          ),
+        );
+      }),
+    );
+  }
+}
+
+class _MainTrophyCircle extends StatelessWidget {
+  final bool filled;
+  final double size;
+  const _MainTrophyCircle({
+    required this.filled,
+    this.size = 36,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: size,
+      height: size,
+      decoration: BoxDecoration(
+        color: Colors.white,
+        shape: BoxShape.circle,
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.12),
+            blurRadius: 6,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Icon(
+        Icons.emoji_events_rounded,
+        size: size * 0.5,
+        color: filled ? Colors.amber : Colors.grey.shade400,
+      ),
+    );
   }
 }

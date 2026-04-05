@@ -72,17 +72,18 @@ class _MatchPageState extends State<MatchPage> {
 
   // قواعد أحجام الفرق لكل لعبة (عدد اللاعبين في كل فريق)
   static const Map<String, List<int>> _teamSizeRules = {
-    'كوت': [2, 3],   // 2 ضد 2 أو 3 ضد 3
-    'بلوت': [2],     // 2 ضد 2
-    'تريكس': [2],    // 2 ضد 2
-    'هند': [2],      // 2 ضد 2 في وضع الفرق
-    'كيرم': [2],     // 2 ضد 2 فقط
-    'سبيتة': [2],    // 2 ضد 2 في وضع الفرق
-    'بيبيفوت': [2],  // 2 ضد 2 في وضع الفرق
-    'قدم': [9],      // 9 ضد 9
-    'سله': [5],      // 5 ضد 5
+    'كوت': [2, 3], // 2 ضد 2 أو 3 ضد 3
+    'بلوت': [2], // 2 ضد 2
+    'تريكس': [2], // 2 ضد 2
+    'هند': [2], // 2 ضد 2 في وضع الفرق
+    'كيرم': [2], // 2 ضد 2 فقط
+    'جاكارو': [2], // 2 ضد 2
+    'سبيتة': [2], // 2 ضد 2 في وضع الفرق
+    'بيبيفوت': [2], // 2 ضد 2 في وضع الفرق
+    'قدم': [9], // 9 ضد 9
+    'سله': [5], // 5 ضد 5
     'طائره': [2, 3, 5, 6], // خيارات متعددة للفرق
-    'بادل': [2],     // 2 ضد 2
+    'بادل': [2], // 2 ضد 2
     'تنس طاولة': [2], // دبلز 2 ضد 2
     'تنس ارضي': [2], // دبلز 2 ضد 2
   };
@@ -109,7 +110,9 @@ class _MatchPageState extends State<MatchPage> {
       'sbeeta',
       'سبيتة',
     ];
-    return cardGames.any((c) => g.toLowerCase().contains(c.trim().toLowerCase())) && !g.toLowerCase().contains('uno');
+    return cardGames
+            .any((c) => g.toLowerCase().contains(c.trim().toLowerCase())) &&
+        !g.toLowerCase().contains('uno');
   }
 
   void _resetQaid() {
@@ -173,7 +176,8 @@ class _MatchPageState extends State<MatchPage> {
     } else {
       final map = last['scores'] as Map<String, dynamic>? ?? {};
       map.forEach((uid, v) {
-        _qaidPlayerScores[uid] = (_qaidPlayerScores[uid] ?? 0) - (v as int? ?? 0);
+        _qaidPlayerScores[uid] =
+            (_qaidPlayerScores[uid] ?? 0) - (v as int? ?? 0);
       });
     }
     setState(() {});
@@ -183,7 +187,14 @@ class _MatchPageState extends State<MatchPage> {
     final uid = (p['userId'] ?? '').toString();
     if (uid.isNotEmpty) return uid;
     final user = p['user'] as Map<String, dynamic>? ?? const {};
-    final name = (user['displayName'] ?? user['name'] ?? user['email'] ?? user['phone'] ?? '').toString().trim().toLowerCase();
+    final name = (user['displayName'] ??
+            user['name'] ??
+            user['email'] ??
+            user['phone'] ??
+            '')
+        .toString()
+        .trim()
+        .toLowerCase();
     if (name.isNotEmpty) return 'name:$name';
     return p.hashCode.toString();
   }
@@ -223,7 +234,8 @@ class _MatchPageState extends State<MatchPage> {
     final code = (widget.room?['code'] ?? widget.app.roomCode ?? '').toString();
     final mode = widget.room?['mode']?.toString();
     final teamModeFlag = widget.room?['teamMode'];
-    final initialGame = (widget.room?['gameId'] ?? widget.app.selectedGame ?? '').toString();
+    final initialGame =
+        (widget.room?['gameId'] ?? widget.app.selectedGame ?? '').toString();
     _currentGameMode = widget.app.gameMode(initialGame);
     // حضّر القيد إذا اللعبة من ألعاب الجنجفه
     if (_isCardGame(initialGame)) {
@@ -260,7 +272,8 @@ class _MatchPageState extends State<MatchPage> {
     super.dispose();
   }
 
-  void _msg(String m, {Color? color, IconData? icon, bool animateIcon = false}) {
+  void _msg(String m,
+      {Color? color, IconData? icon, bool animateIcon = false}) {
     final bool error = color == Colors.red || color == Colors.redAccent;
     final bool success = color == Colors.green || color == Colors.greenAccent;
     showAppSnack(context, m, error: error, success: success);
@@ -271,13 +284,16 @@ class _MatchPageState extends State<MatchPage> {
       bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
       if (!serviceEnabled) return null;
       LocationPermission permission = await Geolocator.checkPermission();
-      if (permission == LocationPermission.denied || permission == LocationPermission.deniedForever) {
+      if (permission == LocationPermission.denied ||
+          permission == LocationPermission.deniedForever) {
         permission = await Geolocator.requestPermission();
-        if (permission == LocationPermission.denied || permission == LocationPermission.deniedForever) {
+        if (permission == LocationPermission.denied ||
+            permission == LocationPermission.deniedForever) {
           return null;
         }
       }
-      return await Geolocator.getCurrentPosition(desiredAccuracy: LocationAccuracy.best);
+      return await Geolocator.getCurrentPosition(
+          desiredAccuracy: LocationAccuracy.best);
     } catch (_) {
       return null;
     }
@@ -291,15 +307,16 @@ class _MatchPageState extends State<MatchPage> {
 
   String _nameForUser(String uid) {
     final p = _uniquePlayersList.firstWhere(
-          (e) => (e['userId'] ?? '').toString() == uid,
+      (e) => (e['userId'] ?? '').toString() == uid,
       orElse: () => const <String, dynamic>{},
     );
     final user = p['user'] as Map<String, dynamic>? ?? const {};
     return (user['displayName'] ??
-        user['name'] ??
-        user['email'] ??
-        user['phone'] ??
-        uid).toString();
+            user['name'] ??
+            user['email'] ??
+            user['phone'] ??
+            uid)
+        .toString();
   }
 
   // نخلي الـ lock من الباكند فقط
@@ -358,7 +375,12 @@ class _MatchPageState extends State<MatchPage> {
   String _nameForMap(Map<String, dynamic> p) {
     final uid = (p['userId'] ?? '').toString();
     final user = p['user'] as Map<String, dynamic>? ?? const {};
-    return (user['displayName'] ?? user['name'] ?? user['email'] ?? user['phone'] ?? uid).toString();
+    return (user['displayName'] ??
+            user['name'] ??
+            user['email'] ??
+            user['phone'] ??
+            uid)
+        .toString();
   }
 
   void _enforceGameMode() {
@@ -381,65 +403,74 @@ class _MatchPageState extends State<MatchPage> {
   bool _validateSetup(String game) {
     final count = _uniquePlayersList.length;
 
-      if (_teamMode) {
-        final sizeA = _teamOf.values.where((t) => t == 'A').length;
-        final sizeB = _teamOf.values.where((t) => t == 'B').length;
-        if (sizeA == 0 || sizeB == 0) {
-          _msg('وزّع اللاعبين على الفريقين أولاً', icon: Icons.error, color: Colors.orange);
-          return false;
-        }
-        if (sizeA != sizeB) {
-          _msg('لازم عدد الفريقين يكون متساوي', icon: Icons.error, color: Colors.orange);
-          return false;
-        }
-        final allowed = _teamSizeRules[game];
-        if (allowed != null && !allowed.contains(sizeA)) {
-          final txt = allowed.map((n) => '$n ضد $n').join(' أو ');
-          _msg('لعبة $game تسمح بـ $txt فقط', icon: Icons.error, color: Colors.orange);
-          return false;
-        }
-      } else {
-        if (game == 'هند' && count != _hindSoloSize) {
-          _msg('هند فردي لازم يكونوا $_hindSoloSize لاعبين', icon: Icons.error, color: Colors.orange);
-          return false;
-        }
-        if (game == 'سبيتة' && count != _spitaSoloSize) {
-          _msg('سبيتة فردي لازم يكونوا $_spitaSoloSize لاعبين', icon: Icons.error, color: Colors.orange);
-          return false;
-        }
-        if (game == 'شطرنج' && count != 2) {
-          _msg('شطرنج فردي فقط 1 ضد 1', icon: Icons.error, color: Colors.orange);
-          return false;
-        }
-        if (game == 'دامه' && count != 2) {
-          _msg('دامه فردي فقط 1 ضد 1', icon: Icons.error, color: Colors.orange);
-          return false;
-        }
-        if (game == 'دومنه' && count != 2) {
-          _msg('دومنه فردي فقط 1 ضد 1', icon: Icons.error, color: Colors.orange);
-          return false;
-        }
-        if (game == 'طاوله' && count != 2) {
-          _msg('طاوله فردي فقط 1 ضد 1', icon: Icons.error, color: Colors.orange);
-          return false;
-        }
-        if (game == 'بلياردو' && count != 2) {
-          _msg('بلياردو فردي فقط 1 ضد 1', icon: Icons.error, color: Colors.orange);
-          return false;
-        }
-        if (game == 'بيبيفوت' && count != 2 && _teamMode == false) {
-          _msg('بيبي فوت فردي فقط 1 ضد 1 أو فرق 2 ضد 2', icon: Icons.error, color: Colors.orange);
-          return false;
-        }
-        if (game == 'تنس طاولة' && _teamMode == false && count != 2) {
-          _msg('تنس طاولة فردي 1 ضد 1 أو فرق 2 ضد 2', icon: Icons.error, color: Colors.orange);
-          return false;
-        }
-        if (game == 'تنس ارضي' && _teamMode == false && count != 2) {
-          _msg('تنس فردي 1 ضد 1 أو فرق 2 ضد 2', icon: Icons.error, color: Colors.orange);
-          return false;
-        }
+    if (_teamMode) {
+      final sizeA = _teamOf.values.where((t) => t == 'A').length;
+      final sizeB = _teamOf.values.where((t) => t == 'B').length;
+      if (sizeA == 0 || sizeB == 0) {
+        _msg('وزّع اللاعبين على الفريقين أولاً',
+            icon: Icons.error, color: Colors.orange);
+        return false;
       }
+      if (sizeA != sizeB) {
+        _msg('لازم عدد الفريقين يكون متساوي',
+            icon: Icons.error, color: Colors.orange);
+        return false;
+      }
+      final allowed = _teamSizeRules[game];
+      if (allowed != null && !allowed.contains(sizeA)) {
+        final txt = allowed.map((n) => '$n ضد $n').join(' أو ');
+        _msg('لعبة $game تسمح بـ $txt فقط',
+            icon: Icons.error, color: Colors.orange);
+        return false;
+      }
+    } else {
+      if (game == 'هند' && count != _hindSoloSize) {
+        _msg('هند فردي لازم يكونوا $_hindSoloSize لاعبين',
+            icon: Icons.error, color: Colors.orange);
+        return false;
+      }
+      if (game == 'سبيتة' && count != _spitaSoloSize) {
+        _msg('سبيتة فردي لازم يكونوا $_spitaSoloSize لاعبين',
+            icon: Icons.error, color: Colors.orange);
+        return false;
+      }
+      if (game == 'شطرنج' && count != 2) {
+        _msg('شطرنج فردي فقط 1 ضد 1', icon: Icons.error, color: Colors.orange);
+        return false;
+      }
+      if (game == 'دامه' && count != 2) {
+        _msg('دامه فردي فقط 1 ضد 1', icon: Icons.error, color: Colors.orange);
+        return false;
+      }
+      if (game == 'دومنه' && count != 2) {
+        _msg('دومنه فردي فقط 1 ضد 1', icon: Icons.error, color: Colors.orange);
+        return false;
+      }
+      if (game == 'طاوله' && count != 2) {
+        _msg('طاوله فردي فقط 1 ضد 1', icon: Icons.error, color: Colors.orange);
+        return false;
+      }
+      if (game == 'بلياردو' && count != 2) {
+        _msg('بلياردو فردي فقط 1 ضد 1',
+            icon: Icons.error, color: Colors.orange);
+        return false;
+      }
+      if (game == 'بيبيفوت' && count != 2 && _teamMode == false) {
+        _msg('بيبي فوت فردي فقط 1 ضد 1 أو فرق 2 ضد 2',
+            icon: Icons.error, color: Colors.orange);
+        return false;
+      }
+      if (game == 'تنس طاولة' && _teamMode == false && count != 2) {
+        _msg('تنس طاولة فردي 1 ضد 1 أو فرق 2 ضد 2',
+            icon: Icons.error, color: Colors.orange);
+        return false;
+      }
+      if (game == 'تنس ارضي' && _teamMode == false && count != 2) {
+        _msg('تنس فردي 1 ضد 1 أو فرق 2 ضد 2',
+            icon: Icons.error, color: Colors.orange);
+        return false;
+      }
+    }
 
     return true;
   }
@@ -450,7 +481,8 @@ class _MatchPageState extends State<MatchPage> {
       final prevStatus = _resultStatus;
       _resultStatus = state['status']?.toString();
       _resultPayload = state['payload'] as Map<String, dynamic>?;
-      _resultVotes = (state['votes'] as List?)?.cast<Map<String, dynamic>>() ?? const [];
+      _resultVotes =
+          (state['votes'] as List?)?.cast<Map<String, dynamic>>() ?? const [];
       _totalPlayers = (state['totalPlayers'] as num?)?.toInt() ?? 0;
       if (prevStatus != _resultStatus) {
         _resultNotified = false;
@@ -464,7 +496,9 @@ class _MatchPageState extends State<MatchPage> {
   void _maybeShowApprovalDialog() {
     if (_resultStatus == null) return;
     final myId = widget.app.userId ?? '';
-    final isHost = (_room?['hostUserId'] ?? widget.room?['hostUserId'])?.toString() == myId;
+    final isHost =
+        (_room?['hostUserId'] ?? widget.room?['hostUserId'])?.toString() ==
+            myId;
 
     if (_resultStatus == 'approved') {
       if (!_resultNotified) {
@@ -484,7 +518,8 @@ class _MatchPageState extends State<MatchPage> {
     }
 
     if (_resultStatus == 'pending' && !isHost) {
-      final alreadyVoted = _resultVotes.any((v) => (v['userId'] ?? '').toString() == myId);
+      final alreadyVoted =
+          _resultVotes.any((v) => (v['userId'] ?? '').toString() == myId);
       if (alreadyVoted) return;
       final payload = _resultPayload ?? const {};
       final winners = (payload['winners'] as List?)?.cast<String>() ?? const [];
@@ -510,10 +545,14 @@ class _MatchPageState extends State<MatchPage> {
                 onPressed: () async {
                   Navigator.pop(ctx, false);
                   try {
-                    await ApiRoom.voteResult(code: _room?['code'] ?? widget.room?['code'] ?? '', approve: false, token: widget.app.token);
-                  _msg('تم الرفض، سيُعاد تحديد النتيجة');
-                  Sfx.error(mute: widget.app.soundMuted == true);
-                    _refreshResultState(_room?['code'] ?? widget.room?['code'] ?? '');
+                    await ApiRoom.voteResult(
+                        code: _room?['code'] ?? widget.room?['code'] ?? '',
+                        approve: false,
+                        token: widget.app.token);
+                    _msg('تم الرفض، سيُعاد تحديد النتيجة');
+                    Sfx.error(mute: widget.app.soundMuted == true);
+                    _refreshResultState(
+                        _room?['code'] ?? widget.room?['code'] ?? '');
                   } finally {
                     _approvalDialogOpen = false;
                     _resultNotified = false;
@@ -525,10 +564,14 @@ class _MatchPageState extends State<MatchPage> {
                 onPressed: () async {
                   Navigator.pop(ctx, true);
                   try {
-                    await ApiRoom.voteResult(code: _room?['code'] ?? widget.room?['code'] ?? '', approve: true, token: widget.app.token);
+                    await ApiRoom.voteResult(
+                        code: _room?['code'] ?? widget.room?['code'] ?? '',
+                        approve: true,
+                        token: widget.app.token);
                     _msg('تمت الموافقة على النتيجة');
                     Sfx.tap(mute: widget.app.soundMuted == true);
-                    _refreshResultState(_room?['code'] ?? widget.room?['code'] ?? '');
+                    _refreshResultState(
+                        _room?['code'] ?? widget.room?['code'] ?? '');
                     widget.app.syncTimelineFromServer().catchError((_) {});
                   } finally {
                     _approvalDialogOpen = false;
@@ -576,15 +619,15 @@ class _MatchPageState extends State<MatchPage> {
       _pearlsByUser.clear();
       _teamOf.clear();
 
-      final gameId = (room['gameId'] ?? widget.app.selectedGame ?? '').toString();
+      final gameId =
+          (room['gameId'] ?? widget.app.selectedGame ?? '').toString();
       _currentGameMode = widget.app.gameMode(gameId);
 
       for (final rp in _uniquePlayersList) {
         final uid = (rp['userId'] ?? '').toString();
         final user = rp['user'] as Map<String, dynamic>?;
         // حاول نقرأ أي قيمة لؤلؤ متاحة من السيرفر، وإلا 5 افتراضي
-        int pearls =
-            (user?['pearls'] as num?)?.toInt() ??
+        int pearls = (user?['pearls'] as num?)?.toInt() ??
             (user?['creditBalance'] as num?)?.toInt() ??
             (user?['permanentScore'] as num?)?.toInt() ??
             5;
@@ -601,7 +644,6 @@ class _MatchPageState extends State<MatchPage> {
 
         final team = rp['team']?.toString();
         _teamOf[uid] = (team == 'A' || team == 'B') ? team : null;
-
       }
 
       final roomTeamMode = room['teamMode'];
@@ -621,7 +663,8 @@ class _MatchPageState extends State<MatchPage> {
         _teamMode = false;
       } else {
         final hasTeams = _teamOf.values.any((t) => t == 'A' || t == 'B');
-        final bothTeams = _teamOf.values.contains('A') && _teamOf.values.contains('B');
+        final bothTeams =
+            _teamOf.values.contains('A') && _teamOf.values.contains('B');
         if (bothTeams) {
           _teamMode = true;
         } else if (!hasTeams) {
@@ -636,7 +679,9 @@ class _MatchPageState extends State<MatchPage> {
       }
 
       // لو تغير نوع اللعب بين فردي/فرق أثناء الجولة للكوت/الجنجفة، صفّر القيد عشان يتوافق مع النمط
-      if (_startedAt != null && _isCardGame(gameId) && prevTeamMode != _teamMode) {
+      if (_startedAt != null &&
+          _isCardGame(gameId) &&
+          prevTeamMode != _teamMode) {
         _resetQaid();
       }
 
@@ -656,11 +701,12 @@ class _MatchPageState extends State<MatchPage> {
   @override
   Widget build(BuildContext context) {
     final code = (widget.room?['code'] ?? widget.app.roomCode ?? '').toString();
-    final game =
-    (widget.room?['gameId'] ?? widget.app.selectedGame ?? 'لعبة').toString();
+    final game = (widget.room?['gameId'] ?? widget.app.selectedGame ?? 'لعبة')
+        .toString();
     final sponsorCode = widget.sponsorCode;
 
-    final hostId = (_room?['hostUserId'] ?? widget.room?['hostUserId'])?.toString();
+    final hostId =
+        (_room?['hostUserId'] ?? widget.room?['hostUserId'])?.toString();
     final isHost = widget.app.userId != null && hostId == widget.app.userId;
     final bool qaidGame = _isCardGame(game);
     final bool started = _startedAt != null;
@@ -714,7 +760,8 @@ class _MatchPageState extends State<MatchPage> {
                     ),
                   ),
                   const SizedBox(height: 8),
-                  SelectableText('كود الروم: $code', textAlign: TextAlign.center),
+                  SelectableText('كود الروم: $code',
+                      textAlign: TextAlign.center),
                   const SizedBox(height: 12),
                   Align(
                     alignment: Alignment.center,
@@ -759,7 +806,8 @@ class _MatchPageState extends State<MatchPage> {
                           Expanded(
                             child: Text(
                               'النتيجة قيد الموافقة (${_resultVotes.where((v) => v['approve'] == true).length}/$_totalPlayers وافقوا)',
-                              style: const TextStyle(fontWeight: FontWeight.w700),
+                              style:
+                                  const TextStyle(fontWeight: FontWeight.w700),
                             ),
                           ),
                         ],
@@ -771,7 +819,9 @@ class _MatchPageState extends State<MatchPage> {
                     color: Colors.red.withValues(alpha: 0.12),
                     child: const Padding(
                       padding: EdgeInsets.all(12),
-                      child: Text('تم رفض النتيجة من أحد اللاعبين. حدّد الفائز من جديد.', style: TextStyle(color: Colors.red)),
+                      child: Text(
+                          'تم رفض النتيجة من أحد اللاعبين. حدّد الفائز من جديد.',
+                          style: TextStyle(color: Colors.red)),
                     ),
                   ),
 
@@ -782,44 +832,56 @@ class _MatchPageState extends State<MatchPage> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          const Text('وضع اللعب', style: TextStyle(fontWeight: FontWeight.w900)),
+                          const Text('وضع اللعب',
+                              style: TextStyle(fontWeight: FontWeight.w900)),
                           const SizedBox(height: 8),
                           if (_currentGameMode == GameMode.both)
                             SegmentedButton<bool>(
                               segments: const [
                                 ButtonSegment(value: true, label: Text('فرق')),
-                                ButtonSegment(value: false, label: Text('فردي')),
+                                ButtonSegment(
+                                    value: false, label: Text('فردي')),
                               ],
                               selected: {_teamMode},
-                            onSelectionChanged: (s) => setState(() {
-                              _teamMode = s.first;
-                              _winnerTeam = null;
-                              _winnerUserId = null;
-                              if (!_teamMode) {
-                                _teamOf.clear();
-                              }
-                              final gameName = (widget.room?['gameId'] ?? widget.app.selectedGame ?? '').toString();
-                              if (_isCardGame(gameName) && _startedAt != null) {
-                                _resetQaid();
-                              }
-                            }),
-                          )
+                              onSelectionChanged: (s) => setState(() {
+                                _teamMode = s.first;
+                                _winnerTeam = null;
+                                _winnerUserId = null;
+                                if (!_teamMode) {
+                                  _teamOf.clear();
+                                }
+                                final gameName = (widget.room?['gameId'] ??
+                                        widget.app.selectedGame ??
+                                        '')
+                                    .toString();
+                                if (_isCardGame(gameName) &&
+                                    _startedAt != null) {
+                                  _resetQaid();
+                                }
+                              }),
+                            )
                           else
                             Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 12, vertical: 10),
                               decoration: BoxDecoration(
                                 color: Colors.white.withValues(alpha: 0.06),
                                 borderRadius: BorderRadius.circular(12),
                               ),
                               child: Row(
                                 children: [
-                                  Icon(_currentGameMode == GameMode.team ? Icons.groups : Icons.person, size: 18),
+                                  Icon(
+                                      _currentGameMode == GameMode.team
+                                          ? Icons.groups
+                                          : Icons.person,
+                                      size: 18),
                                   const SizedBox(width: 8),
                                   Text(
                                     _currentGameMode == GameMode.team
                                         ? 'هذه اللعبة تُلعب كفرق فقط'
                                         : 'هذه اللعبة تُلعب كفردي فقط',
-                                    style: const TextStyle(fontWeight: FontWeight.w700),
+                                    style: const TextStyle(
+                                        fontWeight: FontWeight.w700),
                                   ),
                                 ],
                               ),
@@ -836,17 +898,24 @@ class _MatchPageState extends State<MatchPage> {
                   child: FilledButton.icon(
                     icon: const Icon(Icons.play_circle_outline),
                     style: FilledButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 24, vertical: 14),
                       minimumSize: const Size(240, 54),
                     ),
                     label: const Text('بدء عدّاد (10 دقائق)'),
                     onPressed: () async {
                       if (code.isEmpty) return;
                       if (_uniquePlayersList.length < 2) {
-                        _msg('ما يصير تبلش بروحك', icon: Icons.close, color: Colors.red, animateIcon: true);
+                        _msg('ما يصير تبلش بروحك',
+                            icon: Icons.close,
+                            color: Colors.red,
+                            animateIcon: true);
                         return;
                       }
-                      final gameName = (widget.room?['gameId'] ?? widget.app.selectedGame ?? '').toString();
+                      final gameName = (widget.room?['gameId'] ??
+                              widget.app.selectedGame ??
+                              '')
+                          .toString();
                       if (!_validateSetup(gameName)) return;
                       try {
                         final data = await ApiRoom.startRoom(
@@ -899,7 +968,8 @@ class _MatchPageState extends State<MatchPage> {
                 Builder(builder: (context) {
                   final uniquePlayers = _uniquePlayersList;
                   if (uniquePlayers.isEmpty) {
-                    return const Text('لاعب واحد (أنت). إن لم يظهر، حدّث/شّرف من جهاز آخر.');
+                    return const Text(
+                        'لاعب واحد (أنت). إن لم يظهر، حدّث/شّرف من جهاز آخر.');
                   }
                   return Wrap(
                     spacing: 8,
@@ -914,16 +984,21 @@ class _MatchPageState extends State<MatchPage> {
                       final team = _teamOf[uid] ?? '';
                       final pearls = _pearlsByUser[uid] ?? 0;
                       return Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 12, vertical: 10),
                         decoration: BoxDecoration(
                           color: Colors.white.withValues(alpha: 0.06),
                           borderRadius: BorderRadius.circular(12),
-                          border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
+                          border: Border.all(
+                              color: Colors.white.withValues(alpha: 0.08)),
                         ),
                         child: Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            Text(name, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w700)),
+                            Text(name,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(
+                                    fontWeight: FontWeight.w700)),
                             if (_teamMode && team.isNotEmpty) ...[
                               const SizedBox(width: 4),
                               Text('($team)'),
@@ -940,7 +1015,8 @@ class _MatchPageState extends State<MatchPage> {
                 if (_startedAt == null)
                   const Padding(
                     padding: EdgeInsets.only(top: 6.0),
-                    child: Text('اختر الفائز بعد بدء العداد.', style: TextStyle(color: Colors.white70)),
+                    child: Text('اختر الفائز بعد بدء العداد.',
+                        style: TextStyle(color: Colors.white70)),
                   )
                 else if (_teamMode)
                   Row(
@@ -949,7 +1025,8 @@ class _MatchPageState extends State<MatchPage> {
                       ChoiceChip(
                         selected: _winnerTeam == 'A',
                         selectedColor: Colors.blue.withValues(alpha: 0.2),
-                        labelStyle: TextStyle(color: _winnerTeam == 'A' ? Colors.blue : null),
+                        labelStyle: TextStyle(
+                            color: _winnerTeam == 'A' ? Colors.blue : null),
                         label: const Text('الفريق A'),
                         onSelected: (_) => setState(() => _winnerTeam = 'A'),
                       ),
@@ -957,7 +1034,8 @@ class _MatchPageState extends State<MatchPage> {
                       ChoiceChip(
                         selected: _winnerTeam == 'B',
                         selectedColor: Colors.red.withValues(alpha: 0.2),
-                        labelStyle: TextStyle(color: _winnerTeam == 'B' ? Colors.red : null),
+                        labelStyle: TextStyle(
+                            color: _winnerTeam == 'B' ? Colors.red : null),
                         label: const Text('الفريق B'),
                         onSelected: (_) => setState(() => _winnerTeam = 'B'),
                       ),
@@ -1020,11 +1098,15 @@ class _MatchPageState extends State<MatchPage> {
                   FilledButton.icon(
                     icon: const Icon(Icons.flag),
                     style: FilledButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 18),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 28, vertical: 18),
                       minimumSize: const Size.fromHeight(62),
-                      textStyle: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
+                      textStyle: const TextStyle(
+                          fontSize: 18, fontWeight: FontWeight.w700),
                     ),
-                    label: Text(_resultStatus == 'pending' ? 'النتيجة قيد الموافقة' : 'حسم النتيجة'),
+                    label: Text(_resultStatus == 'pending'
+                        ? 'النتيجة قيد الموافقة'
+                        : 'حسم النتيجة'),
                     onPressed: _locked
                         ? () => _msg('انتظر انتهاء العداد')
                         : () async {
@@ -1055,11 +1137,15 @@ class _MatchPageState extends State<MatchPage> {
                                 }
                                 winners = _uniquePlayersList
                                     .map((p) => p['userId']?.toString() ?? '')
-                                    .where((uid) => uid.isNotEmpty && (_teamOf[uid] ?? '') == _winnerTeam)
+                                    .where((uid) =>
+                                        uid.isNotEmpty &&
+                                        (_teamOf[uid] ?? '') == _winnerTeam)
                                     .toList();
                                 losers = _uniquePlayersList
                                     .map((p) => p['userId']?.toString() ?? '')
-                                    .where((uid) => uid.isNotEmpty && (_teamOf[uid] ?? '') != _winnerTeam)
+                                    .where((uid) =>
+                                        uid.isNotEmpty &&
+                                        (_teamOf[uid] ?? '') != _winnerTeam)
                                     .toList();
                                 winnerName = 'الفريق ${_winnerTeam!}';
                               } else {
@@ -1070,12 +1156,14 @@ class _MatchPageState extends State<MatchPage> {
                                 winners = [_winnerUserId!];
                                 losers = _uniquePlayersList
                                     .map((p) => p['userId']?.toString() ?? '')
-                                    .where((uid) => uid.isNotEmpty && uid != _winnerUserId)
+                                    .where((uid) =>
+                                        uid.isNotEmpty && uid != _winnerUserId)
                                     .toList();
                                 winnerName = _nameForUser(_winnerUserId!);
                               }
 
-                              final loserNames = losers.map(_nameForUser).join('، ');
+                              final loserNames =
+                                  losers.map(_nameForUser).join('، ');
                               winners = winners.toSet().toList();
                               losers = losers.toSet().toList();
                               final confirm = await showDialog<bool>(
@@ -1086,16 +1174,19 @@ class _MatchPageState extends State<MatchPage> {
                                     title: const Text('تأكيد النتيجة'),
                                     content: Text([
                                       'الفائز: $winnerName',
-                                      if (loserNames.isNotEmpty) 'الخاسرون: $loserNames',
+                                      if (loserNames.isNotEmpty)
+                                        'الخاسرون: $loserNames',
                                       'سيتم انتظار موافقة كل اللاعبين.',
                                     ].join('\n')),
                                     actions: [
                                       TextButton(
-                                        onPressed: () => Navigator.pop(ctx, false),
+                                        onPressed: () =>
+                                            Navigator.pop(ctx, false),
                                         child: const Text('إلغاء'),
                                       ),
                                       FilledButton(
-                                        onPressed: () => Navigator.pop(ctx, true),
+                                        onPressed: () =>
+                                            Navigator.pop(ctx, true),
                                         child: const Text('إرسال للموافقة'),
                                       ),
                                     ],
@@ -1104,29 +1195,34 @@ class _MatchPageState extends State<MatchPage> {
                               );
                               if (confirm != true) return;
 
-                          await ApiRoom.submitResult(
-                            code: codeSafe,
-                            winners: winners,
-                            losers: losers,
-                            token: widget.app.token,
-                          );
+                              await ApiRoom.submitResult(
+                                code: codeSafe,
+                                winners: winners,
+                                losers: losers,
+                                token: widget.app.token,
+                              );
 
-                          // حدّث اللآلئ محلياً مباشرةً (كل فائز +1، كل خاسر -1)
-                          for (final w in winners.toSet()) {
-                            _pearlsByUser[w] = (_pearlsByUser[w] ?? 0) + 1;
-                          }
-                          for (final l in losers.toSet()) {
-                            _pearlsByUser[l] = (_pearlsByUser[l] ?? 0) - 1;
-                          }
+                              // حدّث اللآلئ محلياً مباشرةً (كل فائز +1، كل خاسر -1)
+                              for (final w in winners.toSet()) {
+                                _pearlsByUser[w] = (_pearlsByUser[w] ?? 0) + 1;
+                              }
+                              for (final l in losers.toSet()) {
+                                _pearlsByUser[l] = (_pearlsByUser[l] ?? 0) - 1;
+                              }
 
-                          _msg('أُرسلت النتيجة — بانتظار موافقة الجميع');
-                          // حدّث الخط الزمني / الإحصائيات عشان النتائج تظهر فوراً
-                          await widget.app.syncTimelineFromServer().catchError((_) {});
-                          setState(() {
-                            _resultStatus = 'pending';
-                            _resultPayload = {'winners': winners, 'losers': losers};
-                            _winnerUserId = null;
-                            _winnerTeam = null;
+                              _msg('أُرسلت النتيجة — بانتظار موافقة الجميع');
+                              // حدّث الخط الزمني / الإحصائيات عشان النتائج تظهر فوراً
+                              await widget.app
+                                  .syncTimelineFromServer()
+                                  .catchError((_) {});
+                              setState(() {
+                                _resultStatus = 'pending';
+                                _resultPayload = {
+                                  'winners': winners,
+                                  'losers': losers
+                                };
+                                _winnerUserId = null;
+                                _winnerTeam = null;
                               });
                               _refreshResultState(codeSafe);
                             } catch (e) {
@@ -1168,31 +1264,31 @@ class _MatchPageState extends State<MatchPage> {
                         onPressed: _locked
                             ? () => _msg('الشّرف مغلق أثناء العدّاد')
                             : () async {
-                          final inputCode = _codeCtrl.text.trim().isEmpty
-                              ? code
-                              : _codeCtrl.text.trim();
-                          if (inputCode.isEmpty) {
-                            _msg('اكتب الكود للانضمام');
-                            return;
-                          }
-                          if (!widget.app.isSignedIn) {
-                            _msg('سجّل دخول أول');
-                            return;
-                          }
-                          try {
-                            final pos = await _getLocation();
-                            await ApiRoom.joinByCode(
-                              code: inputCode,
-                              token: widget.app.token,
-                              lat: pos?.latitude,
-                              lng: pos?.longitude,
-                            );
-                            _msg('تم الانضمام ✅');
-                            _refresh(inputCode);
-                          } catch (e) {
-                            _msg('خطأ: $e');
-                          }
-                        },
+                                final inputCode = _codeCtrl.text.trim().isEmpty
+                                    ? code
+                                    : _codeCtrl.text.trim();
+                                if (inputCode.isEmpty) {
+                                  _msg('اكتب الكود للانضمام');
+                                  return;
+                                }
+                                if (!widget.app.isSignedIn) {
+                                  _msg('سجّل دخول أول');
+                                  return;
+                                }
+                                try {
+                                  final pos = await _getLocation();
+                                  await ApiRoom.joinByCode(
+                                    code: inputCode,
+                                    token: widget.app.token,
+                                    lat: pos?.latitude,
+                                    lng: pos?.longitude,
+                                  );
+                                  _msg('تم الانضمام ✅');
+                                  _refresh(inputCode);
+                                } catch (e) {
+                                  _msg('خطأ: $e');
+                                }
+                              },
                         child: const Text('انضم'),
                       ),
                     ],
@@ -1225,7 +1321,8 @@ class _MatchPageState extends State<MatchPage> {
                           ),
                         ),
                         const SizedBox(height: 10),
-                        const Text('العدّاد شغّال، انتظر لين يخلص', style: TextStyle(color: Colors.white70)),
+                        const Text('العدّاد شغّال، انتظر لين يخلص',
+                            style: TextStyle(color: Colors.white70)),
                       ],
                     ),
                   ),
@@ -1299,8 +1396,12 @@ class _AssignTeamsCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final onSurface = Theme.of(context).colorScheme.onSurface;
-    final teamA = players.where((p) => teamOf[(p['userId'] ?? '').toString()] == 'A').toList();
-    final teamB = players.where((p) => teamOf[(p['userId'] ?? '').toString()] == 'B').toList();
+    final teamA = players
+        .where((p) => teamOf[(p['userId'] ?? '').toString()] == 'A')
+        .toList();
+    final teamB = players
+        .where((p) => teamOf[(p['userId'] ?? '').toString()] == 'B')
+        .toList();
 
     return Card(
       child: Padding(
@@ -1351,7 +1452,9 @@ class _AssignTeamsCard extends StatelessWidget {
                 padding: const EdgeInsets.symmetric(vertical: 6),
                 child: Row(
                   children: [
-                    Expanded(child: Text(name, maxLines: 1, overflow: TextOverflow.ellipsis)),
+                    Expanded(
+                        child: Text(name,
+                            maxLines: 1, overflow: TextOverflow.ellipsis)),
                     const SizedBox(width: 8),
                     _pearlPill(pearls),
                     const SizedBox(width: 8),
@@ -1388,11 +1491,13 @@ class _AssignTeamsCard extends StatelessWidget {
                         children: const [
                           Padding(
                             padding: EdgeInsets.symmetric(horizontal: 12),
-                            child: Text('A', style: TextStyle(fontWeight: FontWeight.w700)),
+                            child: Text('A',
+                                style: TextStyle(fontWeight: FontWeight.w700)),
                           ),
                           Padding(
                             padding: EdgeInsets.symmetric(horizontal: 12),
-                            child: Text('B', style: TextStyle(fontWeight: FontWeight.w700)),
+                            child: Text('B',
+                                style: TextStyle(fontWeight: FontWeight.w700)),
                           ),
                         ],
                       ),
@@ -1521,7 +1626,8 @@ class _QaidCard extends StatelessWidget {
               children: const [
                 Icon(Icons.calculate),
                 SizedBox(width: 8),
-                Text('قيد الجولة (الجنجفه)', style: TextStyle(fontWeight: FontWeight.w900)),
+                Text('قيد الجولة (الجنجفه)',
+                    style: TextStyle(fontWeight: FontWeight.w900)),
               ],
             ),
             const SizedBox(height: 10),
@@ -1548,7 +1654,8 @@ class _QaidCard extends StatelessWidget {
                 ],
               ),
             ] else ...[
-              const Text('قيد اللاعبين (فردي)', style: TextStyle(fontWeight: FontWeight.w800)),
+              const Text('قيد اللاعبين (فردي)',
+                  style: TextStyle(fontWeight: FontWeight.w800)),
               const SizedBox(height: 8),
               Wrap(
                 spacing: 8,
@@ -1557,13 +1664,17 @@ class _QaidCard extends StatelessWidget {
                   final uid = (p['userId'] ?? '').toString();
                   if (uid.isEmpty) return const SizedBox.shrink();
                   final user = p['user'] as Map<String, dynamic>?;
-                  final name = user?['displayName']?.toString() ?? user?['email']?.toString() ?? uid;
+                  final name = user?['displayName']?.toString() ??
+                      user?['email']?.toString() ??
+                      uid;
                   final score = playerScores[uid] ?? 0;
                   final remain = (target - score).clamp(-999999, 999999);
-                  final ctrl = playerInputs.putIfAbsent(uid, () => TextEditingController());
+                  final ctrl = playerInputs.putIfAbsent(
+                      uid, () => TextEditingController());
                   return SizedBox(
                     width: 170,
-                    child: _QaidSoloBox(name: name, score: score, remain: remain, input: ctrl),
+                    child: _QaidSoloBox(
+                        name: name, score: score, remain: remain, input: ctrl),
                   );
                 }).toList(),
               ),
@@ -1622,7 +1733,8 @@ class _QaidTeamBox extends StatelessWidget {
         children: [
           Text(title, style: const TextStyle(fontWeight: FontWeight.w900)),
           const SizedBox(height: 4),
-          Text('المجموع: $score', style: const TextStyle(fontWeight: FontWeight.w700)),
+          Text('المجموع: $score',
+              style: const TextStyle(fontWeight: FontWeight.w700)),
           const SizedBox(height: 8),
           Row(
             children: [
@@ -1681,7 +1793,8 @@ class _QaidSoloBox extends StatelessWidget {
         children: [
           Text(name, style: const TextStyle(fontWeight: FontWeight.w800)),
           const SizedBox(height: 4),
-          Text('المجموع: $score', style: const TextStyle(fontWeight: FontWeight.w700)),
+          Text('المجموع: $score',
+              style: const TextStyle(fontWeight: FontWeight.w700)),
           const SizedBox(height: 8),
           TextField(
             controller: input,
