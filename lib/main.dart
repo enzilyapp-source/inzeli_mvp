@@ -1,4 +1,5 @@
 // lib/main.dart
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'dart:convert';
 import 'package:flutter_localizations/flutter_localizations.dart';
@@ -115,18 +116,41 @@ class AuthGate extends StatefulWidget {
   State<AuthGate> createState() => _AuthGateState();
 }
 
-class _AuthGateState extends State<AuthGate> {
+class _AuthGateState extends State<AuthGate> with WidgetsBindingObserver {
   final AppState app = AppState();
   bool _loading = true;
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    app.addListener(_onAppChanged);
     _boot();
+  }
+
+  @override
+  void dispose() {
+    app.removeListener(_onAppChanged);
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed && app.isSignedIn) {
+      unawaited(app.refreshSessionFromServer());
+    }
+  }
+
+  void _onAppChanged() {
+    if (mounted) setState(() {});
   }
 
   Future<void> _boot() async {
     await app.load(); // SharedPreferences (auth)
+    if (app.isSignedIn) {
+      unawaited(app.refreshSessionFromServer(force: true));
+    }
     if (mounted) setState(() => _loading = false);
   }
 

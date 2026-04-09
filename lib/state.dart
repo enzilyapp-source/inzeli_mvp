@@ -144,6 +144,8 @@ class AppState extends ChangeNotifier {
       userId != null &&
       userId!.isNotEmpty);
   bool get isEnglish => (language ?? 'ar') == 'en';
+  bool _refreshingSession = false;
+  DateTime? _lastSessionRefreshAt;
 
   /// Helper to pick localized strings without a full i18n system.
   String tr({required String ar, required String en}) => isEnglish ? en : ar;
@@ -542,7 +544,96 @@ class AppState extends ChangeNotifier {
     }
   }
 
+  Future<void> refreshSessionFromServer({
+    bool force = false,
+    Duration minInterval = const Duration(seconds: 12),
+  }) async {
+    final auth = token;
+    if (auth == null || auth.isEmpty) return;
+    if (_refreshingSession) return;
+
+    final now = DateTime.now();
+    if (!force &&
+        _lastSessionRefreshAt != null &&
+        now.difference(_lastSessionRefreshAt!) < minInterval) {
+      return;
+    }
+
+    _refreshingSession = true;
+    try {
+      final me = await getMyProfile(token: auth);
+      _lastSessionRefreshAt = DateTime.now();
+
+      // Keep users logged in unless token is definitely invalid.
+      if (me.data == null) {
+        if (me.statusCode == 401 || me.statusCode == 403) {
+          await clearAuth();
+        }
+        return;
+      }
+
+      String? asNullableString(dynamic value) {
+        if (value == null) return null;
+        final s = value.toString().trim();
+        return s.isEmpty ? null : s;
+      }
+
+      final data = me.data!;
+      userId = asNullableString(data['id']) ?? userId;
+      publicId = asNullableString(data['publicId']) ?? publicId;
+      displayName = asNullableString(data['displayName']) ?? displayName;
+      email = asNullableString(data['email']) ?? email;
+      avatarBase64 = asNullableString(data['avatarBase64']) ?? avatarBase64;
+      avatarPath = asNullableString(data['avatarPath']) ?? avatarPath;
+      themeId = asNullableString(data['themeId']) ?? themeId;
+      frameId = asNullableString(data['frameId']) ?? frameId;
+      cardId = asNullableString(data['cardId']) ?? cardId;
+      permanentScore =
+          (data['permanentScore'] as num?)?.toInt() ?? permanentScore;
+      creditPoints = (data['creditPoints'] as num?)?.toInt() ?? creditPoints;
+      creditBalance = (data['creditBalance'] as num?)?.toInt() ?? creditBalance;
+      name = displayName ?? name;
+
+      final gp = data['gamePearls'];
+      if (gp is Map) {
+        gamePearls =
+            gp.map((k, v) => MapEntry(k.toString(), (v as num?)?.toInt() ?? 0));
+      }
+
+      final profileSnapshot = <String, dynamic>{
+        if (userId != null && userId!.isNotEmpty) 'id': userId,
+        if (publicId != null && publicId!.isNotEmpty) 'publicId': publicId,
+        if (displayName != null && displayName!.isNotEmpty)
+          'displayName': displayName,
+        if (avatarBase64 != null && avatarBase64!.isNotEmpty)
+          'avatarBase64': avatarBase64,
+        if (avatarPath != null && avatarPath!.isNotEmpty)
+          'avatarPath': avatarPath,
+        if (themeId != null && themeId!.isNotEmpty) 'themeId': themeId,
+        if (frameId != null && frameId!.isNotEmpty) 'frameId': frameId,
+        if (cardId != null && cardId!.isNotEmpty) 'cardId': cardId,
+      };
+      if (profileSnapshot.isNotEmpty) {
+        if (userId != null && userId!.isNotEmpty) {
+          userProfiles[userId!] = Map<String, dynamic>.from(profileSnapshot);
+        }
+        if (publicId != null && publicId!.isNotEmpty) {
+          userProfiles[publicId!] = Map<String, dynamic>.from(profileSnapshot);
+        }
+      }
+
+      await _save();
+      notifyListeners();
+    } catch (_) {
+      // ignore temporary network failures; keep local session alive.
+    } finally {
+      _refreshingSession = false;
+    }
+  }
+
   Future<void> clearAuth() async {
+    _refreshingSession = false;
+    _lastSessionRefreshAt = null;
     token = null;
     userId = null;
     publicId = null;
