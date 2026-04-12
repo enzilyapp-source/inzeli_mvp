@@ -118,6 +118,8 @@ class _PlayerProfilePageState extends State<PlayerProfilePage> {
           return AvatarEffectType.greenLeaf;
         case 'flameBlue':
           return AvatarEffectType.flameBlue;
+        case 'whiteSparkle':
+          return AvatarEffectType.whiteSparkle;
         default:
           return null;
       }

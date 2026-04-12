@@ -49,8 +49,10 @@ class _SignInPageState extends State<SignInPage> {
     super.dispose();
   }
 
-  void _msg(String m, {bool error = false, bool success = false}) =>
-      showAppSnack(context, m, error: error, success: success);
+  void _msg(String m, {bool error = false, bool success = false}) {
+    if (!mounted) return;
+    showAppSnack(context, m, error: error, success: success);
+  }
 
   void _resetOtpState() {
     _awaitingOtp = false;

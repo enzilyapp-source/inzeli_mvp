@@ -16,7 +16,8 @@ class ApiDewanyah {
     throw Exception('Invalid JSON');
   }
 
-  static Map<String, dynamic> _dataOrThrow(http.Response res, {String fallback = 'Request failed'}) {
+  static Map<String, dynamic> _dataOrThrow(http.Response res,
+      {String fallback = 'Request failed'}) {
     final m = _decode(res);
     if (res.statusCode >= 400 || m['ok'] != true) {
       final msg = m['message']?.toString() ?? fallback;
@@ -33,6 +34,9 @@ class ApiDewanyah {
     required String contact,
     String? gameId,
     String? note,
+    int? prizeAmount,
+    double? anchorLat,
+    double? anchorLng,
     bool? requireApproval,
     bool? locationLock,
     int? radiusMeters,
@@ -47,6 +51,9 @@ class ApiDewanyah {
             'contact': contact,
             if (gameId != null) 'gameId': gameId,
             if (note != null) 'note': note,
+            if (prizeAmount != null) 'prizeAmount': prizeAmount,
+            if (anchorLat != null) 'anchorLat': anchorLat,
+            if (anchorLng != null) 'anchorLng': anchorLng,
             if (requireApproval != null) 'requireApproval': requireApproval,
             if (locationLock != null) 'locationLock': locationLock,
             if (radiusMeters != null) 'radiusMeters': radiusMeters,
@@ -78,10 +85,16 @@ class ApiDewanyah {
   static Future<List<Map<String, dynamic>>> leaderboard({
     required String dewanyahId,
     int limit = 100,
+    String? gameId,
   }) async {
+    final query = <String, String>{
+      'limit': '$limit',
+      if (gameId != null && gameId.trim().isNotEmpty) 'gameId': gameId.trim(),
+    };
     final res = await http
         .get(
-          Uri.parse('$apiBase/dewanyah/$dewanyahId/leaderboard?limit=$limit'),
+          Uri.parse('$apiBase/dewanyah/$dewanyahId/leaderboard')
+              .replace(queryParameters: query),
           headers: _headers(null),
         )
         .timeout(_timeout);
@@ -99,14 +112,17 @@ class ApiDewanyah {
 
   // GET /dewanyah
   static Future<List<Map<String, dynamic>>> listAll() async {
-    final res = await http.get(Uri.parse('$apiBase/dewanyah')).timeout(_timeout);
+    final res =
+        await http.get(Uri.parse('$apiBase/dewanyah')).timeout(_timeout);
     final m = _decode(res);
     if (res.statusCode >= 400 || m['ok'] != true) {
       final msg = m['message']?.toString() ?? 'Failed to load';
       throw Exception('$msg (HTTP ${res.statusCode})');
     }
     final data = m['data'];
-    if (data is List) return data.map((e) => Map<String, dynamic>.from(e as Map)).toList();
+    if (data is List) {
+      return data.map((e) => Map<String, dynamic>.from(e as Map)).toList();
+    }
     return const [];
   }
 
@@ -116,7 +132,8 @@ class ApiDewanyah {
     required String? token,
   }) async {
     final res = await http
-        .get(Uri.parse('$apiBase/dewanyah/$dewanyahId/members'), headers: _headers(token))
+        .get(Uri.parse('$apiBase/dewanyah/$dewanyahId/members'),
+            headers: _headers(token))
         .timeout(_timeout);
     final m = _decode(res);
     if (res.statusCode >= 400 || m['ok'] != true) {
@@ -124,7 +141,30 @@ class ApiDewanyah {
       throw Exception('$msg (HTTP ${res.statusCode})');
     }
     final data = m['data'];
-    if (data is List) return data.map((e) => Map<String, dynamic>.from(e as Map)).toList();
+    if (data is List) {
+      return data.map((e) => Map<String, dynamic>.from(e as Map)).toList();
+    }
+    return const [];
+  }
+
+  // GET /dewanyah/owner/pending-joins (owner summary)
+  static Future<List<Map<String, dynamic>>> ownerPendingJoins({
+    required String? token,
+  }) async {
+    final res = await http
+        .get(Uri.parse('$apiBase/dewanyah/owner/pending-joins'),
+            headers: _headers(token))
+        .timeout(_timeout);
+    final m = _decode(res);
+    if (res.statusCode >= 400 || m['ok'] != true) {
+      final msg =
+          m['message']?.toString() ?? 'Failed to load owner pending joins';
+      throw Exception('$msg (HTTP ${res.statusCode})');
+    }
+    final data = m['data'];
+    if (data is List) {
+      return data.map((e) => Map<String, dynamic>.from(e as Map)).toList();
+    }
     return const [];
   }
 
@@ -137,7 +177,8 @@ class ApiDewanyah {
   }) async {
     final res = await http
         .patch(
-          Uri.parse('$apiBase/dewanyah/$dewanyahId/members/$memberUserId/status'),
+          Uri.parse(
+              '$apiBase/dewanyah/$dewanyahId/members/$memberUserId/status'),
           headers: _headers(token),
           body: jsonEncode({'status': status}),
         )

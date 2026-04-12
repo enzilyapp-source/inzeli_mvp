@@ -69,15 +69,18 @@ Future<Map<String, dynamic>?> updateMyProfile({
   String? themeId,
   String? frameId,
   String? cardId,
+  bool includeThemeId = false,
+  bool includeFrameId = false,
+  bool includeCardId = false,
 }) async {
   final uri = Uri.parse('$apiBase/users/me');
   final body = <String, dynamic>{};
   if (displayName != null) body['displayName'] = displayName;
   if (avatarBase64 != null) body['avatarBase64'] = avatarBase64;
   if (avatarPath != null) body['avatarPath'] = avatarPath;
-  if (themeId != null) body['themeId'] = themeId;
-  if (frameId != null) body['frameId'] = frameId;
-  if (cardId != null) body['cardId'] = cardId;
+  if (includeThemeId) body['themeId'] = themeId;
+  if (includeFrameId) body['frameId'] = frameId;
+  if (includeCardId) body['cardId'] = cardId;
   if (body.isEmpty) return null;
 
   final res = await http.patch(

@@ -11,6 +11,7 @@ import 'scan_page.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:flutter/services.dart';
 import '../widgets/app_snackbar.dart';
+import '../rules.dart';
 
 class MatchPage extends StatefulWidget {
   final AppState app;
@@ -28,9 +29,8 @@ class MatchPage extends StatefulWidget {
   State<MatchPage> createState() => _MatchPageState();
 }
 
-class _MatchPageState extends State<MatchPage> {
+class _MatchPageState extends State<MatchPage> with WidgetsBindingObserver {
   Map<String, dynamic>? _room; // آخر نسخة من بيانات الروم
-  final _codeCtrl = TextEditingController();
   Timer? _autoRefresh;
 
   List<Map<String, dynamic>> players = [];
@@ -47,6 +47,8 @@ class _MatchPageState extends State<MatchPage> {
   int _remaining = 0;
   DateTime? _startedAt;
   int? _timerSec;
+  bool _timerEndNotified = false;
+  String? _timerRoundKey;
   bool _closedNotified = false;
 
   // حالة النتيجة والموافقات
@@ -79,6 +81,7 @@ class _MatchPageState extends State<MatchPage> {
     'كيرم': [2], // 2 ضد 2 فقط
     'جاكارو': [2], // 2 ضد 2
     'سبيتة': [2], // 2 ضد 2 في وضع الفرق
+    'دفان': [3], // 3 ضد 3 فقط
     'بيبيفوت': [2], // 2 ضد 2 في وضع الفرق
     'قدم': [9], // 9 ضد 9
     'سله': [5], // 5 ضد 5
@@ -87,7 +90,7 @@ class _MatchPageState extends State<MatchPage> {
     'تنس طاولة': [2], // دبلز 2 ضد 2
     'تنس ارضي': [2], // دبلز 2 ضد 2
   };
-  static const int _hindSoloSize = 5; // هند فردي = 5 لاعبين
+  static const Set<int> _hindSoloSizes = {4, 5}; // هند فردي = 4 أو 5 لاعبين
   static const int _spitaSoloSize = 5; // سبيتة فردي = 5 لاعبين
   bool get _iAmInRoom {
     final uid = widget.app.userId;
@@ -97,6 +100,7 @@ class _MatchPageState extends State<MatchPage> {
 
   bool _isCardGame(String game) {
     final g = game.trim();
+    if (g == 'دفان') return false; // دفان بدون قيد
     const cardGames = [
       'كوت',
       'بلوت',
@@ -228,6 +232,7 @@ class _MatchPageState extends State<MatchPage> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _room = widget.room;
     final initial = widget.room?['players'];
     if (initial is List) players = initial.cast<Map<String, dynamic>>();
@@ -261,9 +266,9 @@ class _MatchPageState extends State<MatchPage> {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _ticker?.cancel();
     _autoRefresh?.cancel();
-    _codeCtrl.dispose();
     _qaidInputA.dispose();
     _qaidInputB.dispose();
     for (final c in _qaidPlayerInputs.values) {
@@ -272,11 +277,63 @@ class _MatchPageState extends State<MatchPage> {
     super.dispose();
   }
 
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      final code =
+          (_room?['code'] ?? widget.room?['code'] ?? widget.app.roomCode ?? '')
+              .toString();
+      if (code.isNotEmpty) {
+        _refresh(code);
+      }
+    }
+  }
+
   void _msg(String m,
       {Color? color, IconData? icon, bool animateIcon = false}) {
     final bool error = color == Colors.red || color == Colors.redAccent;
     final bool success = color == Colors.green || color == Colors.greenAccent;
     showAppSnack(context, m, error: error, success: success);
+  }
+
+  void _syncTimerRound(String? startedAtIso) {
+    final key = startedAtIso?.trim();
+    if (key == null || key.isEmpty) {
+      _timerRoundKey = null;
+      _timerEndNotified = false;
+      return;
+    }
+    if (_timerRoundKey != key) {
+      _timerRoundKey = key;
+      _timerEndNotified = false;
+    }
+  }
+
+  void _notifyTimerEnded() {
+    if (_timerEndNotified) return;
+    _timerEndNotified = true;
+    Sfx.timerEnd(mute: widget.app.soundMuted == true);
+    HapticFeedback.heavyImpact();
+    if (!mounted) return;
+    _msg('انتهى العدّاد، حدد الفائز', color: Colors.green);
+    if (_approvalDialogOpen) return;
+    showDialog<void>(
+      context: context,
+      builder: (ctx) => Directionality(
+        textDirection: TextDirection.rtl,
+        child: AlertDialog(
+          title: const Text('انتهى الوقت'),
+          content: const Text(
+              'انتهى العدّاد. الحين اختاروا الفائز واعتمدوا النتيجة.'),
+          actions: [
+            FilledButton(
+              onPressed: () => Navigator.of(ctx).pop(),
+              child: const Text('تم'),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   Future<Position?> _getLocation() async {
@@ -339,9 +396,7 @@ class _MatchPageState extends State<MatchPage> {
         }
         // عند انتهاء العداد
         if (clamped == 0 && _remaining > 0) {
-          Sfx.success(mute: widget.app.soundMuted == true);
-          HapticFeedback.heavyImpact();
-          _msg('انتهى العدّاد، حدد الفائز', color: Colors.green);
+          _notifyTimerEnded();
           _locked = false;
         }
       }
@@ -424,8 +479,13 @@ class _MatchPageState extends State<MatchPage> {
         return false;
       }
     } else {
-      if (game == 'هند' && count != _hindSoloSize) {
-        _msg('هند فردي لازم يكونوا $_hindSoloSize لاعبين',
+      if (game == 'دفان') {
+        _msg('دفان تُلعب فرق فقط 3 ضد 3',
+            icon: Icons.error, color: Colors.orange);
+        return false;
+      }
+      if (game == 'هند' && !_hindSoloSizes.contains(count)) {
+        _msg('هند فردي يسمح بـ 4 أو 5 لاعبين',
             icon: Icons.error, color: Colors.orange);
         return false;
       }
@@ -594,7 +654,14 @@ class _MatchPageState extends State<MatchPage> {
       _locked = room['locked'] == true;
 
       final remainingSec = (room['remainingSec'] as num?)?.toInt();
-      if (remainingSec != null) _remaining = remainingSec;
+      if (remainingSec != null) {
+        final prevRemaining = _remaining;
+        _remaining = remainingSec;
+        if (prevRemaining > 0 && _remaining <= 0) {
+          _notifyTimerEnded();
+          _locked = false;
+        }
+      }
 
       final status = room['status']?.toString();
       if (status != null && status != 'waiting' && status != 'running') {
@@ -687,6 +754,7 @@ class _MatchPageState extends State<MatchPage> {
 
       _timerSec = (room['timerSec'] as num?)?.toInt();
       final s = room['startedAt'] as String?;
+      _syncTimerRound(s);
       _startedAt = s != null ? DateTime.tryParse(s) : null;
       _startTickerIfNeeded();
 
@@ -704,6 +772,8 @@ class _MatchPageState extends State<MatchPage> {
     final game = (widget.room?['gameId'] ?? widget.app.selectedGame ?? 'لعبة')
         .toString();
     final sponsorCode = widget.sponsorCode;
+    final timerMinutes = kGameRules[game]?.timerMinutes ?? 10;
+    final timerSec = timerMinutes * 60;
 
     final hostId =
         (_room?['hostUserId'] ?? widget.room?['hostUserId'])?.toString();
@@ -902,7 +972,7 @@ class _MatchPageState extends State<MatchPage> {
                           horizontal: 24, vertical: 14),
                       minimumSize: const Size(240, 54),
                     ),
-                    label: const Text('بدء عدّاد (10 دقائق)'),
+                    label: Text('بدء عدّاد ($timerMinutes دقيقة)'),
                     onPressed: () async {
                       if (code.isEmpty) return;
                       if (_uniquePlayersList.length < 2) {
@@ -923,12 +993,13 @@ class _MatchPageState extends State<MatchPage> {
                           token: widget.app.token,
                           targetWinPoints: null,
                           allowZeroCredit: true,
-                          timerSec: 600,
+                          timerSec: timerSec,
                         );
                         _locked = data['locked'] == true;
                         _lastRemainingSoundTick = null;
                         _timerSec = (data['timerSec'] as num?)?.toInt();
                         final s = data['startedAt'] as String?;
+                        _syncTimerRound(s);
                         _startedAt = s != null ? DateTime.tryParse(s) : null;
                         if (_isCardGame(gameName)) {
                           _resetQaid();
@@ -1012,13 +1083,13 @@ class _MatchPageState extends State<MatchPage> {
                   );
                 }),
 
-                if (_startedAt == null)
+                if (isHost && _startedAt == null)
                   const Padding(
                     padding: EdgeInsets.only(top: 6.0),
                     child: Text('اختر الفائز بعد بدء العداد.',
                         style: TextStyle(color: Colors.white70)),
                   )
-                else if (_teamMode)
+                else if (isHost && _teamMode)
                   Row(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
@@ -1041,7 +1112,7 @@ class _MatchPageState extends State<MatchPage> {
                       ),
                     ],
                   )
-                else
+                else if (isHost)
                   Wrap(
                     spacing: 6,
                     runSpacing: 6,
@@ -1076,7 +1147,7 @@ class _MatchPageState extends State<MatchPage> {
 
                 const SizedBox(height: 12),
 
-                if (started && qaidGame && !_locked) ...[
+                if (isHost && started && qaidGame && !_locked) ...[
                   _QaidCard(
                     teamMode: _teamMode,
                     target: _qaidTarget,
@@ -1233,65 +1304,41 @@ class _MatchPageState extends State<MatchPage> {
 
                 if (!_iAmInRoom) ...[
                   const SizedBox(height: 16),
-                  const Text('انضم بالكود (اختبار سريع)'),
-                  const SizedBox(height: 6),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: TextField(
-                          controller: _codeCtrl,
-                          decoration: const InputDecoration(
-                            labelText: 'اكتب كود الروم',
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      IconButton.filled(
-                        tooltip: 'مسح QR',
-                        onPressed: () async {
-                          final scanned = await Navigator.push<String>(
-                            context,
-                            MaterialPageRoute(builder: (_) => const ScanPage()),
-                          );
-                          if (scanned != null && scanned.isNotEmpty) {
-                            setState(() => _codeCtrl.text = scanned);
-                          }
-                        },
-                        icon: const Icon(Icons.qr_code_scanner),
-                      ),
-                      const SizedBox(width: 8),
-                      FilledButton(
-                        onPressed: _locked
-                            ? () => _msg('الشّرف مغلق أثناء العدّاد')
-                            : () async {
-                                final inputCode = _codeCtrl.text.trim().isEmpty
-                                    ? code
-                                    : _codeCtrl.text.trim();
-                                if (inputCode.isEmpty) {
-                                  _msg('اكتب الكود للانضمام');
-                                  return;
-                                }
-                                if (!widget.app.isSignedIn) {
-                                  _msg('سجّل دخول أول');
-                                  return;
-                                }
-                                try {
-                                  final pos = await _getLocation();
-                                  await ApiRoom.joinByCode(
-                                    code: inputCode,
-                                    token: widget.app.token,
-                                    lat: pos?.latitude,
-                                    lng: pos?.longitude,
-                                  );
-                                  _msg('تم الانضمام ✅');
-                                  _refresh(inputCode);
-                                } catch (e) {
-                                  _msg('خطأ: $e');
-                                }
-                              },
-                        child: const Text('انضم'),
-                      ),
-                    ],
+                  Align(
+                    alignment: Alignment.center,
+                    child: FilledButton.icon(
+                      onPressed: _locked
+                          ? () => _msg('الشّرف مغلق أثناء العدّاد')
+                          : () async {
+                              final scanned = await Navigator.push<String>(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (_) => const ScanPage(),
+                                ),
+                              );
+                              final inputCode = scanned?.trim() ?? '';
+                              if (inputCode.isEmpty) return;
+                              if (!widget.app.isSignedIn) {
+                                _msg('سجّل دخول أول');
+                                return;
+                              }
+                              try {
+                                final pos = await _getLocation();
+                                await ApiRoom.joinByCode(
+                                  code: inputCode,
+                                  token: widget.app.token,
+                                  lat: pos?.latitude,
+                                  lng: pos?.longitude,
+                                );
+                                _msg('تم الانضمام ✅');
+                                _refresh(inputCode);
+                              } catch (e) {
+                                _msg('خطأ: $e');
+                              }
+                            },
+                      icon: const Icon(Icons.qr_code_scanner),
+                      label: const Text('سكان للانضمام'),
+                    ),
                   ),
                 ],
               ],
@@ -1330,7 +1377,7 @@ class _MatchPageState extends State<MatchPage> {
               ),
             ),
           // أثناء القفل: نسمح باستخدام القيد فقط
-          if (_locked && _remaining > 0 && started && qaidGame)
+          if (isHost && _locked && _remaining > 0 && started && qaidGame)
             Positioned(
               left: 12,
               right: 12,

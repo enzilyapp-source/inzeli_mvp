@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'dart:async';
 import 'dart:math' as math;
 import '../state.dart';
 
@@ -13,7 +12,6 @@ class TimelinePage extends StatefulWidget {
 
 class _TimelinePageState extends State<TimelinePage> {
   bool _loading = false;
-  Timer? _poller;
   String? _lastError;
 
   String _nameFor(String id) {
@@ -59,15 +57,11 @@ class _TimelinePageState extends State<TimelinePage> {
     super.initState();
     widget.app.addListener(_onAppChange);
     _sync();
-    _poller = Timer.periodic(const Duration(seconds: 8), (_) {
-      if (mounted) _sync();
-    });
   }
 
   @override
   void dispose() {
     widget.app.removeListener(_onAppChange);
-    _poller?.cancel();
     super.dispose();
   }
 
@@ -79,14 +73,18 @@ class _TimelinePageState extends State<TimelinePage> {
     if (_loading) return;
     setState(() => _loading = true);
     try {
-      await widget.app.syncTimelineFromServer().timeout(const Duration(seconds: 15));
+      await widget.app
+          .syncTimelineFromServer()
+          .timeout(const Duration(seconds: 15));
       _lastError = null;
     } catch (e) {
       _lastError = e.toString();
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(widget.app.tr(ar: 'تعذر تحديث شسالفه: $e', en: 'Could not refresh timeline: $e')),
+            content: Text(widget.app.tr(
+                ar: 'تعذر تحديث شسالفه: $e',
+                en: 'Could not refresh timeline: $e')),
             behavior: SnackBarBehavior.floating,
           ),
         );
@@ -105,7 +103,8 @@ class _TimelinePageState extends State<TimelinePage> {
   Widget build(BuildContext context) {
     final app = widget.app;
     final on = Theme.of(context).colorScheme.onSurface;
-    final list = [...app.timeline]..sort((a, b) => b.ts.compareTo(a.ts)); // latest first
+    final list = [...app.timeline]
+      ..sort((a, b) => b.ts.compareTo(a.ts)); // latest first
 
     List<String> asStrings(dynamic v) {
       if (v is List) {
@@ -177,7 +176,8 @@ class _TimelinePageState extends State<TimelinePage> {
         padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 4),
         child: Text(
           app.tr(ar: 'الخط الزمني', en: 'Timeline'),
-          style: TextStyle(fontWeight: FontWeight.w900, fontSize: 18, color: on),
+          style:
+              TextStyle(fontWeight: FontWeight.w900, fontSize: 18, color: on),
         ),
       ),
       if (_lastError != null)
@@ -270,8 +270,8 @@ class _TimelinePageState extends State<TimelinePage> {
       final firstWinnerId = winnerIds.isNotEmpty ? winnerIds.first : '';
       final winnerPts = app.pointsOf(firstWinnerId, t.game);
       final loserPts = losersRaw
-          .map((l) =>
-              '${_friendlyNames([l]).first}: ${app.pointsOf(l, t.game)}')
+          .map(
+              (l) => '${_friendlyNames([l]).first}: ${app.pointsOf(l, t.game)}')
           .join(' / ');
 
       // إذا ما في فائز و لا لعبة معروفة نتخطى الكارد
@@ -280,7 +280,9 @@ class _TimelinePageState extends State<TimelinePage> {
       }
 
       final winnersDisplay = winnerNames.join(app.isEnglish ? ', ' : '، ');
-      final winner = winnersDisplay.isEmpty ? app.tr(ar: 'غير معروف', en: 'Unknown') : winnersDisplay;
+      final winner = winnersDisplay.isEmpty
+          ? app.tr(ar: 'غير معروف', en: 'Unknown')
+          : winnersDisplay;
       final losersList = losersNames;
       final losers = losersList.isNotEmpty
           ? losersList.join(app.isEnglish ? ', ' : '، ')
@@ -297,15 +299,20 @@ class _TimelinePageState extends State<TimelinePage> {
         if (!sameWinner) break;
         streak += 1;
       }
-      final hasPearlsInfo = winnerPts != 0 ||
-          losersRaw.any((l) => app.pointsOf(l, t.game) != 0);
+      final hasPearlsInfo =
+          winnerPts != 0 || losersRaw.any((l) => app.pointsOf(l, t.game) != 0);
 
       final subtitleParts = <String>[
-        if (isTeamBattle) app.tr(ar: 'فاز الفريق على الفريق', en: 'Team defeated team'),
-        if (isTeamBattle) app.tr(ar: 'الفريق الفائز: $winner', en: 'Winning team: $winner'),
-        if (isTeamBattle) app.tr(ar: 'الفريق الخاسر: $losers', en: 'Losing team: $losers'),
+        if (isTeamBattle)
+          app.tr(ar: 'فاز الفريق على الفريق', en: 'Team defeated team'),
+        if (isTeamBattle)
+          app.tr(ar: 'الفريق الفائز: $winner', en: 'Winning team: $winner'),
+        if (isTeamBattle)
+          app.tr(ar: 'الفريق الخاسر: $losers', en: 'Losing team: $losers'),
         if (!isTeamBattle) app.tr(ar: 'فاز على: $losers', en: 'Beat: $losers'),
-        app.tr(ar: 'اللعبة: ${t.game.isEmpty ? "—" : t.game}', en: 'Game: ${t.game.isEmpty ? "—" : t.game}'),
+        app.tr(
+            ar: 'اللعبة: ${t.game.isEmpty ? "—" : t.game}',
+            en: 'Game: ${t.game.isEmpty ? "—" : t.game}'),
         if (hasPearlsInfo)
           app.tr(
             ar: 'اللآلئ: $winner $winnerPts${losersRaw.isNotEmpty ? " • الخاسرون: $loserPts" : ""}',
@@ -409,31 +416,38 @@ class _ResultSummaryCard extends StatelessWidget {
                     child: const Icon(Icons.flag, color: Colors.white),
                   ),
                   const SizedBox(width: 10),
-                Expanded(
-                  child: Text(
-                    app.tr(
-                      ar: teamBattle
-                          ? 'فاز الفريق على الفريق'
-                          : 'الفائز $shownWinner على $loserText',
-                      en: teamBattle
-                          ? 'Team defeated team'
-                          : '$shownWinner beat $loserText',
+                  Expanded(
+                    child: Text(
+                      app.tr(
+                        ar: teamBattle
+                            ? 'فاز الفريق على الفريق'
+                            : 'الفائز $shownWinner على $loserText',
+                        en: teamBattle
+                            ? 'Team defeated team'
+                            : '$shownWinner beat $loserText',
+                      ),
+                      style: const TextStyle(fontWeight: FontWeight.w800),
                     ),
-                    style: const TextStyle(fontWeight: FontWeight.w800),
                   ),
-                ),
-                  Text(ts, style: TextStyle(color: Colors.white.withValues(alpha: 0.7), fontSize: 11)),
+                  Text(ts,
+                      style: TextStyle(
+                          color: Colors.white.withValues(alpha: 0.7),
+                          fontSize: 11)),
                 ],
               ),
               const SizedBox(height: 6),
               if (teamBattle) ...[
                 Text(
-                  app.tr(ar: 'الفريق الفائز: $shownWinner', en: 'Winning team: $shownWinner'),
+                  app.tr(
+                      ar: 'الفريق الفائز: $shownWinner',
+                      en: 'Winning team: $shownWinner'),
                   style: const TextStyle(color: Colors.white70),
                 ),
                 const SizedBox(height: 2),
                 Text(
-                  app.tr(ar: 'الفريق الخاسر: $loserText', en: 'Losing team: $loserText'),
+                  app.tr(
+                      ar: 'الفريق الخاسر: $loserText',
+                      en: 'Losing team: $loserText'),
                   style: const TextStyle(color: Colors.white70),
                 ),
                 const SizedBox(height: 4),
@@ -511,7 +525,8 @@ class _TimelineCard extends StatelessWidget {
                 ],
                 Text(
                   ts,
-                  style: TextStyle(color: Colors.white.withValues(alpha: 0.7), fontSize: 11),
+                  style: TextStyle(
+                      color: Colors.white.withValues(alpha: 0.7), fontSize: 11),
                 ),
               ],
             ),
@@ -650,13 +665,15 @@ class _LevelUpCard extends StatelessWidget {
       case 'عليمي':
       case 'beginner':
         return const _NotchStyle(
-          gradient: LinearGradient(colors: [Color(0xFFFFE082), Color(0xFFCE9E2B)]),
+          gradient:
+              LinearGradient(colors: [Color(0xFFFFE082), Color(0xFFCE9E2B)]),
           glow: Color(0xFFFFD54F),
         );
       case 'يمشي حاله':
       case 'advance':
         return const _NotchStyle(
-          gradient: LinearGradient(colors: [Color(0xFFD7A15F), Color(0xFF8A4B2E)]),
+          gradient:
+              LinearGradient(colors: [Color(0xFFD7A15F), Color(0xFF8A4B2E)]),
           glow: Color(0xFFD7A15F),
         );
       case 'زين':
@@ -664,26 +681,30 @@ class _LevelUpCard extends StatelessWidget {
       case 'professional':
       case 'pro':
         return const _NotchStyle(
-          gradient: LinearGradient(colors: [Color(0xFFEFF3F8), Color(0xFF9FA9B5)]),
+          gradient:
+              LinearGradient(colors: [Color(0xFFEFF3F8), Color(0xFF9FA9B5)]),
           glow: Color(0xFFE0E0E0),
           text: Color(0xFF1B1F24),
         );
       case 'فنان':
       case 'legend':
         return const _NotchStyle(
-          gradient: LinearGradient(colors: [Color(0xFFA0F3FF), Color(0xFF5CD7F7)]),
+          gradient:
+              LinearGradient(colors: [Color(0xFFA0F3FF), Color(0xFF5CD7F7)]),
           glow: Color(0xFF80DEEA),
           text: Color(0xFF072630),
         );
       case 'فلتة':
       case 'goat':
         return const _NotchStyle(
-          gradient: LinearGradient(colors: [Color(0xFFB388FF), Color(0xFF512DA8)]),
+          gradient:
+              LinearGradient(colors: [Color(0xFFB388FF), Color(0xFF512DA8)]),
           glow: Color(0xFFB39DDB),
         );
       default:
         return const _NotchStyle(
-          gradient: LinearGradient(colors: [Color(0xFF607D8B), Color(0xFF455A64)]),
+          gradient:
+              LinearGradient(colors: [Color(0xFF607D8B), Color(0xFF455A64)]),
           glow: Color(0xFF90A4AE),
         );
     }
@@ -691,8 +712,11 @@ class _LevelUpCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final toLabel = to.isNotEmpty ? to : app.tr(ar: 'مستوى جديد', en: 'New rank');
-    final fromLabel = from.isNotEmpty ? from : app.tr(ar: 'المستوى السابق', en: 'Previous rank');
+    final toLabel =
+        to.isNotEmpty ? to : app.tr(ar: 'مستوى جديد', en: 'New rank');
+    final fromLabel = from.isNotEmpty
+        ? from
+        : app.tr(ar: 'المستوى السابق', en: 'Previous rank');
     final style = _styleOf(toLabel);
     return Card(
       color: const Color(0xFFFFA53A).withValues(alpha: 0.12),
@@ -708,7 +732,8 @@ class _LevelUpCard extends StatelessWidget {
                 color: Colors.black.withValues(alpha: 0.12),
                 borderRadius: BorderRadius.circular(12),
               ),
-              child: const Icon(Icons.workspace_premium, color: Color(0xFFFFD54F)),
+              child:
+                  const Icon(Icons.workspace_premium, color: Color(0xFFFFD54F)),
             ),
             const SizedBox(width: 10),
             Expanded(
@@ -726,7 +751,9 @@ class _LevelUpCard extends StatelessWidget {
                   _NotchPulsePill(label: toLabel, style: style),
                   const SizedBox(height: 6),
                   Text(
-                    app.tr(ar: 'من $fromLabel إلى $toLabel • اللعبة: $game', en: 'From $fromLabel to $toLabel • Game: $game'),
+                    app.tr(
+                        ar: 'من $fromLabel إلى $toLabel • اللعبة: $game',
+                        en: 'From $fromLabel to $toLabel • Game: $game'),
                     style: const TextStyle(color: Colors.white70),
                   ),
                 ],
@@ -735,7 +762,8 @@ class _LevelUpCard extends StatelessWidget {
             const SizedBox(width: 8),
             Text(
               ts,
-              style: TextStyle(color: Colors.white.withValues(alpha: 0.7), fontSize: 11),
+              style: TextStyle(
+                  color: Colors.white.withValues(alpha: 0.7), fontSize: 11),
             ),
           ],
         ),

@@ -7,6 +7,7 @@ import '../state.dart';
 import '../api_sponsor.dart';
 import '../api_room.dart';
 import '../widgets/app_snackbar.dart';
+import '../widgets/primary_pill_button.dart';
 import 'match_page.dart';
 import 'scan_page.dart';
 
@@ -33,19 +34,11 @@ class _SponsorGameScreenState extends State<SponsorGameScreen> {
   final Map<String, int> _pearlsByGame = {};
   String? _selectedGameId;
 
-  final TextEditingController joinCtrl = TextEditingController();
-
   @override
   void initState() {
     super.initState();
     _selectedGameId = widget.initialGameId;
     _load();
-  }
-
-  @override
-  void dispose() {
-    joinCtrl.dispose();
-    super.dispose();
   }
 
   void _msg(String m, {bool error = false, bool success = false}) =>
@@ -56,13 +49,16 @@ class _SponsorGameScreenState extends State<SponsorGameScreen> {
       bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
       if (!serviceEnabled) return null;
       LocationPermission permission = await Geolocator.checkPermission();
-      if (permission == LocationPermission.denied || permission == LocationPermission.deniedForever) {
+      if (permission == LocationPermission.denied ||
+          permission == LocationPermission.deniedForever) {
         permission = await Geolocator.requestPermission();
-        if (permission == LocationPermission.denied || permission == LocationPermission.deniedForever) {
+        if (permission == LocationPermission.denied ||
+            permission == LocationPermission.deniedForever) {
           return null;
         }
       }
-      return await Geolocator.getCurrentPosition(desiredAccuracy: LocationAccuracy.best);
+      return await Geolocator.getCurrentPosition(
+          desiredAccuracy: LocationAccuracy.best);
     } catch (_) {
       return null;
     }
@@ -94,7 +90,7 @@ class _SponsorGameScreenState extends State<SponsorGameScreen> {
       }
 
       _selectedGameId ??=
-      _games.isNotEmpty ? _games.first['gameId']?.toString() : null;
+          _games.isNotEmpty ? _games.first['gameId']?.toString() : null;
     } catch (e) {
       _msg('فشل تحميل بيانات الراعي: $e', error: true);
     } finally {
@@ -203,24 +199,26 @@ class _SponsorGameScreenState extends State<SponsorGameScreen> {
       await _createAndOpenRoom(gid);
     }
 
-    Future<void> onJoinRoom() async {
-      final code = joinCtrl.text.trim();
-      if (code.isEmpty) {
-        _msg('اكتب كود الروم للانضمام', error: true);
-        return;
-      }
+    Future<void> onScanJoin() async {
       final gid = _selectedGameId;
       if (gid == null || gid.isEmpty) {
         _msg('اختَر اللعبة أولًا', error: true);
         return;
       }
+      final scanned = await Navigator.push<String>(
+        context,
+        MaterialPageRoute(builder: (_) => const ScanPage()),
+      );
+      final code = scanned?.trim() ?? '';
+      if (code.isEmpty) return;
       await _joinAndOpenRoom(code, gid);
     }
 
     const tajawal = TextStyle(fontFamily: 'Tajawal');
     return Scaffold(
       appBar: AppBar(
-        title: Text('راعي: $sponsorName', style: const TextStyle(fontFamily: 'Tajawal')),
+        title: Text('راعي: $sponsorName',
+            style: const TextStyle(fontFamily: 'Tajawal')),
       ),
       body: DefaultTextStyle.merge(
         style: tajawal,
@@ -248,17 +246,22 @@ class _SponsorGameScreenState extends State<SponsorGameScreen> {
                     ),
                     const SizedBox(height: 8),
                     if (_games.isEmpty)
-                      const Text('لا توجد ألعاب مضافة لهذا الراعي بعد.', style: tajawal)
+                      const Text('لا توجد ألعاب مضافة لهذا الراعي بعد.',
+                          style: tajawal)
                     else
                       Wrap(
                         spacing: 12,
                         runSpacing: 12,
                         children: _games.map((g) {
-                          final gameObj = (g['game'] as Map<String, dynamic>?) ?? const {};
-                          final gameId = (g['gameId'] ?? gameObj['id'] ?? '').toString();
+                          final gameObj =
+                              (g['game'] as Map<String, dynamic>?) ?? const {};
+                          final gameId =
+                              (g['gameId'] ?? gameObj['id'] ?? '').toString();
                           final name = (gameObj['name'] ?? gameId).toString();
-                          final cat = (gameObj['category'] ?? 'لعبة').toString();
-                          final prize = (g['prizeAmount'] as num?)?.toInt() ?? 0;
+                          final cat =
+                              (gameObj['category'] ?? 'لعبة').toString();
+                          final prize =
+                              (g['prizeAmount'] as num?)?.toInt() ?? 0;
                           final pearls = _pearlsByGame[gameId] ?? 0;
                           final selected = _selectedGameId == gameId;
 
@@ -272,68 +275,27 @@ class _SponsorGameScreenState extends State<SponsorGameScreen> {
                           );
                         }).toList(),
                       ),
-
                     const SizedBox(height: 24),
                     const Divider(),
                     const SizedBox(height: 12),
-
                     Text(
                       'اختر طريقة اللعب',
-                      style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800, fontFamily: 'Tajawal'),
+                      style: theme.textTheme.titleMedium?.copyWith(
+                          fontWeight: FontWeight.w800, fontFamily: 'Tajawal'),
                     ),
                     const SizedBox(height: 8),
-
-                    Row(
-                      children: [
-                        Expanded(
-                          child: FilledButton.icon(
-                            onPressed: onCreateRoom,
-                            icon: const Icon(Icons.add_box_outlined),
-                            label: const Text('انزلي', style: TextStyle(fontFamily: 'Tajawal')),
-                            style: FilledButton.styleFrom(
-                              minimumSize: const Size.fromHeight(64),
-                              padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 14),
-                              textStyle: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800, fontFamily: 'Tajawal'),
-                              shape: const StadiumBorder(),
-                            ),
-                          ),
-                        ),
-                      ],
+                    PrimaryPillButton(
+                      onPressed: onCreateRoom,
+                      icon: Icons.add_box_outlined,
+                      label: 'انــزلـي',
+                      maxWidth: 240,
                     ),
-                    const SizedBox(height: 12),
-
-                    Row(
-                      children: [
-                        Expanded(
-                          child: TextField(
-                            controller: joinCtrl,
-                            decoration: const InputDecoration(
-                              labelText: 'كود روم للانضمام',
-                              hintText: 'مثال: ABC123',
-                            ),
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        FilledButton(
-                          onPressed: onJoinRoom,
-                          child: const Text('شرّف', style: TextStyle(fontFamily: 'Tajawal')),
-                        ),
-                        const SizedBox(width: 8),
-                        IconButton.filled(
-                          tooltip: 'مسح QR',
-                          icon: const Icon(Icons.qr_code_scanner),
-                          onPressed: () async {
-                            final scanned = await Navigator.push<String>(
-                              context,
-                              MaterialPageRoute(builder: (_) => const ScanPage()),
-                            );
-                            if (scanned != null && scanned.trim().isNotEmpty) {
-                              joinCtrl.text = scanned.trim();
-                              onJoinRoom();
-                            }
-                          },
-                        ),
-                      ],
+                    const SizedBox(height: 10),
+                    PrimaryPillButton(
+                      onPressed: onScanJoin,
+                      icon: Icons.qr_code_scanner,
+                      label: 'شرّف',
+                      maxWidth: 240,
                     ),
                   ],
                 ),

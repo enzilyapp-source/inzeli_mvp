@@ -21,7 +21,6 @@ class GamesPage extends StatefulWidget {
 }
 
 class _GamesPageState extends State<GamesPage> {
-  final TextEditingController _joinCtrl = TextEditingController();
   late final PageController _catPage;
 
   AppState get app => widget.app;
@@ -49,7 +48,6 @@ class _GamesPageState extends State<GamesPage> {
 
   @override
   void dispose() {
-    _joinCtrl.dispose();
     _catPage.dispose();
     super.dispose();
   }
@@ -60,6 +58,11 @@ class _GamesPageState extends State<GamesPage> {
 
   String? get _selectedCategory => app.selectedCategory;
   String? get _selectedGame => app.selectedGame;
+
+  bool _isRoomNotFoundError(Object e) {
+    final s = e.toString();
+    return s.contains('ROOM_NOT_FOUND') || s.contains('HTTP 404');
+  }
 
   // ------------ Actions: Create / Join ------------
   Future<void> _checkCurrentRoomStatus() async {
@@ -79,7 +82,8 @@ class _GamesPageState extends State<GamesPage> {
         }
       }
     } catch (_) {
-      app.setRoomCode(null);
+      // لا نمسح كود الروم على أخطاء اتصال مؤقتة؛ نحتفظ به حتى نتحقق فعليًا أنه انتهى.
+      // المسح يتم فقط إذا رجع السيرفر أن الروم غير موجود.
       if (mounted) setState(() {});
     }
   }
@@ -128,16 +132,15 @@ class _GamesPageState extends State<GamesPage> {
     }
   }
 
-  Future<void> _joinRoomByCode() async {
+  Future<void> _joinRoomByCode(String code) async {
     if (!app.isSignedIn) {
       _msg('سجّل الدخول أولًا');
       return;
     }
     final proceed = await _ensureRulesPrompt();
     if (!proceed) return;
-    final code = _joinCtrl.text.trim();
     if (code.isEmpty) {
-      _msg('اكتب كود الروم');
+      _msg('امسح QR للانضمام');
       return;
     }
     final game = _selectedGame;
@@ -186,8 +189,7 @@ class _GamesPageState extends State<GamesPage> {
       MaterialPageRoute(builder: (_) => const ScanPage()),
     );
     if (code == null || code.isEmpty) return;
-    _joinCtrl.text = code;
-    await _joinRoomByCode();
+    await _joinRoomByCode(code.trim());
   }
 
   Future<void> _openCurrentRoom() async {
@@ -224,6 +226,9 @@ class _GamesPageState extends State<GamesPage> {
       );
       setState(() {});
     } catch (e) {
+      if (_isRoomNotFoundError(e)) {
+        app.setRoomCode(null);
+      }
       _msg('فشل فتح الروم الحالي: $e');
     }
   }
@@ -383,31 +388,12 @@ class _GamesPageState extends State<GamesPage> {
           label: app.tr(ar: 'انــزلـي', en: 'Start'),
           maxWidth: 240,
         ),
-        const SizedBox(height: 12),
-        Row(
-          children: [
-            Expanded(
-              child: TextField(
-                controller: _joinCtrl,
-                decoration: const InputDecoration(
-                  labelText: 'ادخل كود الروم',
-                  hintText: 'مثال: ABC123',
-                  filled: true,
-                ),
-              ),
-            ),
-            const SizedBox(width: 8),
-            IconButton.filled(
-              onPressed: _scanAndJoin,
-              icon: const Icon(Icons.qr_code_scanner),
-              tooltip: 'مسح QR',
-            ),
-            const SizedBox(width: 4),
-            FilledButton(
-              onPressed: _joinRoomByCode,
-              child: const Text('شرّف'),
-            ),
-          ],
+        const SizedBox(height: 10),
+        PrimaryPillButton(
+          onPressed: _scanAndJoin,
+          icon: Icons.qr_code_scanner,
+          label: app.tr(ar: 'شرّف', en: 'Join'),
+          maxWidth: 240,
         ),
       ],
     );

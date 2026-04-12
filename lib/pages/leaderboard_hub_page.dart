@@ -11,6 +11,7 @@ import 'sponsor_page.dart';
 import 'games_page.dart';
 import 'player_profile_page.dart';
 import 'dewanyah_list_page.dart';
+import 'package:geolocator/geolocator.dart';
 
 class LeaderboardHubPage extends StatefulWidget {
   final AppState app;
@@ -41,8 +42,11 @@ class _LeaderboardHubPageState extends State<LeaderboardHubPage> {
   final TextEditingController _playerSearchCtrl = TextEditingController();
   final TextEditingController _dewNameCtrl = TextEditingController();
   final TextEditingController _dewContactCtrl = TextEditingController();
+  final TextEditingController _dewPrizeCtrl = TextEditingController(text: '50');
   final TextEditingController _dewNoteCtrl = TextEditingController();
   String _dewGame = 'بلوت';
+  bool _dewLockLocation = false;
+  int _dewRadiusMeters = 100;
 
   late List<Map<String, dynamic>> _dewanyahSpaces;
   bool _loadingSponsors = false;
@@ -75,6 +79,7 @@ class _LeaderboardHubPageState extends State<LeaderboardHubPage> {
   @override
   void initState() {
     super.initState();
+    widget.app.addListener(_onAppChanged);
     tab = widget.initialTab.clamp(0, 2);
     _dewanyahSpaces = [..._seedDewanyahs(), ..._ownedAsSpaces()];
     _loadSponsors();
@@ -84,14 +89,21 @@ class _LeaderboardHubPageState extends State<LeaderboardHubPage> {
 
   @override
   void dispose() {
+    widget.app.removeListener(_onAppChanged);
     _regularPager.dispose();
     _sponsorPager.dispose();
     _dewPager.dispose();
     _playerSearchCtrl.dispose();
     _dewNameCtrl.dispose();
     _dewContactCtrl.dispose();
+    _dewPrizeCtrl.dispose();
     _dewNoteCtrl.dispose();
     super.dispose();
+  }
+
+  void _onAppChanged() {
+    if (!mounted) return;
+    setState(() {});
   }
 
   List<Map<String, dynamic>> _seedDewanyahs() => [
@@ -336,6 +348,21 @@ class _LeaderboardHubPageState extends State<LeaderboardHubPage> {
         {"displayName": "Futun", "pearls": basePearls - 3, "streak": 0},
       ];
 
+  List<Map<String, dynamic>> _normalizeBoardRows(
+      List<Map<String, dynamic>> rows) {
+    final myId = widget.app.userId;
+    final myName = (widget.app.displayName ?? '').trim();
+    return rows.map((r) {
+      final row = Map<String, dynamic>.from(r);
+      final uid = (row['userId'] ?? row['id'] ?? '').toString();
+      if (myId != null && myId.isNotEmpty && uid == myId && myName.isNotEmpty) {
+        row['displayName'] = myName;
+        row['name'] = myName;
+      }
+      return row;
+    }).toList();
+  }
+
   void _msg(String text, {bool error = false, bool success = false}) {
     if (!mounted) return;
     final Color color = error
@@ -451,16 +478,68 @@ class _LeaderboardHubPageState extends State<LeaderboardHubPage> {
     );
   }
 
+  Future<Position?> _getCurrentPositionForDewanyah() async {
+    try {
+      final enabled = await Geolocator.isLocationServiceEnabled();
+      if (!enabled) return null;
+      var permission = await Geolocator.checkPermission();
+      if (permission == LocationPermission.denied ||
+          permission == LocationPermission.deniedForever) {
+        permission = await Geolocator.requestPermission();
+      }
+      if (permission == LocationPermission.denied ||
+          permission == LocationPermission.deniedForever) {
+        return null;
+      }
+      return await Geolocator.getCurrentPosition(
+          desiredAccuracy: LocationAccuracy.best);
+    } catch (_) {
+      return null;
+    }
+  }
+
   Future<void> _submitDewanyahRequest({bool closeSheet = false}) async {
     final name = _dewNameCtrl.text.trim();
     final contact = _dewContactCtrl.text.trim();
+    final prizeRaw = _dewPrizeCtrl.text.trim();
     if (name.isEmpty || contact.isEmpty) {
       _msg('عبئ اسم الديوانية ووسيلة التواصل', error: true);
       return;
     }
+    int? prizeAmount;
+    if (prizeRaw.isNotEmpty) {
+      prizeAmount = int.tryParse(prizeRaw);
+      if (prizeAmount == null || prizeAmount < 0) {
+        _msg('حطي سعر جائزة صحيح (رقم بدون كسور)', error: true);
+        return;
+      }
+    }
+
+    double? anchorLat;
+    double? anchorLng;
+    if (_dewLockLocation) {
+      final pos = await _getCurrentPositionForDewanyah();
+      if (pos == null) {
+        _msg('فعّلي الموقع وخلي التطبيق يقدر يقرأه حتى نثبت موقع الديوانية',
+            error: true);
+        return;
+      }
+      anchorLat = pos.latitude;
+      anchorLng = pos.longitude;
+    }
+
     final note = _dewNoteCtrl.text.trim();
     await widget.app.addDewanyahRequest(
-        name: name, contact: contact, gameId: _dewGame, note: note);
+      name: name,
+      contact: contact,
+      gameId: _dewGame,
+      note: note,
+      locationLock: _dewLockLocation,
+      radiusMeters: _dewLockLocation ? _dewRadiusMeters : null,
+      anchorLat: anchorLat,
+      anchorLng: anchorLng,
+      prizeAmount: prizeAmount,
+    );
 
     if (!mounted) return;
     setState(() {
@@ -468,8 +547,12 @@ class _LeaderboardHubPageState extends State<LeaderboardHubPage> {
         'name': name,
         'owner': widget.app.displayName ?? 'أنت',
         'gameId': _dewGame,
-        'prizeAmount': 50,
+        'prizeAmount': prizeAmount ?? 50,
         'status': 'pending',
+        'locationLock': _dewLockLocation,
+        'radiusMeters': _dewLockLocation ? _dewRadiusMeters : null,
+        'anchorLat': anchorLat,
+        'anchorLng': anchorLng,
         'startingPearls': 5,
         'players': [
           {
@@ -481,10 +564,13 @@ class _LeaderboardHubPageState extends State<LeaderboardHubPage> {
       });
       _dewPage = 0;
       _dewPager.jumpToPage(0);
+      _dewLockLocation = false;
+      _dewRadiusMeters = 100;
     });
 
     _dewNameCtrl.clear();
     _dewContactCtrl.clear();
+    _dewPrizeCtrl.text = '50';
     _dewNoteCtrl.clear();
     _msg('استلمنا طلب الديوانية، سنتواصل معك للتفعيل', success: true);
     if (closeSheet && mounted) Navigator.pop(context);
@@ -503,18 +589,22 @@ class _LeaderboardHubPageState extends State<LeaderboardHubPage> {
         gameId: g,
         prize: null,
         showSponsorPearls: false,
-        loader: () async {
-          final rows =
-              await ApiLeaderboard.globalTop(token: app.token, gameId: g);
+        loader: (limit) async {
+          final rows = await ApiLeaderboard.globalTop(
+            token: app.token,
+            gameId: g,
+            limit: limit,
+          );
           if (rows.isEmpty) return _mockBoard(basePearls: 5);
-          return rows
+          return _normalizeBoardRows(rows
               .map((r) => {
                     'displayName':
                         (r['displayName'] ?? r['name'] ?? '').toString(),
                     'pearls': (r['pearls'] ?? r['permanentScore'] ?? 0),
+                    'userId': (r['userId'] ?? '').toString(),
                     'streak': 0,
                   })
-              .toList();
+              .toList());
         },
         fallback: _mockBoard(basePearls: 5),
       );
@@ -533,11 +623,15 @@ class _LeaderboardHubPageState extends State<LeaderboardHubPage> {
         gameId: gameName,
         prize: prize,
         showSponsorPearls: true,
-        loader: () => ApiLeaderboard.sponsorGameTop(
-          sponsorCode: _sponsorCode!,
-          gameId: gid,
-          token: app.token,
-        ),
+        loader: (limit) async {
+          final rows = await ApiLeaderboard.sponsorGameTop(
+            sponsorCode: _sponsorCode!,
+            gameId: gid,
+            token: app.token,
+            limit: limit,
+          );
+          return _normalizeBoardRows(rows);
+        },
         fallback: _mockBoard(basePearls: 5),
       );
     }).toList();
@@ -568,7 +662,14 @@ class _LeaderboardHubPageState extends State<LeaderboardHubPage> {
             fivePearlsNote: true,
             loader: dewId == null
                 ? null
-                : () => ApiDewanyah.leaderboard(dewanyahId: dewId),
+                : (limit) async {
+                    final rows = await ApiDewanyah.leaderboard(
+                      dewanyahId: dewId,
+                      limit: limit,
+                      gameId: gid,
+                    );
+                    return _normalizeBoardRows(rows);
+                  },
           ),
         );
       }
@@ -627,10 +728,45 @@ class _LeaderboardHubPageState extends State<LeaderboardHubPage> {
         ),
         SizedBox(height: spacing),
         TextField(
+          controller: _dewPrizeCtrl,
+          keyboardType: TextInputType.number,
+          decoration: const InputDecoration(
+            labelText: 'سعر الجائزة',
+            hintText: 'مثال: 50',
+          ),
+        ),
+        SizedBox(height: spacing),
+        TextField(
           controller: _dewNoteCtrl,
           maxLines: compact ? 2 : 3,
           decoration: const InputDecoration(labelText: 'ملاحظات / قواعد خاصة'),
         ),
+        SizedBox(height: spacing),
+        SwitchListTile.adaptive(
+          value: _dewLockLocation,
+          onChanged: (v) => setState(() => _dewLockLocation = v),
+          contentPadding: EdgeInsets.zero,
+          title: const Text('تثبيت موقع الديوانية وقت الطلب'),
+          subtitle: Text(
+            'اختياري',
+            style: TextStyle(color: Colors.white.withValues(alpha: 0.72)),
+          ),
+        ),
+        if (_dewLockLocation) ...[
+          SizedBox(height: spacing),
+          DropdownButtonFormField<int>(
+            initialValue: _dewRadiusMeters,
+            decoration: const InputDecoration(labelText: 'نطاق الموقع (متر)'),
+            items: const [80, 100, 150, 200, 300]
+                .map((v) => DropdownMenuItem<int>(
+                      value: v,
+                      child: Text('$v م'),
+                    ))
+                .toList(),
+            onChanged: (v) =>
+                setState(() => _dewRadiusMeters = v ?? _dewRadiusMeters),
+          ),
+        ],
       ],
     );
   }
@@ -1104,6 +1240,8 @@ extension _UserResultCard on _LeaderboardHubPageState {
                     return AvatarEffectType.greenLeaf;
                   case 'flameBlue':
                     return AvatarEffectType.flameBlue;
+                  case 'whiteSparkle':
+                    return AvatarEffectType.whiteSparkle;
                   default:
                     return null;
                 }
@@ -1188,7 +1326,7 @@ class _BoardSpec {
   final String gameId;
   final int? prize;
   final bool showSponsorPearls;
-  final Future<List<Map<String, dynamic>>> Function()? loader;
+  final Future<List<Map<String, dynamic>>> Function(int limit)? loader;
   final List<Map<String, dynamic>> fallback;
   final String? badge;
   final String? owner;
@@ -1346,7 +1484,7 @@ class _LeaderboardPanel extends StatelessWidget {
             const SizedBox(height: 8),
             Expanded(
               child: FutureBuilder<List<Map<String, dynamic>>>(
-                future: spec.loader?.call().catchError((_) => spec.fallback),
+                future: spec.loader?.call(30).catchError((_) => spec.fallback),
                 builder: (context, snap) {
                   if (snap.connectionState == ConnectionState.waiting &&
                       spec.loader != null) {
@@ -1618,20 +1756,37 @@ class _BoardDetailPage extends StatefulWidget {
 }
 
 class _BoardDetailPageState extends State<_BoardDetailPage> {
+  static const int _initialLimit = 30;
+  static const int _stepLimit = 30;
+  static const int _maxLimit = 300;
+
   late PageController _ctrl;
   late int _index;
+  final Map<int, int> _limits = {};
 
   @override
   void initState() {
     super.initState();
     _index = widget.initialIndex;
     _ctrl = PageController(initialPage: _index);
+    _limits[_index] = _initialLimit;
   }
 
   @override
   void dispose() {
     _ctrl.dispose();
     super.dispose();
+  }
+
+  int _limitFor(int pageIndex) => _limits[pageIndex] ?? _initialLimit;
+
+  void _loadMore(int pageIndex) {
+    final current = _limitFor(pageIndex);
+    if (current >= _maxLimit) return;
+    setState(() {
+      _limits[pageIndex] =
+          (current + _stepLimit).clamp(_initialLimit, _maxLimit);
+    });
   }
 
   @override
@@ -1655,20 +1810,28 @@ class _BoardDetailPageState extends State<_BoardDetailPage> {
             child: PageView.builder(
               controller: _ctrl,
               itemCount: specs.length,
-              onPageChanged: (i) => setState(() => _index = i),
+              onPageChanged: (i) => setState(() {
+                _index = i;
+                _limits.putIfAbsent(i, () => _initialLimit);
+              }),
               itemBuilder: (_, i) {
                 final spec = specs[i];
+                final limit = _limitFor(i);
                 return Padding(
                   padding: const EdgeInsets.all(12.0),
                   child: FutureBuilder<List<Map<String, dynamic>>>(
-                    future:
-                        spec.loader?.call().catchError((_) => spec.fallback),
+                    future: spec.loader
+                        ?.call(limit)
+                        .catchError((_) => spec.fallback),
                     builder: (context, snap) {
                       if (snap.connectionState == ConnectionState.waiting &&
                           spec.loader != null) {
                         return const Center(child: CircularProgressIndicator());
                       }
                       final list = snap.data ?? spec.fallback;
+                      final hasMore = spec.loader != null &&
+                          list.length >= limit &&
+                          limit < _maxLimit;
                       return Column(
                         crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
@@ -1687,6 +1850,18 @@ class _BoardDetailPageState extends State<_BoardDetailPage> {
                               child: _BoardCard(
                                   items: list,
                                   showSponsorPearls: spec.showSponsorPearls)),
+                          const SizedBox(height: 10),
+                          if (spec.loader != null)
+                            Align(
+                              alignment: Alignment.center,
+                              child: OutlinedButton.icon(
+                                onPressed: hasMore ? () => _loadMore(i) : null,
+                                icon: const Icon(Icons.expand_more),
+                                label: Text(
+                                  hasMore ? 'عرض المزيد' : 'كل الأعضاء ظاهرين',
+                                ),
+                              ),
+                            ),
                         ],
                       );
                     },

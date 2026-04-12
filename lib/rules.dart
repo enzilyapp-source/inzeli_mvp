@@ -65,7 +65,7 @@ const Map<String, GameRule> kGameRules = {
   'هند': GameRule(
     name: 'هند',
     timerMinutes: 30,
-    minPlayers: 2, // فردي يبدأ 2 ويزيد حتى 5، أو 2×2
+    minPlayers: 4, // فردي 4 أو 5، أو فرق 2×2
     maxPlayers: 5,
     modes: [PlayMode.solo, PlayMode.team2v2],
     pointsPerPlayer: true,
@@ -79,6 +79,14 @@ const Map<String, GameRule> kGameRules = {
     modes: [PlayMode.solo],
     pointsPerPlayer: true,
     allowFreeForAll: true,
+  ),
+  'دفان': GameRule(
+    name: 'دفان',
+    timerMinutes: 30,
+    minPlayers: 6, // 3 ضد 3 فقط
+    maxPlayers: 6,
+    modes: [PlayMode.team3v3],
+    pointsPerPlayer: true,
   ),
 
   // ألعاب شعبية (بورد)
@@ -125,7 +133,7 @@ const Map<String, GameRule> kGameRules = {
   ),
   'جاكارو': GameRule(
     name: 'جاكارو',
-    timerMinutes: 30,
+    timerMinutes: 40,
     minPlayers: 4,
     maxPlayers: 4,
     modes: [PlayMode.team2v2],

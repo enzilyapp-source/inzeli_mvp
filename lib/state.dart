@@ -1,4 +1,5 @@
 // lib/state.dart
+import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -6,6 +7,7 @@ import 'api_dewanyah.dart';
 import 'api_timeline.dart';
 import 'api_user.dart';
 import 'api_users.dart';
+import 'push/one_signal_bridge.dart';
 
 enum GameMode { solo, team, both }
 
@@ -79,17 +81,10 @@ class AppState extends ChangeNotifier {
 
   /// Games per category used by LeaderboardPage
   final Map<String, List<String>> games = const <String, List<String>>{
-    'جنجفة': ['كوت', 'بلوت', 'تريكس', 'هند', 'سبيتة', 'اونو'],
-    'ألعاب شعبية': [
-      'شطرنج',
-      'دامه',
-      'كيرم',
-      'دومنه',
-      'طاوله',
-      'بلياردو',
-      'جاكارو'
-    ],
+    'جنجفة': ['كوت', 'بلوت', 'تريكس', 'هند', 'سبيتة', 'اونو', 'دفان'],
+    'ألعاب شعبية': ['شطرنج', 'دامه', 'كيرم', 'دومنه', 'طاوله', 'جاكارو'],
     'رياضة': [
+      'بلياردو',
       'بيبيفوت',
       'قدم',
       'سله',
@@ -109,6 +104,7 @@ class AppState extends ChangeNotifier {
     'هند': GameMode.both,
     'سبيتة': GameMode.both,
     'اونو': GameMode.solo,
+    'دفان': GameMode.team,
     'شطرنج': GameMode.solo,
     'دامه': GameMode.solo,
     'كيرم': GameMode.team,
@@ -159,6 +155,7 @@ class AppState extends ChangeNotifier {
       'هند': 'Hind',
       'سبيتة': 'Spita',
       'اونو': 'Uno',
+      'دفان': 'Dafan',
       'شطرنج': 'Chess',
       'دامه': 'Checkers',
       'كيرم': 'Carrom',
@@ -437,6 +434,7 @@ class AppState extends ChangeNotifier {
 
     // fetch timeline from server (best-effort)
     syncTimelineFromServer();
+    unawaited(OneSignalBridge.syncSignedInUser(userId));
 
     final profileSnapshot = <String, dynamic>{
       if (userId != null && userId!.isNotEmpty) 'id': userId,
@@ -497,6 +495,9 @@ class AppState extends ChangeNotifier {
         themeId: themeId,
         frameId: frameId,
         cardId: cardId,
+        includeThemeId: true,
+        includeFrameId: true,
+        includeCardId: true,
       );
       if (updated == null) return;
 
@@ -623,6 +624,7 @@ class AppState extends ChangeNotifier {
       }
 
       await _save();
+      unawaited(OneSignalBridge.syncSignedInUser(userId));
       notifyListeners();
     } catch (_) {
       // ignore temporary network failures; keep local session alive.
@@ -660,6 +662,7 @@ class AppState extends ChangeNotifier {
     userProfiles.clear();
     _stats.clear();
     joinedDewanyahIds.clear();
+    unawaited(OneSignalBridge.onSignedOut());
 
     await _save();
     notifyListeners();
@@ -814,6 +817,9 @@ class AppState extends ChangeNotifier {
     required String contact,
     String? gameId,
     String? note,
+    int? prizeAmount,
+    double? anchorLat,
+    double? anchorLng,
     bool? requireApproval,
     bool? locationLock,
     int? radiusMeters,
@@ -825,6 +831,9 @@ class AppState extends ChangeNotifier {
           contact: contact,
           gameId: gameId,
           note: note,
+          prizeAmount: prizeAmount,
+          anchorLat: anchorLat,
+          anchorLng: anchorLng,
           requireApproval: requireApproval,
           locationLock: locationLock,
           radiusMeters: radiusMeters,
@@ -840,6 +849,11 @@ class AppState extends ChangeNotifier {
       'contact': contact,
       'gameId': gameId,
       'note': note,
+      'prizeAmount': prizeAmount ?? 50,
+      'anchorLat': anchorLat,
+      'anchorLng': anchorLng,
+      'locationLock': locationLock ?? false,
+      'radiusMeters': radiusMeters,
       'status': 'pending',
       'createdAt': DateTime.now().toIso8601String(),
       'ownerId': userId,

@@ -8,9 +8,9 @@ class ApiRoom {
   static const Duration _timeout = Duration(seconds: 20);
 
   static Map<String, String> _headers({String? token}) => {
-    'Content-Type': 'application/json',
-    if (token != null && token.isNotEmpty) 'Authorization': 'Bearer $token',
-  };
+        'Content-Type': 'application/json',
+        if (token != null && token.isNotEmpty) 'Authorization': 'Bearer $token',
+      };
 
   static Map<String, dynamic> _decodeJson(http.Response res) {
     try {
@@ -23,10 +23,10 @@ class ApiRoom {
   }
 
   static Never _throwApiErr(
-      Map<String, dynamic>? m,
-      http.Response res,
-      String fallback,
-      ) {
+    Map<String, dynamic>? m,
+    http.Response res,
+    String fallback,
+  ) {
     final msg = (m != null && m['message'] is String)
         ? m['message'] as String
         : fallback;
@@ -34,9 +34,9 @@ class ApiRoom {
   }
 
   static Map<String, dynamic> _dataOrThrow(
-      http.Response res, {
-        String fallback = 'Request failed',
-      }) {
+    http.Response res, {
+    String fallback = 'Request failed',
+  }) {
     final m = _decodeJson(res);
     if (res.statusCode >= 400 || m['ok'] != true) {
       _throwApiErr(m, res, fallback);
@@ -50,6 +50,7 @@ class ApiRoom {
   static Future<Map<String, dynamic>> createRoom({
     required String gameId,
     String? sponsorCode,
+    String? dewanyahId,
     required String? token,
     double? lat,
     double? lng,
@@ -59,6 +60,8 @@ class ApiRoom {
       'gameId': gameId,
       if (sponsorCode != null && sponsorCode.trim().isNotEmpty)
         'sponsorCode': sponsorCode.trim(),
+      if (dewanyahId != null && dewanyahId.trim().isNotEmpty)
+        'dewanyahId': dewanyahId.trim(),
       if (lat != null) 'lat': lat,
       if (lng != null) 'lng': lng,
       if (radiusMeters != null) 'radiusMeters': radiusMeters,
@@ -66,10 +69,10 @@ class ApiRoom {
 
     final res = await http
         .post(
-      Uri.parse('$apiBase/rooms'),
-      headers: _headers(token: token),
-      body: jsonEncode(body),
-    )
+          Uri.parse('$apiBase/rooms'),
+          headers: _headers(token: token),
+          body: jsonEncode(body),
+        )
         .timeout(_timeout);
 
     return _dataOrThrow(res, fallback: 'Failed to create room');
@@ -84,14 +87,14 @@ class ApiRoom {
   }) async {
     final res = await http
         .post(
-      Uri.parse('$apiBase/rooms/join'),
-      headers: _headers(token: token),
-      body: jsonEncode({
-        'code': code,
-        if (lat != null) 'lat': lat,
-        if (lng != null) 'lng': lng,
-      }),
-    )
+          Uri.parse('$apiBase/rooms/join'),
+          headers: _headers(token: token),
+          body: jsonEncode({
+            'code': code,
+            if (lat != null) 'lat': lat,
+            if (lng != null) 'lng': lng,
+          }),
+        )
         .timeout(_timeout);
 
     final m = _decodeJson(res);
@@ -102,14 +105,14 @@ class ApiRoom {
 
   /// جلب روم بالكود
   static Future<Map<String, dynamic>> getRoomByCode(
-      String code, {
-        String? token,
-      }) async {
+    String code, {
+    String? token,
+  }) async {
     final res = await http
         .get(
-      Uri.parse('$apiBase/rooms/$code'),
-      headers: _headers(token: token),
-    )
+          Uri.parse('$apiBase/rooms/$code'),
+          headers: _headers(token: token),
+        )
         .timeout(_timeout);
 
     return _dataOrThrow(res, fallback: 'Failed to fetch room');
@@ -131,10 +134,10 @@ class ApiRoom {
 
     final res = await http
         .post(
-      Uri.parse('$apiBase/rooms/$code/start'),
-      headers: _headers(token: token),
-      body: jsonEncode(body),
-    )
+          Uri.parse('$apiBase/rooms/$code/start'),
+          headers: _headers(token: token),
+          body: jsonEncode(body),
+        )
         .timeout(_timeout);
 
     return _dataOrThrow(res, fallback: 'Failed to start room');
@@ -148,10 +151,10 @@ class ApiRoom {
   }) async {
     final res = await http
         .post(
-      Uri.parse('$apiBase/rooms/$code/stake'),
-      headers: _headers(token: token),
-      body: jsonEncode({'amount': amount}),
-    )
+          Uri.parse('$apiBase/rooms/$code/stake'),
+          headers: _headers(token: token),
+          body: jsonEncode({'amount': amount}),
+        )
         .timeout(_timeout);
 
     return _dataOrThrow(res, fallback: 'Failed to set stake');
@@ -166,13 +169,13 @@ class ApiRoom {
   }) async {
     final res = await http
         .post(
-      Uri.parse('$apiBase/rooms/$code/team'),
-      headers: _headers(token: token),
-      body: jsonEncode({
-        'playerUserId': playerUserId,
-        'team': team,
-      }),
-    )
+          Uri.parse('$apiBase/rooms/$code/team'),
+          headers: _headers(token: token),
+          body: jsonEncode({
+            'playerUserId': playerUserId,
+            'team': team,
+          }),
+        )
         .timeout(_timeout);
 
     final m = _decodeJson(res);
@@ -190,13 +193,13 @@ class ApiRoom {
   }) async {
     final res = await http
         .post(
-      Uri.parse('$apiBase/rooms/$code/leader'),
-      headers: _headers(token: token),
-      body: jsonEncode({
-        'team': team,
-        'leaderUserId': leaderUserId,
-      }),
-    )
+          Uri.parse('$apiBase/rooms/$code/leader'),
+          headers: _headers(token: token),
+          body: jsonEncode({
+            'team': team,
+            'leaderUserId': leaderUserId,
+          }),
+        )
         .timeout(_timeout);
 
     final m = _decodeJson(res);
@@ -214,13 +217,13 @@ class ApiRoom {
   }) async {
     final res = await http
         .post(
-      Uri.parse('$apiBase/rooms/$code/result'),
-      headers: _headers(token: token),
-      body: jsonEncode({
-        'winners': winners,
-        'losers': losers,
-      }),
-    )
+          Uri.parse('$apiBase/rooms/$code/result'),
+          headers: _headers(token: token),
+          body: jsonEncode({
+            'winners': winners,
+            'losers': losers,
+          }),
+        )
         .timeout(_timeout);
     return _dataOrThrow(res, fallback: 'Failed to submit result');
   }
@@ -233,10 +236,10 @@ class ApiRoom {
   }) async {
     final res = await http
         .post(
-      Uri.parse('$apiBase/rooms/$code/result/vote'),
-      headers: _headers(token: token),
-      body: jsonEncode({'approve': approve}),
-    )
+          Uri.parse('$apiBase/rooms/$code/result/vote'),
+          headers: _headers(token: token),
+          body: jsonEncode({'approve': approve}),
+        )
         .timeout(_timeout);
     return _dataOrThrow(res, fallback: 'Failed to vote on result');
   }
@@ -248,9 +251,9 @@ class ApiRoom {
   }) async {
     final res = await http
         .get(
-      Uri.parse('$apiBase/rooms/$code/state'),
-      headers: _headers(token: token),
-    )
+          Uri.parse('$apiBase/rooms/$code/state'),
+          headers: _headers(token: token),
+        )
         .timeout(_timeout);
     return _dataOrThrow(res, fallback: 'Failed to fetch room state');
   }

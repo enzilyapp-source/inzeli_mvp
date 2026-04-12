@@ -520,6 +520,8 @@ class _TopProfileCard extends StatelessWidget {
         return AvatarEffectType.greenLeaf;
       case 'flameBlue':
         return AvatarEffectType.flameBlue;
+      case 'whiteSparkle':
+        return AvatarEffectType.whiteSparkle;
       default:
         return null;
     }

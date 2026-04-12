@@ -116,6 +116,8 @@ class _ProfilePageState extends State<ProfilePage> {
         return AvatarEffectType.greenLeaf;
       case 'flameBlue':
         return AvatarEffectType.flameBlue;
+      case 'whiteSparkle':
+        return AvatarEffectType.whiteSparkle;
       default:
         return null;
     }
@@ -133,6 +135,8 @@ class _ProfilePageState extends State<ProfilePage> {
         return 'greenLeaf';
       case AvatarEffectType.flameBlue:
         return 'flameBlue';
+      case AvatarEffectType.whiteSparkle:
+        return 'whiteSparkle';
       default:
         return null;
     }
@@ -531,6 +535,8 @@ class _ProfilePageState extends State<ProfilePage> {
           (AvatarEffectType.goldLightning, 'برق ذهبي'),
           (AvatarEffectType.kuwaitSparkles, 'ألوان العلم'),
           (AvatarEffectType.greenLeaf, 'اخضر'),
+          (AvatarEffectType.flameBlue, 'لهب أزرق'),
+          (AvatarEffectType.whiteSparkle, 'سباركل أبيض'),
         ];
         final cardThemes = [
           ('أزرق', 0),
@@ -739,6 +745,21 @@ class _ProfilePageState extends State<ProfilePage> {
                     ),
                   ),
                 ),
+                PositionedDirectional(
+                  top: 12,
+                  end: 12,
+                  child: Material(
+                    color: const Color(0xFF121D30).withValues(alpha: 0.82),
+                    shape: const CircleBorder(),
+                    child: IconButton(
+                      tooltip: app.tr(ar: 'الإعدادات', en: 'Settings'),
+                      onPressed: () => _openSettings(app),
+                      icon: const Icon(Icons.settings_outlined,
+                          color: Colors.white, size: 20),
+                      visualDensity: VisualDensity.compact,
+                    ),
+                  ),
+                ),
                 Align(
                   alignment: Alignment.center,
                   child: Column(
@@ -904,11 +925,6 @@ class _ProfilePageState extends State<ProfilePage> {
           spacing: 10,
           runSpacing: 10,
           children: [
-            _QuickActionChip(
-              icon: Icons.settings_outlined,
-              label: app.tr(ar: 'الإعدادات', en: 'Settings'),
-              onTap: () => _openSettings(app),
-            ),
             _QuickActionChip(
               icon: Icons.shopping_bag_outlined,
               label: app.tr(ar: 'المتجر', en: 'Market'),
