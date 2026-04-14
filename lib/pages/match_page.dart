@@ -41,7 +41,6 @@ class _MatchPageState extends State<MatchPage> with WidgetsBindingObserver {
   String? _winnerUserId;
   String? _winnerTeam; // A/B if team mode
   bool _teamMode = false; // default to فردي حتى يختار المضيف فرق
-  bool _locked = false; // لا يسمح بالحسم/الشّرف أثناء العدّاد
 
   Timer? _ticker;
   int _remaining = 0;
@@ -60,6 +59,7 @@ class _MatchPageState extends State<MatchPage> with WidgetsBindingObserver {
   bool _resultNotified = false;
   GameMode _currentGameMode = GameMode.both;
   int? _lastRemainingSoundTick;
+  DateTime? _lastRefreshErrorAt;
 
   // -------- قيد (تسجيل نقاط الجنجفه) --------
   final int _qaidDefaultTarget = 100;
@@ -362,6 +362,19 @@ class _MatchPageState extends State<MatchPage> with WidgetsBindingObserver {
     return '$m:$ss';
   }
 
+  int _calcRemainingFromClock() {
+    if (_startedAt == null || _timerSec == null || _timerSec! <= 0) return 0;
+    final elapsed = DateTime.now().difference(_startedAt!).inSeconds;
+    final remain = _timerSec! - elapsed;
+    return remain > 0 ? remain : 0;
+  }
+
+  bool get _countdownActive {
+    // نعتمد الزمن الفعلي من startedAt/timerSec لتفادي أي تعليق لو قيمة _locked
+    // أو _remaining وصلت بشكل متأخر من السيرفر.
+    return _calcRemainingFromClock() > 0;
+  }
+
   String _nameForUser(String uid) {
     final p = _uniquePlayersList.firstWhere(
       (e) => (e['userId'] ?? '').toString() == uid,
@@ -397,7 +410,6 @@ class _MatchPageState extends State<MatchPage> with WidgetsBindingObserver {
         // عند انتهاء العداد
         if (clamped == 0 && _remaining > 0) {
           _notifyTimerEnded();
-          _locked = false;
         }
       }
       setState(() => _remaining = clamped);
@@ -651,15 +663,12 @@ class _MatchPageState extends State<MatchPage> with WidgetsBindingObserver {
       final room = await ApiRoom.getRoomByCode(code, token: widget.app.token);
       _room = room;
 
-      _locked = room['locked'] == true;
-
       final remainingSec = (room['remainingSec'] as num?)?.toInt();
       if (remainingSec != null) {
         final prevRemaining = _remaining;
         _remaining = remainingSec;
         if (prevRemaining > 0 && _remaining <= 0) {
           _notifyTimerEnded();
-          _locked = false;
         }
       }
 
@@ -762,7 +771,14 @@ class _MatchPageState extends State<MatchPage> with WidgetsBindingObserver {
 
       setState(() {});
     } catch (e) {
-      _msg('تحديث الروم فشل: $e');
+      // لا نسبب سبام SnackBar كل 3 ثواني لأن هذا يعلق واجهة المباراة.
+      final now = DateTime.now();
+      final shouldToast = _lastRefreshErrorAt == null ||
+          now.difference(_lastRefreshErrorAt!) > const Duration(seconds: 15);
+      if (shouldToast && mounted) {
+        _lastRefreshErrorAt = now;
+        _msg('تعذر تحديث الروم الآن، جاري المحاولة...');
+      }
     }
   }
 
@@ -774,6 +790,7 @@ class _MatchPageState extends State<MatchPage> with WidgetsBindingObserver {
     final sponsorCode = widget.sponsorCode;
     final timerMinutes = kGameRules[game]?.timerMinutes ?? 10;
     final timerSec = timerMinutes * 60;
+    final countdownActive = _countdownActive;
 
     final hostId =
         (_room?['hostUserId'] ?? widget.room?['hostUserId'])?.toString();
@@ -995,7 +1012,6 @@ class _MatchPageState extends State<MatchPage> with WidgetsBindingObserver {
                           allowZeroCredit: true,
                           timerSec: timerSec,
                         );
-                        _locked = data['locked'] == true;
                         _lastRemainingSoundTick = null;
                         _timerSec = (data['timerSec'] as num?)?.toInt();
                         final s = data['startedAt'] as String?;
@@ -1147,7 +1163,7 @@ class _MatchPageState extends State<MatchPage> with WidgetsBindingObserver {
 
                 const SizedBox(height: 12),
 
-                if (isHost && started && qaidGame && !_locked) ...[
+                if (isHost && started && qaidGame && !countdownActive) ...[
                   _QaidCard(
                     teamMode: _teamMode,
                     target: _qaidTarget,
@@ -1178,7 +1194,7 @@ class _MatchPageState extends State<MatchPage> with WidgetsBindingObserver {
                     label: Text(_resultStatus == 'pending'
                         ? 'النتيجة قيد الموافقة'
                         : 'حسم النتيجة'),
-                    onPressed: _locked
+                    onPressed: countdownActive
                         ? () => _msg('انتظر انتهاء العداد')
                         : () async {
                             final codeSafe = code;
@@ -1187,7 +1203,7 @@ class _MatchPageState extends State<MatchPage> with WidgetsBindingObserver {
                               _msg('ابدأ العداد أولاً');
                               return;
                             }
-                            if (_remaining > 0) {
+                            if (countdownActive) {
                               _msg('انتظر انتهاء العدّاد أولاً');
                               return;
                             }
@@ -1307,7 +1323,7 @@ class _MatchPageState extends State<MatchPage> with WidgetsBindingObserver {
                   Align(
                     alignment: Alignment.center,
                     child: FilledButton.icon(
-                      onPressed: _locked
+                      onPressed: countdownActive
                           ? () => _msg('الشّرف مغلق أثناء العدّاد')
                           : () async {
                               final scanned = await Navigator.push<String>(
@@ -1344,7 +1360,7 @@ class _MatchPageState extends State<MatchPage> with WidgetsBindingObserver {
               ],
             ),
           ),
-          if (_locked && _remaining > 0)
+          if (countdownActive)
             Positioned.fill(
               child: AbsorbPointer(
                 absorbing: true,
@@ -1377,7 +1393,7 @@ class _MatchPageState extends State<MatchPage> with WidgetsBindingObserver {
               ),
             ),
           // أثناء القفل: نسمح باستخدام القيد فقط
-          if (isHost && _locked && _remaining > 0 && started && qaidGame)
+          if (isHost && countdownActive && started && qaidGame)
             Positioned(
               left: 12,
               right: 12,

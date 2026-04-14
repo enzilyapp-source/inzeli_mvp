@@ -461,9 +461,11 @@ class _ProfilePageState extends State<ProfilePage> {
                           icon: const Icon(Icons.save),
                           label: const Text('حفظ التغييرات'),
                           onPressed: () async {
+                            final oldName = (app.displayName ?? '').trim();
                             app.displayName = _nameCtrl.text.trim().isEmpty
                                 ? app.displayName
                                 : _nameCtrl.text.trim();
+                            app.name = app.displayName ?? app.name;
                             app.email = _emailCtrl.text.trim().isEmpty
                                 ? app.email
                                 : _emailCtrl.text.trim();
@@ -471,7 +473,19 @@ class _ProfilePageState extends State<ProfilePage> {
                                 ? app.phone
                                 : _phoneCtrl.text.trim();
                             await app.saveState();
-                            await app.syncProfileToServer();
+                            final synced = await app.syncProfileToServer(
+                              includeAvatarData: false,
+                              includeThemeData: false,
+                            );
+                            await app.refreshSessionFromServer(force: true);
+                            if (mounted &&
+                                !synced &&
+                                oldName != (app.displayName ?? '').trim()) {
+                              _msg(
+                                'تعذر حفظ الاسم على الخادم. تأكد من الاتصال ثم أعد الحفظ.',
+                                error: true,
+                              );
+                            }
                             if (mounted) setState(() {});
                             if (ctx.mounted) Navigator.pop(ctx);
                           },
@@ -630,7 +644,9 @@ class _ProfilePageState extends State<ProfilePage> {
                       widget.app.themeId = _effectId(_avatarEffect);
                       widget.app.cardId = _cardId(_cardThemeIndex);
                       await widget.app.saveState();
-                      await widget.app.syncProfileToServer();
+                      await widget.app.syncProfileToServer(
+                        includeAvatarData: false,
+                      );
                       if (!ctx.mounted) return;
                       Navigator.pop(ctx);
                       setState(() {});

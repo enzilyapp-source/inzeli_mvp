@@ -477,9 +477,12 @@ class AppState extends ChangeNotifier {
     await syncProfileToServer();
   }
 
-  Future<void> syncProfileToServer() async {
+  Future<bool> syncProfileToServer({
+    bool includeAvatarData = true,
+    bool includeThemeData = true,
+  }) async {
     final auth = token;
-    if (auth == null || auth.isEmpty) return;
+    if (auth == null || auth.isEmpty) return false;
     try {
       final avatarPathForApi = (avatarPath != null &&
               (avatarPath!.startsWith('http://') ||
@@ -490,16 +493,16 @@ class AppState extends ChangeNotifier {
       final updated = await updateMyProfile(
         token: auth,
         displayName: displayName,
-        avatarBase64: avatarBase64,
-        avatarPath: avatarPathForApi,
-        themeId: themeId,
-        frameId: frameId,
-        cardId: cardId,
-        includeThemeId: true,
-        includeFrameId: true,
-        includeCardId: true,
+        avatarBase64: includeAvatarData ? avatarBase64 : null,
+        avatarPath: includeAvatarData ? avatarPathForApi : null,
+        themeId: includeThemeData ? themeId : null,
+        frameId: includeThemeData ? frameId : null,
+        cardId: includeThemeData ? cardId : null,
+        includeThemeId: includeThemeData,
+        includeFrameId: includeThemeData,
+        includeCardId: includeThemeData,
       );
-      if (updated == null) return;
+      if (updated == null) return false;
 
       String? asNullableString(dynamic value) {
         if (value == null) return null;
@@ -510,6 +513,7 @@ class AppState extends ChangeNotifier {
       userId = asNullableString(updated['id']) ?? userId;
       publicId = asNullableString(updated['publicId']) ?? publicId;
       displayName = asNullableString(updated['displayName']) ?? displayName;
+      name = displayName ?? name;
       themeId = asNullableString(updated['themeId']) ?? themeId;
       frameId = asNullableString(updated['frameId']) ?? frameId;
       cardId = asNullableString(updated['cardId']) ?? cardId;
@@ -540,8 +544,10 @@ class AppState extends ChangeNotifier {
 
       await _save();
       notifyListeners();
+      return true;
     } catch (_) {
       // ignore backend sync errors and keep local profile state
+      return false;
     }
   }
 
