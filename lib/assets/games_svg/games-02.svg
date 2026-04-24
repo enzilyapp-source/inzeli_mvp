@@ -1,0 +1,71 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 512 512">
+  <defs>
+    <style>
+      .cls-1, .cls-2 {
+        fill: none;
+      }
+
+      .cls-3 {
+        fill: url(#linear-gradient-2);
+        mix-blend-mode: color-burn;
+        opacity: .59;
+      }
+
+      .cls-4 {
+        fill: #92bdc8;
+      }
+
+      .cls-5 {
+        isolation: isolate;
+      }
+
+      .cls-6 {
+        fill: url(#linear-gradient);
+        opacity: .21;
+      }
+
+      .cls-2 {
+        stroke: url(#New_Pattern_Swatch_1);
+        stroke-miterlimit: 10;
+        stroke-width: 8px;
+      }
+    </style>
+    <linearGradient id="linear-gradient" x1="20.33" y1="489.95" x2="489" y2="21.28" gradientUnits="userSpaceOnUse">
+      <stop offset=".47" stop-color="#e4f1fb"/>
+      <stop offset=".51" stop-color="#dae8f3"/>
+      <stop offset=".63" stop-color="#bdcbd9"/>
+      <stop offset=".74" stop-color="#abbaca"/>
+      <stop offset=".82" stop-color="#a5b4c5"/>
+    </linearGradient>
+    <linearGradient id="linear-gradient-2" x1="96.68" y1="-23.12" x2="418.53" y2="534.35" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#fff"/>
+      <stop offset="1" stop-color="#d5e9f8"/>
+    </linearGradient>
+    <pattern id="New_Pattern_Swatch_1" data-name="New Pattern Swatch 1" x="0" y="0" width="74.6" height="74.6" patternTransform="translate(-779.34 -164.94)" patternUnits="userSpaceOnUse" viewBox="0 0 74.6 74.6">
+      <g>
+        <rect class="cls-1" width="74.6" height="74.6"/>
+        <rect class="cls-4" x="0" width="74.6" height="74.6"/>
+      </g>
+    </pattern>
+  </defs>
+  <g class="cls-5">
+    <g id="Layer_3" data-name="Layer 3">
+      <g>
+        <rect class="cls-6" x="5.82" y="8.05" width="497.69" height="495.12" rx="47.21" ry="47.21"/>
+        <path class="cls-3" d="M51.31,9.63h412.59c23.52,0,42.61,19.09,42.61,42.61v406.74c0,23.52-19.09,42.61-42.61,42.61H51.31c-23.52,0-42.61-19.09-42.61-42.61V52.25c0-23.52,19.09-42.61,42.61-42.61Z"/>
+      </g>
+    </g>
+    <g id="Layer_2" data-name="Layer 2">
+      <g>
+        <path class="cls-2" d="M313.09,236.78c-18.71-34.39-59.65-62.13-112.4-59.75"/>
+        <path class="cls-2" d="M260.8,264.35c36.01-11.72,70.76-35.2,83.46-68.2"/>
+        <path class="cls-2" d="M258.04,324.35c38.53.66,83.51-19.41,107.87-67.22"/>
+        <path class="cls-2" d="M260.8,264.35c-7.6,35.52-5.78,75.27,12.58,102.94"/>
+        <path class="cls-2" d="M211.27,231.91c-19.4,33.01-24.02,80.73,2.41,125.35"/>
+        <path class="cls-2" d="M260.8,264.35c-27.95-25.98-65.24-44.95-99.59-39.68"/>
+        <circle class="cls-2" cx="260.77" cy="262.14" r="105.14"/>
+      </g>
+    </g>
+  </g>
+</svg>

@@ -1,5 +1,6 @@
 // lib/pages/games_page.dart
 import 'package:flutter/material.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 
 import '../state.dart';
 import '../api_room.dart';
@@ -10,6 +11,70 @@ import '../widgets/primary_pill_button.dart';
 import 'match_page.dart';
 import 'scan_page.dart';
 import 'package:geolocator/geolocator.dart';
+
+// ربط كل لعبة بأيقونتها (SVG) داخل أزرار الألعاب.
+// NOTE: هذه الخريطة قابلة للتعديل لاحقًا إذا أردتِ تبديل أيقونة لعبة معيّنة.
+const Map<String, String> _gamePngAssetById = <String, String>{
+  'قدم': 'lib/assets/games_png/games-01.png',
+  'طائره': 'lib/assets/games_png/games-02.png',
+  'سله': 'lib/assets/games_png/games-03.png',
+  'دفان': 'lib/assets/games_png/games-10.png',
+  'تنس ارضي': 'lib/assets/games_png/games-05.png',
+  'بيبيفوت': 'lib/assets/games_png/games-06.png',
+  'بادل': 'lib/assets/games_png/games-07.png',
+  'بلوت': 'lib/assets/games_png/games-10.png',
+  'هند': 'lib/assets/games_png/games-09.png',
+  'كوت': 'lib/assets/games_png/games-08.png',
+  'سبيتة': 'lib/assets/games_png/games-12.png',
+  'بولنج': 'lib/assets/games_png/games-16.png',
+  'بلياردو': 'lib/assets/games_png/games-15.png',
+  'تنس طاولة': 'lib/assets/games_png/games-17.png',
+  'شطرنج': 'lib/assets/games_png/games-18.png',
+  'تريكس': 'lib/assets/games_png/games-11.png',
+  'دامه': 'lib/assets/games_png/games-19.png',
+  'كيرم': 'lib/assets/games_png/games-20.png',
+  'دومنه': 'lib/assets/games_png/games-21.png',
+  'طاوله': 'lib/assets/games_png/games-22.png',
+  'اونو': 'lib/assets/games_png/games-13.png',
+  'جاكارو': 'lib/assets/games_png/games-23.png',
+};
+
+const Map<String, String> _gameSvgAssetById = <String, String>{
+  'قدم': 'lib/assets/games_svg/games-01.svg',
+  'طائره': 'lib/assets/games_svg/games-02.svg',
+  'سله': 'lib/assets/games_svg/games-03.svg',
+  'دفان': 'lib/assets/games_svg/games-10.svg',
+  'تنس ارضي': 'lib/assets/games_svg/games-05.svg',
+  'بيبيفوت': 'lib/assets/games_svg/games-06.svg',
+  'بادل': 'lib/assets/games_svg/games-07.svg',
+  'بلوت': 'lib/assets/games_svg/games-10.svg',
+  'هند': 'lib/assets/games_svg/games-09.svg',
+  'كوت': 'lib/assets/games_svg/games-08.svg',
+  'سبيتة': 'lib/assets/games_svg/games-12.svg',
+  'بولنج': 'lib/assets/games_svg/games-16.svg',
+  'بلياردو': 'lib/assets/games_svg/games-15.svg',
+  'تنس طاولة': 'lib/assets/games_svg/games-17.svg',
+  'شطرنج': 'lib/assets/games_svg/games-18.svg',
+  'تريكس': 'lib/assets/games_svg/games-11.svg',
+  'دامه': 'lib/assets/games_svg/games-19.svg',
+  'كيرم': 'lib/assets/games_svg/games-20.svg',
+  'دومنه': 'lib/assets/games_svg/games-21.svg',
+  'طاوله': 'lib/assets/games_svg/games-22.svg',
+  'اونو': 'lib/assets/games_svg/games-13.svg',
+  'جاكارو': 'lib/assets/games_svg/games-23.svg',
+};
+
+const Map<String, String> _categoryIconPngById = <String, String>{
+  'رياضة': 'lib/assets/category_icons/sports.png',
+  'ألعاب شعبية': 'lib/assets/category_icons/popular.png',
+  'جنجفة': 'lib/assets/category_icons/cards.png',
+};
+
+const Map<String, String> _categoryDisplayArabic = <String, String>{
+  'رياضة': 'ريــــاضة',
+  'ألعاب شعبية': 'ألعــــاب شعبية',
+  'جنجفة': 'جنجـــــــفه',
+};
 
 class GamesPage extends StatefulWidget {
   final AppState app;
@@ -58,6 +123,17 @@ class _GamesPageState extends State<GamesPage> {
 
   String? get _selectedCategory => app.selectedCategory;
   String? get _selectedGame => app.selectedGame;
+
+  String? _pngForGame(String gameId) => _gamePngAssetById[gameId.trim()];
+  String? _svgForGame(String gameId) => _gameSvgAssetById[gameId.trim()];
+
+  String _categoryDisplayLabel(String categoryId) {
+    final label = app.categoryLabel(categoryId);
+    if (app.isEnglish) return label;
+    return _categoryDisplayArabic[label] ??
+        _categoryDisplayArabic[categoryId] ??
+        label;
+  }
 
   bool _isRoomNotFoundError(Object e) {
     final s = e.toString();
@@ -318,7 +394,8 @@ class _GamesPageState extends State<GamesPage> {
               final cat = categories[idx];
               final isSelected = idx == currentIndex;
               return _CategoryCard(
-                title: app.categoryLabel(cat),
+                title: _categoryDisplayLabel(cat),
+                iconAsset: _categoryIconPngById[cat],
                 isSelected: isSelected,
               );
             },
@@ -370,7 +447,9 @@ class _GamesPageState extends State<GamesPage> {
             setState(() {});
           },
           child: _GameCardImage(
-            title: app.gameLabel(g),
+            gameId: g,
+            pngAsset: _pngForGame(g),
+            svgAsset: _svgForGame(g),
             isSelected: isSelected,
           ),
         );
@@ -459,9 +538,34 @@ class _GamesPageState extends State<GamesPage> {
           const SizedBox(height: 8),
           _buildCategoryPager(),
           const SizedBox(height: 16),
-          Text(
-              'التصنيف: ${app.categoryLabel(cat)} — اللعبة: ${app.gameLabel(game)}',
-              style: const TextStyle(color: Colors.white70, fontSize: 12)),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            decoration: BoxDecoration(
+              color: Colors.white.withValues(alpha: 0.08),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: Colors.white12),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Text(
+                  'التصنيف: ${_categoryDisplayLabel(cat)}',
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(color: Colors.white70, fontSize: 12),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  app.gameLabel(game),
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(
+                    color: Color(0xFFE49A2C),
+                    fontSize: 16,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+              ],
+            ),
+          ),
           const SizedBox(height: 12),
           _buildGamesGrid(),
           const SizedBox(height: 24),
@@ -586,13 +690,22 @@ class _ProximityHint extends StatelessWidget {
 }
 
 class _GameCardImage extends StatelessWidget {
-  final String title;
+  final String gameId;
+  final String? pngAsset;
+  final String? svgAsset;
   final bool isSelected;
-  const _GameCardImage({required this.title, required this.isSelected});
+  const _GameCardImage({
+    required this.gameId,
+    required this.isSelected,
+    this.pngAsset,
+    this.svgAsset,
+  });
 
   @override
   Widget build(BuildContext context) {
     final borderColor = isSelected ? const Color(0xFFE49A2C) : Colors.white24;
+    final hasPng = pngAsset != null && pngAsset!.trim().isNotEmpty;
+    final hasSvg = svgAsset != null && svgAsset!.trim().isNotEmpty;
     return AnimatedContainer(
       duration: const Duration(milliseconds: 160),
       decoration: BoxDecoration(
@@ -609,7 +722,7 @@ class _GameCardImage extends StatelessWidget {
             : null,
       ),
       child: ClipRRect(
-        borderRadius: BorderRadius.circular(17),
+        borderRadius: BorderRadius.circular(14),
         child: Container(
           decoration: const BoxDecoration(
             gradient: LinearGradient(
@@ -618,27 +731,98 @@ class _GameCardImage extends StatelessWidget {
               end: Alignment.bottomRight,
             ),
           ),
-          child: Center(
-            child: Text(
-              title,
-              textAlign: TextAlign.center,
-              style: const TextStyle(
-                color: Colors.white,
-                fontWeight: FontWeight.w800,
-                fontSize: 13,
-              ),
+          child: Padding(
+            padding: const EdgeInsets.all(6),
+            child: Center(
+              child: _iconOnlyVisual(hasPng: hasPng, hasSvg: hasSvg),
             ),
           ),
         ),
       ),
     );
   }
+
+  Widget _svgOrFallback(bool hasSvg) {
+    if (hasSvg) {
+      return SvgPicture.asset(
+        svgAsset!,
+        fit: BoxFit.contain,
+        alignment: Alignment.center,
+        semanticsLabel: gameId,
+        placeholderBuilder: (_) => _fallbackTitle(),
+      );
+    }
+    return _fallbackTitle();
+  }
+
+  Widget _iconOnlyVisual({required bool hasPng, required bool hasSvg}) {
+    if (hasPng) {
+      return _iconCropForGame(
+        gameId: gameId,
+        child: Image.asset(
+          pngAsset!,
+          fit: BoxFit.contain,
+          filterQuality: FilterQuality.high,
+          errorBuilder: (_, __, ___) => _svgOrFallback(hasSvg),
+        ),
+      );
+    }
+    if (hasSvg) {
+      return _iconCropForGame(
+        gameId: gameId,
+        child: SvgPicture.asset(
+          svgAsset!,
+          fit: BoxFit.contain,
+          alignment: Alignment.center,
+          semanticsLabel: gameId,
+          placeholderBuilder: (_) => _fallbackTitle(),
+        ),
+      );
+    }
+    return _fallbackTitle();
+  }
+
+  Widget _iconCropForGame({required String gameId, required Widget child}) {
+    // كل الأيقونات الجديدة (PNG بدون نص) الآن متناسقة بنفس إطار القص.
+    // القص الخاص القديم لبلياردو/دومنه كان يسبب ظهور مربع أسود ببعض المنصات.
+    return _iconCrop(child: child);
+  }
+
+  Widget _iconCrop({
+    required Widget child,
+    Alignment alignment = const Alignment(0, 0.2),
+    double widthFactor = 0.9,
+    double heightFactor = 0.8,
+  }) {
+    return ClipRect(
+      child: Align(
+        // نقص بسيط من الأعلى لإخفاء الخط الرفيع الظاهر ببعض الأصول.
+        alignment: alignment,
+        widthFactor: widthFactor,
+        heightFactor: heightFactor,
+        child: child,
+      ),
+    );
+  }
+
+  Widget _fallbackTitle() {
+    return Icon(
+      Icons.sports_esports_rounded,
+      color: Colors.white.withValues(alpha: 0.92),
+      size: 30,
+    );
+  }
 }
 
 class _CategoryCard extends StatelessWidget {
   final String title;
+  final String? iconAsset;
   final bool isSelected;
-  const _CategoryCard({required this.title, required this.isSelected});
+  const _CategoryCard({
+    required this.title,
+    required this.isSelected,
+    this.iconAsset,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -673,14 +857,31 @@ class _CategoryCard extends StatelessWidget {
             ),
           ),
           child: Center(
-            child: Text(
-              title,
-              style: TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.w900,
-                color: Colors.white.withValues(alpha: isSelected ? 1 : 0.8),
-                shadows: const [Shadow(color: Colors.black45, blurRadius: 4)],
-              ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (iconAsset != null) ...[
+                  Image.asset(
+                    iconAsset!,
+                    width: 46,
+                    height: 46,
+                    filterQuality: FilterQuality.high,
+                  ),
+                  const SizedBox(height: 8),
+                ],
+                Text(
+                  title,
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.w900,
+                    color: const Color(0xFFE49A2C)
+                        .withValues(alpha: isSelected ? 1 : 0.9),
+                    shadows: const [
+                      Shadow(color: Colors.black45, blurRadius: 4)
+                    ],
+                  ),
+                ),
+              ],
             ),
           ),
         ),

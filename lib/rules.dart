@@ -116,7 +116,7 @@ const Map<String, GameRule> kGameRules = {
   ),
   'دومنه': GameRule(
     name: 'دومنه',
-    timerMinutes: 15,
+    timerMinutes: 10,
     minPlayers: 2, // 1 ضد 1 إلى 4 ضد بعض
     maxPlayers: 4,
     modes: [PlayMode.solo],

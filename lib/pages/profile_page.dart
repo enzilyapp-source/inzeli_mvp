@@ -42,6 +42,7 @@ class _ProfilePageState extends State<ProfilePage> {
   int _wins = 0;
   int _losses = 0;
   int _games = 0;
+  bool _showPearlProgress = false;
   late final TextEditingController _nameCtrl;
   late final TextEditingController _emailCtrl;
   late final TextEditingController _phoneCtrl;
@@ -918,21 +919,64 @@ class _ProfilePageState extends State<ProfilePage> {
           ],
         ),
 
-        const SizedBox(height: 12),
+        const SizedBox(height: 10),
 
-        // Pearls per game (دائرة تعبئة لكل لعبة)
-        Card(
-          child: Padding(
-            padding: const EdgeInsets.all(12),
-            child: _PearlCircleGrid(
-              entries: _gamePearlEntries(app),
-              maxValue: _milestones.last,
-              milestones: _milestones,
-              rankLabel: _labelFor,
-              rankName: _rankName,
+        Row(
+          children: [
+            Expanded(
+              child: Divider(
+                color: Colors.white.withValues(alpha: 0.28),
+                thickness: 1.2,
+                endIndent: 10,
+              ),
+            ),
+            InkWell(
+              onTap: () =>
+                  setState(() => _showPearlProgress = !_showPearlProgress),
+              borderRadius: BorderRadius.circular(18),
+              child: Container(
+                width: 36,
+                height: 36,
+                decoration: BoxDecoration(
+                  color: Colors.white.withValues(alpha: 0.1),
+                  shape: BoxShape.circle,
+                  border: Border.all(color: Colors.white24),
+                ),
+                child: Icon(
+                  _showPearlProgress
+                      ? Icons.expand_less_rounded
+                      : Icons.more_horiz_rounded,
+                  color: Colors.white,
+                  size: 22,
+                ),
+              ),
+            ),
+            Expanded(
+              child: Divider(
+                color: Colors.white.withValues(alpha: 0.28),
+                thickness: 1.2,
+                indent: 10,
+              ),
+            ),
+          ],
+        ),
+
+        if (_showPearlProgress) ...[
+          const SizedBox(height: 8),
+          // Pearls per game (دائرة تعبئة لكل لعبة)
+          Card(
+            child: Padding(
+              padding: const EdgeInsets.all(12),
+              child: _PearlCircleGrid(
+                entries: _gamePearlEntries(app),
+                maxValue: _milestones.last,
+                milestones: _milestones,
+                rankLabel: _labelFor,
+                rankName: _rankName,
+              ),
             ),
           ),
-        ),
+        ],
 
         const SizedBox(height: 12),
 
@@ -997,43 +1041,44 @@ class _ProfilePageState extends State<ProfilePage> {
           ),
         ],
 
-        const SizedBox(height: 12),
+        if (_showPearlProgress) const SizedBox(height: 12),
 
-        // Milestones (الأنواط) row as animated orbs
-        Card(
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(12, 12, 12, 4),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  app.tr(ar: 'الأنواط', en: 'Ranks'),
-                  style: const TextStyle(
-                    fontWeight: FontWeight.w900,
-                    fontSize: 16,
+        if (_showPearlProgress) ...[
+          // Milestones (الأنواط) row as animated orbs
+          Card(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(12, 12, 12, 4),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    app.tr(ar: 'الأنواط', en: 'Ranks'),
+                    style: const TextStyle(
+                      fontWeight: FontWeight.w900,
+                      fontSize: 16,
+                    ),
                   ),
-                ),
-                const SizedBox(height: 8),
-                Wrap(
-                  spacing: 10,
-                  runSpacing: 10,
-                  children: _milestones.map((m) {
-                    final got = app.winsOf(meName, game);
-                    final achieved = got >= m;
-                    return _RankOrb(
-                      label: _labelFor(m),
-                      count: m,
-                      achieved: achieved,
-                    );
-                  }).toList(),
-                ),
-                const SizedBox(height: 8),
-              ],
+                  const SizedBox(height: 8),
+                  Wrap(
+                    spacing: 10,
+                    runSpacing: 10,
+                    children: _milestones.map((m) {
+                      final got = app.winsOf(meName, game);
+                      final achieved = got >= m;
+                      return _RankOrb(
+                        label: _labelFor(m),
+                        count: m,
+                        achieved: achieved,
+                      );
+                    }).toList(),
+                  ),
+                  const SizedBox(height: 8),
+                ],
+              ),
             ),
           ),
-        ),
-
-        const SizedBox(height: 12),
+          const SizedBox(height: 12),
+        ],
 
         // Current game “level” ring + streak
         Card(

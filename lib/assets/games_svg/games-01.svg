@@ -1,0 +1,82 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 512 512">
+  <defs>
+    <style>
+      .cls-1 {
+        fill: none;
+      }
+
+      .cls-2 {
+        fill: url(#linear-gradient-2);
+        mix-blend-mode: color-burn;
+        opacity: .59;
+      }
+
+      .cls-3 {
+        fill: #92bdc8;
+      }
+
+      .cls-4 {
+        isolation: isolate;
+      }
+
+      .cls-5 {
+        fill: url(#linear-gradient);
+        opacity: .21;
+      }
+
+      .cls-6 {
+        fill: url(#New_Pattern_Swatch_1);
+      }
+    </style>
+    <linearGradient id="linear-gradient" x1="20.33" y1="489.95" x2="489" y2="21.28" gradientUnits="userSpaceOnUse">
+      <stop offset=".47" stop-color="#e4f1fb"/>
+      <stop offset=".51" stop-color="#dae8f3"/>
+      <stop offset=".63" stop-color="#bdcbd9"/>
+      <stop offset=".74" stop-color="#abbaca"/>
+      <stop offset=".82" stop-color="#a5b4c5"/>
+    </linearGradient>
+    <linearGradient id="linear-gradient-2" x1="96.68" y1="-23.12" x2="418.53" y2="534.35" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#fff"/>
+      <stop offset="1" stop-color="#d5e9f8"/>
+    </linearGradient>
+    <pattern id="New_Pattern_Swatch_1" data-name="New Pattern Swatch 1" x="0" y="0" width="74.6" height="74.6" patternTransform="translate(4097.05 4204.08) scale(1.55)" patternUnits="userSpaceOnUse" viewBox="0 0 74.6 74.6">
+      <g>
+        <rect class="cls-1" width="74.6" height="74.6"/>
+        <rect class="cls-3" x="0" width="74.6" height="74.6"/>
+      </g>
+    </pattern>
+  </defs>
+  <g class="cls-4">
+    <g id="Layer_3" data-name="Layer 3">
+      <g>
+        <rect class="cls-5" x="5.82" y="8.05" width="497.69" height="495.12" rx="47.21" ry="47.21"/>
+        <path class="cls-2" d="M51.31,9.63h412.59c23.52,0,42.61,19.09,42.61,42.61v406.74c0,23.52-19.09,42.61-42.61,42.61H51.31c-23.52,0-42.61-19.09-42.61-42.61V52.25c0-23.52,19.09-42.61,42.61-42.61Z"/>
+      </g>
+      <g>
+        <rect class="cls-5" x="5.82" y="8.05" width="497.69" height="495.12" rx="47.21" ry="47.21"/>
+        <path class="cls-2" d="M51.31,9.63h412.59c23.52,0,42.61,19.09,42.61,42.61v406.74c0,23.52-19.09,42.61-42.61,42.61H51.31c-23.52,0-42.61-19.09-42.61-42.61V52.25c0-23.52,19.09-42.61,42.61-42.61Z"/>
+      </g>
+    </g>
+    <g id="Layer_2" data-name="Layer 2">
+      <g>
+        <polygon class="cls-6" points="329.97 299.09 297.63 299.09 297.63 291.09 325.33 291.09 343.05 260.06 325.33 229.04 297.63 229.04 297.63 221.04 329.97 221.04 352.27 260.06 329.97 299.09"/>
+        <polygon class="cls-6" points="281.09 262.05 274.14 258.08 292.93 225.2 275.48 199.02 257.6 199.02 257.6 191.02 279.76 191.02 302.33 224.88 281.09 262.05"/>
+        <polygon class="cls-6" points="288.95 361.7 273.94 326.68 281.29 323.53 296.3 358.55 288.95 361.7"/>
+        <polygon class="cls-6" points="339.23 322.16 324.22 297.14 331.08 293.03 346.09 318.04 339.23 322.16"/>
+        <polygon class="cls-6" points="331.08 227.1 324.22 222.98 339.23 197.97 346.09 202.08 331.08 227.1"/>
+        <polygon class="cls-6" points="281.2 196.81 274.04 193.23 289.05 163.22 296.2 166.79 281.2 196.81"/>
+        <rect class="cls-6" x="347.66" y="256.06" width="15.01" height="8"/>
+        <path class="cls-6" d="M279.76,329.1h-44.31l-22.57-33.86,22.39-39.18h44.67l22.39,39.18-22.57,33.86ZM239.73,321.1h35.74l17.45-26.18-17.63-30.86h-35.38l-17.63,30.86,17.45,26.18Z"/>
+        <polygon class="cls-6" points="217.58 299.09 185.24 299.09 162.94 260.06 185.24 221.04 217.58 221.04 217.58 229.04 189.88 229.04 172.16 260.06 189.88 291.09 217.58 291.09 217.58 299.09"/>
+        <polygon class="cls-6" points="234.12 262.05 212.88 224.88 235.45 191.02 257.6 191.02 257.6 199.02 239.73 199.02 222.28 225.2 241.07 258.08 234.12 262.05"/>
+        <path class="cls-6" d="M257.6,369.13c-60.14,0-109.07-48.93-109.07-109.07s48.93-109.07,109.07-109.07,109.07,48.93,109.07,109.07-48.93,109.07-109.07,109.07ZM257.6,159c-55.73,0-101.07,45.34-101.07,101.07s45.34,101.07,101.07,101.07,101.07-45.34,101.07-101.07-45.34-101.07-101.07-101.07Z"/>
+        <polygon class="cls-6" points="226.26 361.7 218.91 358.55 233.92 323.53 241.27 326.68 226.26 361.7"/>
+        <polygon class="cls-6" points="175.98 322.16 169.12 318.04 184.13 293.03 190.99 297.14 175.98 322.16"/>
+        <polygon class="cls-6" points="184.13 227.1 169.12 202.08 175.98 197.97 190.99 222.98 184.13 227.1"/>
+        <polygon class="cls-6" points="234.01 196.81 219 166.79 226.16 163.22 241.17 193.23 234.01 196.81"/>
+        <rect class="cls-6" x="152.54" y="256.06" width="15.01" height="8"/>
+      </g>
+    </g>
+  </g>
+</svg>

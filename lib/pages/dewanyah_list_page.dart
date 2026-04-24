@@ -310,192 +310,244 @@ class _DewanyahListPageState extends State<DewanyahListPage> {
                 child: Padding(
                   padding: const EdgeInsets.all(12),
                   child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
-                      Row(
+                      Text(
+                        name,
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(
+                          fontWeight: FontWeight.w900,
+                          fontSize: 18,
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      Wrap(
+                        alignment: WrapAlignment.center,
+                        spacing: 8,
+                        runSpacing: 8,
                         children: [
-                          Expanded(
-                            child: Text('$name — $game',
-                                style: const TextStyle(
-                                    fontWeight: FontWeight.w900)),
+                          Chip(
+                            avatar: const Icon(Icons.sports_esports_outlined,
+                                size: 16),
+                            label: Text(game),
+                            visualDensity: VisualDensity.compact,
                           ),
                           if (isOwner)
-                            Padding(
-                              padding: const EdgeInsets.only(left: 6),
-                              child: const Chip(
-                                label: Text('مالك'),
-                                visualDensity: VisualDensity.compact,
-                              ),
+                            const Chip(
+                              avatar:
+                                  Icon(Icons.verified_user_outlined, size: 16),
+                              label: Text('مالك'),
+                              visualDensity: VisualDensity.compact,
                             ),
-                          if (locationLock) const SizedBox(width: 6),
                           if (locationLock)
                             const Chip(
+                              avatar:
+                                  Icon(Icons.location_on_outlined, size: 16),
                               label: Text('قفل موقع'),
                               visualDensity: VisualDensity.compact,
                             ),
                         ],
                       ),
-                      if (owner.isNotEmpty) Text('المالك: $owner'),
+                      if (owner.isNotEmpty) ...[
+                        const SizedBox(height: 4),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            const Icon(Icons.person_outline, size: 16),
+                            const SizedBox(width: 4),
+                            Flexible(
+                              child: Text(
+                                'المالك: $owner',
+                                textAlign: TextAlign.center,
+                                style: TextStyle(
+                                  color: Colors.white.withValues(alpha: .82),
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
                       const SizedBox(height: 8),
                       if (games.isNotEmpty)
-                        Wrap(
-                          spacing: 6,
-                          runSpacing: 6,
-                          children: games
-                              .map(
-                                (g) => ChoiceChip(
-                                  label: Text(g),
-                                  selected: currentGame == g,
-                                  onSelected: (_) => setState(
-                                      () => _selectedGameByDew[id] = g),
-                                ),
-                              )
-                              .toList(),
+                        Center(
+                          child: Wrap(
+                            alignment: WrapAlignment.center,
+                            spacing: 6,
+                            runSpacing: 6,
+                            children: games
+                                .map(
+                                  (g) => ChoiceChip(
+                                    label: Text(g),
+                                    selected: currentGame == g,
+                                    onSelected: (_) => setState(
+                                        () => _selectedGameByDew[id] = g),
+                                  ),
+                                )
+                                .toList(),
+                          ),
                         ),
                       if (games.isNotEmpty) const SizedBox(height: 8),
                       if (isOwner)
-                        TextButton.icon(
-                          onPressed: () async {
-                            try {
-                              final members = await ApiDewanyah.members(
-                                  dewanyahId: d['id']?.toString() ?? '',
-                                  token: app.token);
-                              if (!context.mounted) return;
-                              showDialog(
-                                context: context,
-                                builder: (_) => AlertDialog(
-                                  title: const Text('الطلبات والأعضاء'),
-                                  content: SizedBox(
-                                    width: 350,
-                                    child: ListView.separated(
-                                      shrinkWrap: true,
-                                      itemCount: members.length,
-                                      separatorBuilder: (_, __) =>
-                                          const Divider(height: 8),
-                                      itemBuilder: (_, i) {
-                                        final m = members[i];
-                                        final status =
-                                            (m['status'] ?? '').toString();
-                                        final mid =
-                                            (m['userId'] ?? '').toString();
-                                        return ListTile(
-                                          leading: CircleAvatar(
-                                              child: Text('${i + 1}')),
-                                          title: Text(m['user']?['displayName']
-                                                  ?.toString() ??
-                                              'لاعب'),
-                                          subtitle: Text('حالة: $status'),
-                                          trailing: status == 'pending'
-                                              ? Wrap(
-                                                  spacing: 6,
-                                                  children: [
-                                                    TextButton(
-                                                      onPressed: () async {
-                                                        await ApiDewanyah
-                                                            .setMemberStatus(
-                                                                dewanyahId: d[
-                                                                            'id']
-                                                                        ?.toString() ??
-                                                                    '',
-                                                                memberUserId:
-                                                                    mid,
-                                                                status:
-                                                                    'approved',
-                                                                token:
-                                                                    app.token);
-                                                        if (!mounted ||
-                                                            !context.mounted) {
-                                                          return;
-                                                        }
-                                                        Navigator.pop(context);
-                                                        await _refresh();
-                                                        if (!mounted ||
-                                                            !context.mounted) {
-                                                          return;
-                                                        }
-                                                        ScaffoldMessenger.of(
-                                                                context)
-                                                            .showSnackBar(
-                                                                const SnackBar(
-                                                                    content: Text(
-                                                                        'تمت الموافقة')));
-                                                        await _refreshOwnerPending(
-                                                            showToastOnIncrease:
-                                                                false);
-                                                      },
-                                                      child: const Text('قبول'),
-                                                    ),
-                                                    TextButton(
-                                                      onPressed: () async {
-                                                        await ApiDewanyah
-                                                            .setMemberStatus(
-                                                                dewanyahId: d[
-                                                                            'id']
-                                                                        ?.toString() ??
-                                                                    '',
-                                                                memberUserId:
-                                                                    mid,
-                                                                status:
-                                                                    'rejected',
-                                                                token:
-                                                                    app.token);
-                                                        if (!mounted ||
-                                                            !context.mounted) {
-                                                          return;
-                                                        }
-                                                        Navigator.pop(context);
-                                                        await _refresh();
-                                                        if (!mounted ||
-                                                            !context.mounted) {
-                                                          return;
-                                                        }
-                                                        ScaffoldMessenger.of(
-                                                                context)
-                                                            .showSnackBar(
-                                                                const SnackBar(
-                                                                    content: Text(
-                                                                        'تم الرفض')));
-                                                        await _refreshOwnerPending(
-                                                            showToastOnIncrease:
-                                                                false);
-                                                      },
-                                                      child: const Text('رفض'),
-                                                    ),
-                                                  ],
-                                                )
-                                              : null,
-                                        );
-                                      },
+                        Center(
+                          child: TextButton.icon(
+                            onPressed: () async {
+                              try {
+                                final members = await ApiDewanyah.members(
+                                    dewanyahId: d['id']?.toString() ?? '',
+                                    token: app.token);
+                                if (!context.mounted) return;
+                                showDialog(
+                                  context: context,
+                                  builder: (_) => AlertDialog(
+                                    title: const Text('الطلبات والأعضاء'),
+                                    content: SizedBox(
+                                      width: 350,
+                                      child: ListView.separated(
+                                        shrinkWrap: true,
+                                        itemCount: members.length,
+                                        separatorBuilder: (_, __) =>
+                                            const Divider(height: 8),
+                                        itemBuilder: (_, i) {
+                                          final m = members[i];
+                                          final status =
+                                              (m['status'] ?? '').toString();
+                                          final mid =
+                                              (m['userId'] ?? '').toString();
+                                          return ListTile(
+                                            leading: CircleAvatar(
+                                                child: Text('${i + 1}')),
+                                            title: Text(m['user']
+                                                        ?['displayName']
+                                                    ?.toString() ??
+                                                'لاعب'),
+                                            subtitle: Text('حالة: $status'),
+                                            trailing: status == 'pending'
+                                                ? Wrap(
+                                                    spacing: 6,
+                                                    children: [
+                                                      TextButton(
+                                                        onPressed: () async {
+                                                          await ApiDewanyah
+                                                              .setMemberStatus(
+                                                                  dewanyahId:
+                                                                      d['id']?.toString() ??
+                                                                          '',
+                                                                  memberUserId:
+                                                                      mid,
+                                                                  status:
+                                                                      'approved',
+                                                                  token: app
+                                                                      .token);
+                                                          if (!mounted ||
+                                                              !context
+                                                                  .mounted) {
+                                                            return;
+                                                          }
+                                                          Navigator.pop(
+                                                              context);
+                                                          await _refresh();
+                                                          if (!mounted ||
+                                                              !context
+                                                                  .mounted) {
+                                                            return;
+                                                          }
+                                                          ScaffoldMessenger.of(
+                                                                  context)
+                                                              .showSnackBar(
+                                                                  const SnackBar(
+                                                                      content: Text(
+                                                                          'تمت الموافقة')));
+                                                          await _refreshOwnerPending(
+                                                              showToastOnIncrease:
+                                                                  false);
+                                                        },
+                                                        child:
+                                                            const Text('قبول'),
+                                                      ),
+                                                      TextButton(
+                                                        onPressed: () async {
+                                                          await ApiDewanyah
+                                                              .setMemberStatus(
+                                                                  dewanyahId:
+                                                                      d['id']?.toString() ??
+                                                                          '',
+                                                                  memberUserId:
+                                                                      mid,
+                                                                  status:
+                                                                      'rejected',
+                                                                  token: app
+                                                                      .token);
+                                                          if (!mounted ||
+                                                              !context
+                                                                  .mounted) {
+                                                            return;
+                                                          }
+                                                          Navigator.pop(
+                                                              context);
+                                                          await _refresh();
+                                                          if (!mounted ||
+                                                              !context
+                                                                  .mounted) {
+                                                            return;
+                                                          }
+                                                          ScaffoldMessenger.of(
+                                                                  context)
+                                                              .showSnackBar(
+                                                                  const SnackBar(
+                                                                      content: Text(
+                                                                          'تم الرفض')));
+                                                          await _refreshOwnerPending(
+                                                              showToastOnIncrease:
+                                                                  false);
+                                                        },
+                                                        child:
+                                                            const Text('رفض'),
+                                                      ),
+                                                    ],
+                                                  )
+                                                : null,
+                                          );
+                                        },
+                                      ),
                                     ),
                                   ),
-                                ),
-                              );
-                            } catch (e) {
-                              if (!context.mounted) return;
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                  SnackBar(
-                                      content: Text('فشل تحميل الطلبات: $e')));
-                            }
-                          },
-                          icon: _OwnerPendingBadge(count: pendingCount),
-                          label: Text(
-                            pendingCount > 0
-                                ? 'الطلبات/الأعضاء ($pendingCount)'
-                                : 'الطلبات/الأعضاء',
+                                );
+                              } catch (e) {
+                                if (!context.mounted) return;
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                    SnackBar(
+                                        content:
+                                            Text('فشل تحميل الطلبات: $e')));
+                              }
+                            },
+                            icon: _OwnerPendingBadge(count: pendingCount),
+                            label: Text(
+                              pendingCount > 0
+                                  ? 'الطلبات/الأعضاء ($pendingCount)'
+                                  : 'الطلبات/الأعضاء',
+                            ),
                           ),
                         )
                       else if (!isJoined)
-                        ElevatedButton.icon(
-                          onPressed: () => _join(d),
-                          icon: const Icon(Icons.group_add_outlined),
-                          label: Text(
-                              requireApproval ? 'طلب انضمام' : 'انضمام مباشر'),
+                        Align(
+                          alignment: Alignment.center,
+                          child: ElevatedButton.icon(
+                            onPressed: () => _join(d),
+                            icon: const Icon(Icons.group_add_outlined),
+                            label: Text(requireApproval
+                                ? 'طلب انضمام'
+                                : 'انضمام مباشر'),
+                          ),
                         ),
                       if (isJoined && !isOwner)
                         const Padding(
                           padding: EdgeInsets.symmetric(vertical: 4.0),
-                          child: Text('أنت عضو في هذه الديوانية',
-                              style: TextStyle(color: Colors.greenAccent)),
+                          child: Text(
+                            'أنت عضو في هذه الديوانية',
+                            textAlign: TextAlign.center,
+                            style: TextStyle(color: Colors.greenAccent),
+                          ),
                         ),
                       if (games.isNotEmpty && (isJoined || isOwner))
                         Row(
@@ -509,48 +561,53 @@ class _DewanyahListPageState extends State<DewanyahListPage> {
                             ),
                           ],
                         ),
-                      TextButton(
-                        onPressed: () async {
-                          try {
-                            final list = await ApiDewanyah.leaderboard(
-                              dewanyahId: d['id']?.toString() ?? '',
-                              gameId:
-                                  currentGame.isNotEmpty ? currentGame : null,
-                            );
-                            if (!context.mounted) return;
-                            showDialog(
-                              context: context,
-                              builder: (_) => AlertDialog(
-                                title: const Text('لوحة الديوانية'),
-                                content: SizedBox(
-                                  width: 320,
-                                  child: ListView.separated(
-                                    shrinkWrap: true,
-                                    itemCount: list.length,
-                                    separatorBuilder: (_, __) =>
-                                        const Divider(height: 8),
-                                    itemBuilder: (_, i) {
-                                      final p = list[i];
-                                      return ListTile(
-                                        leading: CircleAvatar(
-                                            child: Text('${i + 1}')),
-                                        title: Text(
-                                            p['displayName']?.toString() ??
-                                                'لاعب'),
-                                        trailing: Text('${p['pearls'] ?? 0}'),
-                                      );
-                                    },
+                      Center(
+                        child: TextButton.icon(
+                          onPressed: () async {
+                            try {
+                              final list = await ApiDewanyah.leaderboard(
+                                dewanyahId: d['id']?.toString() ?? '',
+                                gameId:
+                                    currentGame.isNotEmpty ? currentGame : null,
+                              );
+                              if (!context.mounted) return;
+                              showDialog(
+                                context: context,
+                                builder: (_) => AlertDialog(
+                                  title: const Text('لوحة الديوانية'),
+                                  content: SizedBox(
+                                    width: 320,
+                                    child: ListView.separated(
+                                      shrinkWrap: true,
+                                      itemCount: list.length,
+                                      separatorBuilder: (_, __) =>
+                                          const Divider(height: 8),
+                                      itemBuilder: (_, i) {
+                                        final p = list[i];
+                                        return ListTile(
+                                          leading: CircleAvatar(
+                                              child: Text('${i + 1}')),
+                                          title: Text(
+                                              p['displayName']?.toString() ??
+                                                  'لاعب'),
+                                          trailing: Text('${p['pearls'] ?? 0}'),
+                                        );
+                                      },
+                                    ),
                                   ),
                                 ),
-                              ),
-                            );
-                          } catch (e) {
-                            if (!context.mounted) return;
-                            ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-                                content: Text('فشل تحميل اللوحة: $e')));
-                          }
-                        },
-                        child: const Text('عرض اللوحة'),
+                              );
+                            } catch (e) {
+                              if (!context.mounted) return;
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(
+                                      content: Text('فشل تحميل اللوحة: $e')));
+                            }
+                          },
+                          icon:
+                              const Icon(Icons.leaderboard_outlined, size: 18),
+                          label: const Text('عرض اللوحة'),
+                        ),
                       ),
                     ],
                   ),
