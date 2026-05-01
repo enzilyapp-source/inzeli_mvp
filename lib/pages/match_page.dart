@@ -90,7 +90,7 @@ class _MatchPageState extends State<MatchPage> with WidgetsBindingObserver {
     'تنس طاولة': [2], // دبلز 2 ضد 2
     'تنس ارضي': [2], // دبلز 2 ضد 2
   };
-  static const Set<int> _hindSoloSizes = {4, 5}; // هند فردي = 4 أو 5 لاعبين
+  static const Set<int> _hindSoloSizes = {2, 3, 4}; // هند فردي = 2 أو 3 أو 4 لاعبين
   static const int _spitaSoloSize = 5; // سبيتة فردي = 5 لاعبين
   bool get _iAmInRoom {
     final uid = widget.app.userId;
@@ -497,7 +497,7 @@ class _MatchPageState extends State<MatchPage> with WidgetsBindingObserver {
         return false;
       }
       if (game == 'هند' && !_hindSoloSizes.contains(count)) {
-        _msg('هند فردي يسمح بـ 4 أو 5 لاعبين',
+        _msg('هند فردي يسمح بـ 2 أو 3 أو 4 لاعبين',
             icon: Icons.error, color: Colors.orange);
         return false;
       }

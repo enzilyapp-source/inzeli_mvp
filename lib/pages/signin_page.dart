@@ -1,4 +1,5 @@
 // lib/pages/signin_page.dart
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import '../widgets/app_snackbar.dart';
 import '../state.dart';
@@ -426,11 +427,24 @@ class _SignInPageState extends State<SignInPage> {
                           ),
                           TextButton(
                             onPressed: _busy ? null : _toggleAuthMode,
-                            child: Text(
-                              _isLogin
-                                  ? 'ما عندك حساب؟ إنشاء حساب'
-                                  : 'عندك حساب؟ تسجيل دخول',
-                              style: const TextStyle(color: Colors.white),
+                            child: Text.rich(
+                              TextSpan(
+                                text: _isLogin
+                                    ? 'ما عندك حساب؟ '
+                                    : 'عندك حساب؟ ',
+                                style: const TextStyle(color: Colors.white),
+                                children: [
+                                  TextSpan(
+                                    text: _isLogin
+                                        ? 'إنشاء حساب'
+                                        : 'تسجيل دخول',
+                                    style: const TextStyle(
+                                      color: Color(0xFFE7A73B),
+                                      fontWeight: FontWeight.w800,
+                                    ),
+                                  ),
+                                ],
+                              ),
                             ),
                           ),
                         ],
@@ -447,7 +461,7 @@ class _SignInPageState extends State<SignInPage> {
   }
 }
 
-/// بسيط: حقل يفتح DatePicker لاختيار سنة/شهر/يوم
+/// حقل تاريخ ميلاد بأسلوب أسهل (قائمة/عجلة) بدل تقويم كامل.
 class _BirthDatePicker extends StatelessWidget {
   final String label;
   final DateTime? value;
@@ -467,15 +481,84 @@ class _BirthDatePicker extends StatelessWidget {
     final initial = value ?? DateTime(now.year - 18, 1, 1);
     final first = DateTime(1900, 1, 1);
     final last = now;
-    final picked = await showDatePicker(
+
+    DateTime temp = initial;
+    await showModalBottomSheet<void>(
       context: context,
-      initialDate: initial,
-      firstDate: first,
-      lastDate: last,
-      helpText: label,
-      locale: const Locale('ar'),
+      backgroundColor: Colors.transparent,
+      builder: (sheetCtx) {
+        return Directionality(
+          textDirection: TextDirection.rtl,
+          child: Container(
+            decoration: const BoxDecoration(
+              color: Color(0xFF1F3556),
+              borderRadius: BorderRadius.vertical(top: Radius.circular(18)),
+            ),
+            child: SafeArea(
+              top: false,
+              child: SizedBox(
+                height: 320,
+                child: Column(
+                  children: [
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(14, 8, 8, 8),
+                      child: Row(
+                        children: [
+                          TextButton(
+                            onPressed: () => Navigator.pop(sheetCtx),
+                            child: const Text(
+                              'إلغاء',
+                              style: TextStyle(color: Colors.white70),
+                            ),
+                          ),
+                          const Spacer(),
+                          Text(
+                            label,
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                          const Spacer(),
+                          TextButton(
+                            onPressed: () {
+                              onChanged(temp);
+                              Navigator.pop(sheetCtx);
+                            },
+                            child: const Text(
+                              'تم',
+                              style: TextStyle(
+                                color: Color(0xFFE7A73B),
+                                fontWeight: FontWeight.w800,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const Divider(height: 1, color: Color(0x3FFFFFFF)),
+                    Expanded(
+                      child: CupertinoTheme(
+                        data: const CupertinoThemeData(
+                          brightness: Brightness.dark,
+                        ),
+                        child: CupertinoDatePicker(
+                          mode: CupertinoDatePickerMode.date,
+                          initialDateTime: initial,
+                          minimumDate: first,
+                          maximumDate: last,
+                          onDateTimeChanged: (d) => temp = d,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        );
+      },
     );
-    if (picked != null) onChanged(picked);
   }
 
   @override

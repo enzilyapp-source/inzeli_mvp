@@ -124,7 +124,11 @@ class _GamesPageState extends State<GamesPage> {
   String? get _selectedCategory => app.selectedCategory;
   String? get _selectedGame => app.selectedGame;
 
-  String? _pngForGame(String gameId) => _gamePngAssetById[gameId.trim()];
+  String? _pngForGame(String gameId) {
+    final id = gameId.trim();
+    return _gamePngAssetById[id];
+  }
+
   String? _svgForGame(String gameId) => _gameSvgAssetById[gameId.trim()];
 
   String _categoryDisplayLabel(String categoryId) {

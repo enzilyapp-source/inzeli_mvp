@@ -260,7 +260,6 @@ class _LeaderboardHubPageState extends State<LeaderboardHubPage> {
                 width: double.infinity,
                 child: FilledButton(
                   onPressed: () {
-                    widget.app.markTutorialSeen();
                     Navigator.pop(context);
                   },
                   child: const Text('تم'),
@@ -271,6 +270,9 @@ class _LeaderboardHubPageState extends State<LeaderboardHubPage> {
         ),
       ),
     );
+    if (widget.app.tutorialSeen != true) {
+      widget.app.markTutorialSeen();
+    }
   }
 
   Widget _tutorialRow(IconData icon, String title, String body) {
