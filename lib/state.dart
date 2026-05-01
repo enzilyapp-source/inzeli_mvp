@@ -68,6 +68,9 @@ class AppState extends ChangeNotifier {
   List<Map<String, dynamic>> ownedDewanyahs = <Map<String, dynamic>>[];
   Set<String> joinedDewanyahIds = <String>{};
   List<Map<String, dynamic>> managedBoards = <Map<String, dynamic>>[];
+  List<Map<String, dynamic>> badges = <Map<String, dynamic>>[];
+  Map<String, int> badgeCounts = <String, int>{};
+  Map<String, dynamic>? bestBadge;
 
   // ---- Local demo data (used by old leaderboard/player profile/timeline) ----
   final List<TimelineEntry> timeline = <TimelineEntry>[];
@@ -260,6 +263,7 @@ class AppState extends ChangeNotifier {
         managedBoards =
             rawBoards.map((e) => Map<String, dynamic>.from(e as Map)).toList();
       }
+      _applyBadges(m);
       final rawStats = m['userStats'];
       if (rawStats is Map) {
         userStats = rawStats.map((k, v) =>
@@ -350,6 +354,9 @@ class AppState extends ChangeNotifier {
       'ownedDewanyahs': ownedDewanyahs,
       'joinedDewanyahIds': joinedDewanyahIds.toList(),
       'managedBoards': managedBoards,
+      'badges': badges,
+      'badgeCounts': badgeCounts,
+      'bestBadge': bestBadge,
       'userStats': userStats,
       'userProfiles': userProfiles,
       'timeline': timeline
@@ -375,6 +382,49 @@ class AppState extends ChangeNotifier {
 
   // جعل الحفظ متاحاً للصفحات الأخرى بشكل آمن
   Future<void> saveState() => _save();
+
+  void _applyBadges(Map<String, dynamic> data) {
+    final rawBadges = data['badges'];
+    if (rawBadges is List) {
+      badges = rawBadges
+          .whereType<Map>()
+          .map((e) => Map<String, dynamic>.from(e))
+          .toList();
+    }
+
+    final rawCounts = data['badgeCounts'];
+    if (rawCounts is Map) {
+      badgeCounts = rawCounts.map(
+        (k, v) => MapEntry(k.toString(), (v as num?)?.toInt() ?? 0),
+      );
+    } else if (badges.isNotEmpty) {
+      final counts = <String, int>{};
+      for (final b in badges) {
+        final label = (b['label'] ?? '').toString();
+        if (label.isEmpty) continue;
+        counts[label] =
+            (counts[label] ?? 0) + ((b['count'] as num?)?.toInt() ?? 0);
+      }
+      badgeCounts = counts;
+    }
+
+    final rawBest = data['bestBadge'];
+    if (rawBest is Map) {
+      bestBadge = Map<String, dynamic>.from(rawBest);
+    } else if (badges.isNotEmpty) {
+      final sorted = List<Map<String, dynamic>>.from(badges)
+        ..sort((a, b) => ((b['threshold'] as num?)?.toInt() ?? 0)
+            .compareTo((a['threshold'] as num?)?.toInt() ?? 0));
+      bestBadge = sorted.first;
+    }
+  }
+
+  int badgeCountForLabel(String label) => badgeCounts[label] ?? 0;
+
+  String? bestBadgeLabel() {
+    final label = bestBadge?['label']?.toString();
+    return (label == null || label.isEmpty) ? null : label;
+  }
 
   void upsertUserStats(String key, Map<String, dynamic> stats) {
     userStats[key] = stats;
@@ -419,6 +469,7 @@ class AppState extends ChangeNotifier {
     cardId = asNullableString(user['cardId']) ?? cardId;
     avatarBase64 = asNullableString(user['avatarBase64']) ?? avatarBase64;
     avatarPath = asNullableString(user['avatarPath']) ?? avatarPath;
+    _applyBadges(user);
 
     // optional fallbacks
     name = displayName ?? name;
@@ -606,6 +657,7 @@ class AppState extends ChangeNotifier {
         gamePearls =
             gp.map((k, v) => MapEntry(k.toString(), (v as num?)?.toInt() ?? 0));
       }
+      _applyBadges(data);
 
       final profileSnapshot = <String, dynamic>{
         if (userId != null && userId!.isNotEmpty) 'id': userId,
@@ -659,8 +711,11 @@ class AppState extends ChangeNotifier {
     // managedBoards = <Map<String, dynamic>>[];
     gamePearls = <String, int>{};
     pearlsResetMonth = null;
-    rulesPromptSeen = false;
-    tutorialSeen = false;
+    badges = <Map<String, dynamic>>[];
+    badgeCounts = <String, int>{};
+    bestBadge = null;
+    // Keep one-time guidance flags across logouts so onboarding prompts
+    // don't keep re-appearing for the same device user.
     soundMuted = null;
     profilePrivate = null;
     timeline.clear();

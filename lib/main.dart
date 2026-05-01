@@ -293,7 +293,10 @@ class _TopProfileCard extends StatelessWidget {
     final name = app.displayName ?? app.name ?? '—';
     final id = app.publicId ?? app.userId ?? '';
     final (topGame, topPearls) = _topPearlGame(app);
-    final rank = _rankLabelForPearls(topPearls);
+    final savedRank = app.bestBadgeLabel();
+    final rank = savedRank == null
+        ? _rankLabelForPearls(topPearls)
+        : _rankLabelForBadge(savedRank);
     final recentWins = _recentWins(name);
     final screenWidth = MediaQuery.of(context).size.width;
     final compact = screenWidth < 430;
@@ -485,6 +488,20 @@ class _TopProfileCard extends StatelessWidget {
     if (pearls >= 10) return app.tr(ar: 'يمشي حاله', en: 'Advance');
     if (pearls >= 5) return app.tr(ar: 'عليمي', en: 'Beginner');
     return app.tr(ar: 'بدايات', en: 'New');
+  }
+
+  String _rankLabelForBadge(String label) {
+    return app.tr(
+      ar: label,
+      en: switch (label) {
+        'عليمي' => 'Beginner',
+        'يمشي حاله' => 'Advance',
+        'زين' => 'Professional',
+        'فنان' => 'Legend',
+        'فلتة' => 'GOAT',
+        _ => label,
+      },
+    );
   }
 
   String _shortId(String raw) {

@@ -688,7 +688,10 @@ class _ProfilePageState extends State<ProfilePage> {
       return _rankName(_labelFor(milestone));
     }
 
-    final currentRank = currentRankLabelForPearls(topPearls);
+    final savedRank = app.bestBadgeLabel();
+    final currentRank = savedRank == null
+        ? currentRankLabelForPearls(topPearls)
+        : _rankName(savedRank);
     final recentWins = _recentWins(meName);
     final screenWidth = MediaQuery.of(context).size.width;
     final compactHeader = screenWidth < 390;
@@ -1063,11 +1066,12 @@ class _ProfilePageState extends State<ProfilePage> {
                     spacing: 10,
                     runSpacing: 10,
                     children: _milestones.map((m) {
-                      final got = app.winsOf(meName, game);
-                      final achieved = got >= m;
+                      final savedCount =
+                          app.badgeCountForLabel(_storedLabelFor(m));
+                      final achieved = savedCount > 0;
                       return _RankOrb(
                         label: _labelFor(m),
-                        count: m,
+                        count: savedCount,
                         achieved: achieved,
                       );
                     }).toList(),
@@ -1153,6 +1157,17 @@ class _ProfilePageState extends State<ProfilePage> {
     final idx = _milestones.indexOf(milestone);
     return (idx >= 0 && idx < labels.length) ? labels[idx] : '';
     // 5: عليمي, 10: يمشي حاله, 15: زين, 20: فنان, 30: فلتة
+  }
+
+  String _storedLabelFor(int milestone) {
+    return switch (milestone) {
+      5 => 'عليمي',
+      10 => 'يمشي حاله',
+      15 => 'زين',
+      20 => 'فنان',
+      30 => 'فلتة',
+      _ => '',
+    };
   }
 
   String _rankName(String name) {
