@@ -8,6 +8,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../widgets/app_snackbar.dart';
 
 import '../state.dart';
+import '../biometric_auth.dart';
 import '../widgets/streak_flame.dart'; // uses: StreakFlame(streak: ...)
 import '../widgets/avatar_effects.dart';
 import 'store_page.dart';
@@ -365,6 +366,7 @@ class _ProfilePageState extends State<ProfilePage> {
         bool privateProfile = app.profilePrivate ?? false;
         return StatefulBuilder(
           builder: (ctx, setSheet) {
+            bool biometricEnabled = app.biometricEnabled;
             return SafeArea(
               child: SingleChildScrollView(
                 padding: EdgeInsets.only(
@@ -448,6 +450,35 @@ class _ProfilePageState extends State<ProfilePage> {
                       title: const Text('إخفاء الملف الشخصي'),
                       subtitle: const Text(
                           'عند الإخفاء يظهر في البحث الثيم + أفضل لعبة + فوز/خسارة فقط'),
+                    ),
+                    SwitchListTile(
+                      value: biometricEnabled,
+                      onChanged: (v) async {
+                        if (v) {
+                          final available =
+                              await BiometricAuthService.isAvailable();
+                          if (!available) {
+                            if (mounted) {
+                              _msg('Face ID غير متاح على هذا الجهاز');
+                            }
+                            return;
+                          }
+
+                          final ok = await BiometricAuthService.authenticate(
+                            reason: 'فعّل Face ID للدخول إلى إنزلي',
+                          );
+                          if (!ok) return;
+                        }
+
+                        if (!ctx.mounted) return;
+                        app.setBiometricEnabled(v);
+                        biometricEnabled = v;
+                        if (mounted) setState(() {});
+                        setSheet(() {});
+                      },
+                      title: const Text('الدخول بـ Face ID'),
+                      subtitle:
+                          const Text('يفتح الجلسة المحفوظة على هذا الجهاز'),
                     ),
                     const SizedBox(height: 14),
                     Row(

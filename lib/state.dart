@@ -3,6 +3,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'api_auth.dart';
 import 'api_dewanyah.dart';
 import 'api_timeline.dart';
 import 'api_user.dart';
@@ -60,6 +61,7 @@ class AppState extends ChangeNotifier {
   String? language; // e.g. 'ar' / 'en'
   bool? soundMuted;
   bool? profilePrivate;
+  bool biometricEnabled = false;
   bool? rulesPromptSeen;
   bool? tutorialSeen;
   // لآلئ شهرية لكل لعبة (تُعاد شهرياً إلى 5 لكل لعبة)
@@ -237,6 +239,7 @@ class AppState extends ChangeNotifier {
       language = m['language'] as String?;
       soundMuted = m['soundMuted'] as bool?;
       profilePrivate = m['profilePrivate'] as bool?;
+      biometricEnabled = m['biometricEnabled'] as bool? ?? false;
       tutorialSeen = m['tutorialSeen'] as bool?;
       final rawFreeThemes = m['freeThemesOwned'];
       if (rawFreeThemes is List) {
@@ -346,6 +349,7 @@ class AppState extends ChangeNotifier {
       'language': language,
       'soundMuted': soundMuted,
       'profilePrivate': profilePrivate,
+      'biometricEnabled': biometricEnabled,
       'tutorialSeen': tutorialSeen ?? false,
       'freeThemesOwned': freeThemesOwned.toList(),
       'gamePearls': gamePearls,
@@ -619,6 +623,16 @@ class AppState extends ChangeNotifier {
 
     _refreshingSession = true;
     try {
+      final refreshed = await refreshAuthSession(token: auth);
+      final refreshedData = refreshed.data ?? <String, dynamic>{};
+      final refreshedToken = refreshedData['token'] as String?;
+      final refreshedUser = refreshedData['user'] as Map<String, dynamic>?;
+      if (refreshed.ok && refreshedToken != null && refreshedUser != null) {
+        _lastSessionRefreshAt = DateTime.now();
+        await setAuthFromBackend(token: refreshedToken, user: refreshedUser);
+        return;
+      }
+
       final me = await getMyProfile(token: auth);
       _lastSessionRefreshAt = DateTime.now();
 
@@ -718,6 +732,7 @@ class AppState extends ChangeNotifier {
     // don't keep re-appearing for the same device user.
     soundMuted = null;
     profilePrivate = null;
+    biometricEnabled = false;
     timeline.clear();
     userStats.clear();
     userProfiles.clear();
@@ -771,6 +786,12 @@ class AppState extends ChangeNotifier {
 
   void setProfilePrivate(bool v) {
     profilePrivate = v;
+    _save();
+    notifyListeners();
+  }
+
+  void setBiometricEnabled(bool v) {
+    biometricEnabled = v;
     _save();
     notifyListeners();
   }

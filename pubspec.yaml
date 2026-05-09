@@ -2,7 +2,7 @@ name: inzeli
 description: Inzeli MVP
 publish_to: "none"
 
-version: 1.0.9+10
+version: 1.0.10+11
 
 environment:
   sdk: ">=3.0.0 <4.0.0"
@@ -25,6 +25,7 @@ dependencies:
   url_launcher: ^6.2.5
   onesignal_flutter: ^5.3.4
   flutter_svg: ^2.0.10+1
+  local_auth: ^2.3.0
 
 dev_dependencies:
   flutter_test:

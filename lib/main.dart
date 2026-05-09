@@ -3,8 +3,10 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'dart:convert';
 import 'package:flutter_localizations/flutter_localizations.dart';
+import 'biometric_auth.dart';
 import 'state.dart';
 import 'widgets/avatar_effects.dart';
+import 'widgets/primary_pill_button.dart';
 
 // pages
 import 'pages/games_page.dart';
@@ -119,6 +121,8 @@ class AuthGate extends StatefulWidget {
 class _AuthGateState extends State<AuthGate> with WidgetsBindingObserver {
   final AppState app = AppState();
   bool _loading = true;
+  bool _biometricUnlocked = false;
+  bool _biometricPrompting = false;
 
   @override
   void initState() {
@@ -143,6 +147,9 @@ class _AuthGateState extends State<AuthGate> with WidgetsBindingObserver {
   }
 
   void _onAppChanged() {
+    if (!app.isSignedIn || !app.biometricEnabled) {
+      _biometricUnlocked = true;
+    }
     if (mounted) setState(() {});
   }
 
@@ -151,7 +158,43 @@ class _AuthGateState extends State<AuthGate> with WidgetsBindingObserver {
     if (app.isSignedIn) {
       unawaited(app.refreshSessionFromServer(force: true));
     }
-    if (mounted) setState(() => _loading = false);
+    _biometricUnlocked = !app.isSignedIn || !app.biometricEnabled;
+    if (mounted) {
+      setState(() => _loading = false);
+      if (!_biometricUnlocked) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) unawaited(_unlockWithBiometrics());
+        });
+      }
+    }
+  }
+
+  Future<void> _unlockWithBiometrics() async {
+    if (_biometricPrompting || !app.isSignedIn) return;
+    _biometricPrompting = true;
+    if (mounted) setState(() {});
+    try {
+      final available = await BiometricAuthService.isAvailable();
+      if (!available) {
+        app.setBiometricEnabled(false);
+        _biometricUnlocked = true;
+        return;
+      }
+
+      final ok = await BiometricAuthService.authenticate(
+        reason: 'استخدم Face ID لفتح إنزلي',
+      );
+      if (ok) _biometricUnlocked = true;
+    } finally {
+      _biometricPrompting = false;
+      if (mounted) setState(() {});
+    }
+  }
+
+  Future<void> _logoutFromLock() async {
+    await app.clearAuth();
+    _biometricUnlocked = true;
+    if (mounted) setState(() {});
   }
 
   @override
@@ -162,7 +205,89 @@ class _AuthGateState extends State<AuthGate> with WidgetsBindingObserver {
       );
     }
 
+    if (app.isSignedIn && app.biometricEnabled && !_biometricUnlocked) {
+      return _BiometricUnlockPage(
+        busy: _biometricPrompting,
+        onUnlock: _unlockWithBiometrics,
+        onLogout: _logoutFromLock,
+      );
+    }
+
     return app.isSignedIn ? HomePage(app: app) : SignInPage(app: app);
+  }
+}
+
+class _BiometricUnlockPage extends StatelessWidget {
+  final bool busy;
+  final VoidCallback onUnlock;
+  final VoidCallback onLogout;
+
+  const _BiometricUnlockPage({
+    required this.busy,
+    required this.onUnlock,
+    required this.onLogout,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      body: Container(
+        width: double.infinity,
+        decoration: const BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [Color(0xFF34677A), Color(0xFF232E4A)],
+          ),
+        ),
+        child: SafeArea(
+          child: Center(
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 380),
+              child: Padding(
+                padding: const EdgeInsets.all(24),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Image.asset(
+                      'lib/assets/enzeli_logo.png',
+                      width: 96,
+                      height: 96,
+                    ),
+                    const SizedBox(height: 18),
+                    const Icon(Icons.face, size: 56, color: Colors.white),
+                    const SizedBox(height: 12),
+                    const Text(
+                      'فتح إنزلي',
+                      style:
+                          TextStyle(fontSize: 22, fontWeight: FontWeight.w900),
+                    ),
+                    const SizedBox(height: 8),
+                    const Text(
+                      'استخدم Face ID للدخول إلى حسابك المحفوظ على هذا الجهاز',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(color: Colors.white70),
+                    ),
+                    const SizedBox(height: 20),
+                    PrimaryPillButton(
+                      label: 'فتح بـ Face ID',
+                      onPressed: busy ? null : onUnlock,
+                      icon: Icons.face,
+                      loading: busy,
+                    ),
+                    const SizedBox(height: 8),
+                    TextButton(
+                      onPressed: busy ? null : onLogout,
+                      child: const Text('تسجيل خروج'),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
   }
 }
 

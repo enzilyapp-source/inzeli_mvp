@@ -220,6 +220,22 @@ class _SignInPageState extends State<SignInPage> {
     }
   }
 
+  Future<void> _openForgotPassword() async {
+    if (_busy) return;
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      builder: (ctx) => _ForgotPasswordSheet(
+        initialEmail: _email.text.trim(),
+        onCompleted: (data) async {
+          Navigator.of(ctx).pop();
+          await _completeAuth(data, loginFlow: true);
+        },
+      ),
+    );
+  }
+
   void _toggleAuthMode() {
     if (_busy) return;
     setState(() {
@@ -429,15 +445,13 @@ class _SignInPageState extends State<SignInPage> {
                             onPressed: _busy ? null : _toggleAuthMode,
                             child: Text.rich(
                               TextSpan(
-                                text: _isLogin
-                                    ? 'ما عندك حساب؟ '
-                                    : 'عندك حساب؟ ',
+                                text:
+                                    _isLogin ? 'ما عندك حساب؟ ' : 'عندك حساب؟ ',
                                 style: const TextStyle(color: Colors.white),
                                 children: [
                                   TextSpan(
-                                    text: _isLogin
-                                        ? 'إنشاء حساب'
-                                        : 'تسجيل دخول',
+                                    text:
+                                        _isLogin ? 'إنشاء حساب' : 'تسجيل دخول',
                                     style: const TextStyle(
                                       color: Color(0xFFE7A73B),
                                       fontWeight: FontWeight.w800,
@@ -447,6 +461,17 @@ class _SignInPageState extends State<SignInPage> {
                               ),
                             ),
                           ),
+                          if (_isLogin)
+                            TextButton(
+                              onPressed: _busy ? null : _openForgotPassword,
+                              child: const Text(
+                                'نسيت كلمة السر؟',
+                                style: TextStyle(
+                                  color: Colors.white70,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                            ),
                         ],
                       ),
                     ),
@@ -455,6 +480,217 @@ class _SignInPageState extends State<SignInPage> {
               ),
             );
           },
+        ),
+      ),
+    );
+  }
+}
+
+class _ForgotPasswordSheet extends StatefulWidget {
+  final String initialEmail;
+  final Future<void> Function(Map<String, dynamic> data) onCompleted;
+
+  const _ForgotPasswordSheet({
+    required this.initialEmail,
+    required this.onCompleted,
+  });
+
+  @override
+  State<_ForgotPasswordSheet> createState() => _ForgotPasswordSheetState();
+}
+
+class _ForgotPasswordSheetState extends State<_ForgotPasswordSheet> {
+  final _formKey = GlobalKey<FormState>();
+  late final TextEditingController _email;
+  final _otp = TextEditingController();
+  final _password = TextEditingController();
+  final _confirm = TextEditingController();
+  bool _busy = false;
+  String? _requestId;
+  String? _phoneHint;
+
+  bool get _awaitingOtp => _requestId != null && _requestId!.isNotEmpty;
+
+  @override
+  void initState() {
+    super.initState();
+    _email = TextEditingController(text: widget.initialEmail);
+  }
+
+  @override
+  void dispose() {
+    _email.dispose();
+    _otp.dispose();
+    _password.dispose();
+    _confirm.dispose();
+    super.dispose();
+  }
+
+  void _msg(String m, {bool error = false, bool success = false}) {
+    if (!mounted) return;
+    showAppSnack(context, m, error: error, success: success);
+  }
+
+  Future<void> _requestOtp() async {
+    if (!_formKey.currentState!.validate()) return;
+    setState(() => _busy = true);
+    try {
+      final r = await requestPasswordResetOtp(email: _email.text.trim());
+      if (!r.ok) {
+        _msg(r.message, error: true);
+        return;
+      }
+
+      final data = r.data ?? <String, dynamic>{};
+      final requestId = data['requestId']?.toString();
+      if (requestId == null || requestId.isEmpty) {
+        _msg('تعذر بدء استرجاع كلمة السر', error: true);
+        return;
+      }
+
+      setState(() {
+        _requestId = requestId;
+        _phoneHint = data['phoneHint']?.toString();
+      });
+      final target = (_phoneHint == null || _phoneHint!.isEmpty)
+          ? 'رقم جوالك'
+          : 'رقمك $_phoneHint';
+      _msg('أرسلنا رمز التحقق إلى $target', success: true);
+    } catch (e) {
+      _msg(e.toString(), error: true);
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Future<void> _resetPassword() async {
+    if (!_formKey.currentState!.validate()) return;
+    final requestId = _requestId;
+    if (requestId == null || requestId.isEmpty) {
+      _msg('طلب الاسترجاع غير موجود، أعد إرسال الرمز', error: true);
+      return;
+    }
+    if (_password.text != _confirm.text) {
+      _msg('كلمتا السر غير متطابقتين', error: true);
+      return;
+    }
+
+    setState(() => _busy = true);
+    try {
+      final r = await resetPasswordWithOtp(
+        requestId: requestId,
+        code: _otp.text.trim(),
+        password: _password.text,
+      );
+      if (!r.ok) {
+        _msg(r.message, error: true);
+        return;
+      }
+
+      _msg('تم تغيير كلمة السر', success: true);
+      await widget.onCompleted(r.data ?? <String, dynamic>{});
+    } catch (e) {
+      _msg(e.toString(), error: true);
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final bottomInset = MediaQuery.of(context).viewInsets.bottom;
+    return Directionality(
+      textDirection: TextDirection.rtl,
+      child: SafeArea(
+        top: false,
+        child: SingleChildScrollView(
+          padding: EdgeInsets.fromLTRB(16, 8, 16, 16 + bottomInset),
+          child: Form(
+            key: _formKey,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                const Text(
+                  'استرجاع كلمة السر',
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.w900),
+                ),
+                const SizedBox(height: 12),
+                TextFormField(
+                  controller: _email,
+                  enabled: !_awaitingOtp && !_busy,
+                  decoration: const InputDecoration(labelText: 'الإيميل'),
+                  keyboardType: TextInputType.emailAddress,
+                  autofillHints: const [AutofillHints.email],
+                  validator: (v) {
+                    final s = v?.trim() ?? '';
+                    if (s.isEmpty) return 'الإيميل مطلوب';
+                    if (!s.contains('@')) return 'أدخل إيميل صحيح';
+                    return null;
+                  },
+                ),
+                if (_awaitingOtp) ...[
+                  const SizedBox(height: 10),
+                  TextFormField(
+                    controller: _otp,
+                    decoration: const InputDecoration(labelText: 'رمز التحقق'),
+                    keyboardType: TextInputType.number,
+                    maxLength: 6,
+                    validator: (v) =>
+                        RegExp(r'^\d{6}$').hasMatch(v?.trim() ?? '')
+                            ? null
+                            : 'أدخل رمز مكوّن من 6 أرقام',
+                  ),
+                  const SizedBox(height: 10),
+                  TextFormField(
+                    controller: _password,
+                    decoration:
+                        const InputDecoration(labelText: 'كلمة السر الجديدة'),
+                    obscureText: true,
+                    autofillHints: const [AutofillHints.newPassword],
+                    validator: (v) =>
+                        (v == null || v.length < 6) ? '٦ أحرف على الأقل' : null,
+                  ),
+                  const SizedBox(height: 10),
+                  TextFormField(
+                    controller: _confirm,
+                    decoration:
+                        const InputDecoration(labelText: 'تأكيد كلمة السر'),
+                    obscureText: true,
+                    autofillHints: const [AutofillHints.newPassword],
+                    validator: (v) =>
+                        (v == null || v.length < 6) ? '٦ أحرف على الأقل' : null,
+                  ),
+                  Align(
+                    alignment: AlignmentDirectional.centerStart,
+                    child: TextButton(
+                      onPressed: _busy
+                          ? null
+                          : () {
+                              setState(() {
+                                _requestId = null;
+                                _phoneHint = null;
+                                _otp.clear();
+                                _password.clear();
+                                _confirm.clear();
+                              });
+                            },
+                      child: const Text('تغيير الإيميل'),
+                    ),
+                  ),
+                ],
+                const SizedBox(height: 14),
+                PrimaryPillButton(
+                  label: _awaitingOtp ? 'تغيير كلمة السر' : 'إرسال الرمز',
+                  onPressed: _busy
+                      ? null
+                      : (_awaitingOtp ? _resetPassword : _requestOtp),
+                  icon: _awaitingOtp ? Icons.lock_reset : Icons.sms_outlined,
+                  loading: _busy,
+                ),
+              ],
+            ),
+          ),
         ),
       ),
     );

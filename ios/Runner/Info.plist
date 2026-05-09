@@ -49,5 +49,7 @@
 	<string>نحتاج الكاميرا لمسح رمز QR للانضمام إلى الروم.</string>
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>نستخدم الموقع للتأكد أن اللاعبين قريبون من بعض (حوالي ١٠٠ متر) قبل بدء اللعب.</string>
+	<key>NSFaceIDUsageDescription</key>
+	<string>نستخدم Face ID لفتح حسابك في إنزلي بسرعة وأمان على هذا الجهاز.</string>
 </dict>
 </plist>

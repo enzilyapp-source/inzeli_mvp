@@ -52,6 +52,12 @@ String _friendlyAuthMessage(String message, String? code) {
       return 'خدمة رسائل OTP غير مفعلة على الخادم';
     case 'OTP_SEND_FAILED':
       return 'تعذّر إرسال رمز التحقق، حاول مرة أخرى';
+    case 'PASSWORD_RESET_NOT_FOUND':
+      return 'ما لقينا حساب بهذا الإيميل';
+    case 'PASSWORD_RESET_PHONE_MISSING':
+      return 'هذا الحساب ما عنده رقم جوال موثق لاسترجاع كلمة السر';
+    case 'PASSWORD_RESET_PAYLOAD_INVALID':
+      return 'طلب استرجاع كلمة السر غير صالح، أعد المحاولة';
     case 'OTP_NOT_FOUND':
       return 'طلب التحقق غير موجود أو منتهي';
     case 'OTP_INVALID':
@@ -117,6 +123,24 @@ Future<ApiResponse<Map<String, dynamic>>> requestRegisterOtp({
       if (birthDate != null) 'birthDate': birthDate,
     });
 
+Future<ApiResponse<Map<String, dynamic>>> requestPasswordResetOtp({
+  required String email,
+}) =>
+    _post('/auth/password/request-otp', {
+      'email': email,
+    });
+
+Future<ApiResponse<Map<String, dynamic>>> resetPasswordWithOtp({
+  required String requestId,
+  required String code,
+  required String password,
+}) =>
+    _post('/auth/password/reset', {
+      'requestId': requestId,
+      'code': code,
+      'password': password,
+    });
+
 Future<ApiResponse<Map<String, dynamic>>> verifyRegisterOtp({
   required String requestId,
   required String code,
@@ -150,5 +174,35 @@ Future<ApiResponse<Map<String, dynamic>>> login({
       'email': email,
       'password': password,
     });
+
+Future<ApiResponse<Map<String, dynamic>>> refreshAuthSession({
+  required String token,
+}) async {
+  try {
+    final res = await http.post(
+      Uri.parse('$apiBase/auth/refresh'),
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer $token',
+      },
+    ).timeout(const Duration(seconds: 18));
+
+    // ignore: avoid_print
+    print('AUTH /auth/refresh → ${res.statusCode} ${res.body}');
+    return ApiResponse.fromHttp(res);
+  } catch (e) {
+    final raw = e.toString();
+    final lower = raw.toLowerCase();
+    final looksLikeNetwork = lower.contains('socket') ||
+        lower.contains('connection') ||
+        lower.contains('failed host lookup') ||
+        lower.contains('timeout') ||
+        lower.contains('handshake');
+    final msg = looksLikeNetwork
+        ? 'تعذر الاتصال بالخادم. تأكد من الإنترنت ورابط الـ API: $apiBase'
+        : raw;
+    return ApiResponse(ok: false, message: msg);
+  }
+}
 
 //api_auth.dart
