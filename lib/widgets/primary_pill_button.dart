@@ -9,6 +9,9 @@ class PrimaryPillButton extends StatelessWidget {
   final EdgeInsetsGeometry? padding;
   final bool loading;
   final double? maxWidth;
+  final double minHeight;
+  final double fontSize;
+  final double borderRadius;
 
   const PrimaryPillButton({
     super.key,
@@ -18,6 +21,9 @@ class PrimaryPillButton extends StatelessWidget {
     this.padding,
     this.loading = false,
     this.maxWidth,
+    this.minHeight = 72,
+    this.fontSize = 20,
+    this.borderRadius = 12,
   });
 
   static const Color _accent = Color(0xFFF1A949);
@@ -48,9 +54,9 @@ class PrimaryPillButton extends StatelessWidget {
           ],
           Text(
             label,
-            style: const TextStyle(
+            style: TextStyle(
               fontWeight: FontWeight.w900,
-              fontSize: 20,
+              fontSize: fontSize,
               color: _accent,
             ),
           ),
@@ -61,12 +67,12 @@ class PrimaryPillButton extends StatelessWidget {
     return Center(
       child: ConstrainedBox(
         constraints: BoxConstraints(
-          minHeight: 60,
+          minHeight: minHeight,
           maxWidth: maxWidth ?? 360,
         ),
         child: DecoratedBox(
           decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(18),
+            borderRadius: BorderRadius.circular(borderRadius),
             gradient: const LinearGradient(
               begin: Alignment(-0.6, -0.8),
               end: Alignment(0.9, 0.9),
@@ -92,7 +98,9 @@ class PrimaryPillButton extends StatelessWidget {
 
   ButtonStyle get _style => TextButton.styleFrom(
         foregroundColor: _accent,
-        padding: padding ?? const EdgeInsets.symmetric(vertical: 18, horizontal: 14),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+        padding:
+            padding ?? const EdgeInsets.symmetric(vertical: 18, horizontal: 16),
+        shape:
+            RoundedRectangleBorder(borderRadius: BorderRadius.circular(borderRadius)),
       );
 }

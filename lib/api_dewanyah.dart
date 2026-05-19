@@ -189,4 +189,41 @@ class ApiDewanyah {
       throw Exception('$msg (HTTP ${res.statusCode})');
     }
   }
+
+  // DELETE /dewanyah/:id/members/:userId
+  static Future<void> removeMember({
+    required String dewanyahId,
+    required String memberUserId,
+    required String? token,
+  }) async {
+    final res = await http
+        .delete(
+          Uri.parse('$apiBase/dewanyah/$dewanyahId/members/$memberUserId'),
+          headers: _headers(token),
+        )
+        .timeout(_timeout);
+    final m = _decode(res);
+    if (res.statusCode >= 400 || m['ok'] != true) {
+      final msg = m['message']?.toString() ?? 'Failed to remove member';
+      throw Exception('$msg (HTTP ${res.statusCode})');
+    }
+  }
+
+  // DELETE /dewanyah/:id/members/me
+  static Future<void> leave({
+    required String dewanyahId,
+    required String? token,
+  }) async {
+    final res = await http
+        .delete(
+          Uri.parse('$apiBase/dewanyah/$dewanyahId/members/me'),
+          headers: _headers(token),
+        )
+        .timeout(_timeout);
+    final m = _decode(res);
+    if (res.statusCode >= 400 || m['ok'] != true) {
+      final msg = m['message']?.toString() ?? 'Failed to leave dewanyah';
+      throw Exception('$msg (HTTP ${res.statusCode})');
+    }
+  }
 }

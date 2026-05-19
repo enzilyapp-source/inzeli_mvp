@@ -134,7 +134,7 @@ class _SponsorGameScreenState extends State<SponsorGameScreen> {
 
       unawaited(_load());
     } catch (e) {
-      _msg('تعذّر إنشاء الغرفة: $e', error: true);
+      _msg('تعذّر إنشاء الغرفة: ${ApiRoom.friendlyError(e)}', error: true);
     }
   }
 
@@ -177,7 +177,7 @@ class _SponsorGameScreenState extends State<SponsorGameScreen> {
 
       unawaited(_load());
     } catch (e) {
-      _msg('تعذّر الانضمام: $e', error: true);
+      _msg('تعذّر الانضمام: ${ApiRoom.friendlyError(e)}', error: true);
     }
   }
 

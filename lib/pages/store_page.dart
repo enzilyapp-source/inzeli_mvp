@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 import '../api_store.dart';
 import '../state.dart';
 import '../widgets/app_snackbar.dart';
+import '../widgets/challenge_rank_visuals.dart';
+import '../widgets/profile_theme_frame.dart';
 
 class StorePage extends StatefulWidget {
   final AppState app;
@@ -25,17 +27,20 @@ class _StorePageState extends State<StorePage> {
 
   Future<List<Map<String, dynamic>>> _load() async {
     final items = await ApiStore.listItems();
-    // إدراج الثيمات المجانية في حال لم تُرجعها الـ API
-    const freeThemes = [
-      {'id': 'blueThunder', 'name': 'برق أزرق', 'kind': 'theme', 'price': 0, 'preview': 'هالة برق أزرق'},
-      {'id': 'goldLightning', 'name': 'برق ذهبي', 'kind': 'theme', 'price': 0, 'preview': 'هالة برق ذهبي'},
-      {'id': 'kuwait', 'name': 'ألوان العلم', 'kind': 'theme', 'price': 0, 'preview': 'هالة العلم'},
-      {'id': 'greenLeaf', 'name': 'اخضر', 'kind': 'theme', 'price': 0, 'preview': 'أوراق متساقطة'},
-      {'id': 'flameBlue', 'name': 'لهب أزرق', 'kind': 'theme', 'price': 0, 'preview': 'هالة لهب أزرق'},
-      {'id': 'whiteSparkle', 'name': 'سباركل أبيض', 'kind': 'theme', 'price': 0, 'preview': 'هالة بريق أبيض'},
-    ];
+    final fallbackThemes = kThemeVisualOptions
+        .where((t) => t.unlockThreshold == null)
+        .map((t) => {
+              'id': t.id,
+              'name': t.label,
+              'kind': 'theme',
+              'price': 0,
+              'preview': t.description ?? t.label,
+              'description': t.description ?? '',
+              'vipOnly': t.vipOnly,
+            })
+        .toList();
     final existingIds = items.map((e) => e['id'].toString()).toSet();
-    for (final t in freeThemes) {
+    for (final t in fallbackThemes) {
       if (!existingIds.contains(t['id'])) {
         items.add(Map<String, dynamic>.from(t));
       }
@@ -70,8 +75,12 @@ class _StorePageState extends State<StorePage> {
         final res = await ApiStore.buyItem(token: widget.app.token!, itemId: itemId);
         ownedIds.add(itemId);
         widget.app.creditBalance = (res['balance'] as num?)?.toInt() ?? widget.app.creditBalance;
+        final rawVipUntil = (res['vipUntil'] ?? '').toString().trim();
+        if (rawVipUntil.isNotEmpty) {
+          widget.app.vipUntil = DateTime.tryParse(rawVipUntil) ?? widget.app.vipUntil;
+        }
         await widget.app.saveState();
-        _msg('تم الشراء');
+        _msg(itemId == kVipMonthlyItemId ? 'تم تفعيل VIP الشهري' : 'تم الشراء');
       }
     } catch (e) {
       _msg('فشل الشراء: $e');
@@ -105,6 +114,25 @@ class _StorePageState extends State<StorePage> {
 
   void _msg(String text, {bool error = false, bool success = false}) {
     showAppSnack(context, text, error: error, success: success);
+  }
+
+  String _kindLabel(String kind, bool vipOnly) {
+    if (kind == 'subscription') return 'اشتراك';
+    if (vipOnly) return 'VIP';
+    return switch (kind) {
+      'theme' => 'ثيم',
+      'frame' => 'إطار',
+      'card' => 'كرت',
+      _ => kind,
+    };
+  }
+
+  String _vipExpiryLabel() {
+    final vipUntil = widget.app.vipUntil;
+    if (vipUntil == null) return 'غير مشترك';
+    final d = vipUntil.day.toString().padLeft(2, '0');
+    final m = vipUntil.month.toString().padLeft(2, '0');
+    return 'VIP حتى $d/$m/${vipUntil.year}';
   }
 
   @override
@@ -160,9 +188,15 @@ class _StorePageState extends State<StorePage> {
                   final kind = it['kind']?.toString() ?? '';
                   final desc = it['description']?.toString() ?? '';
                   final preview = it['preview']?.toString() ?? '';
+                  final vipOnly = it['vipOnly'] == true;
+                  final isSubscription = kind == 'subscription' || id == kVipMonthlyItemId;
+                  final canApplyViaVip = vipOnly && widget.app.hasActiveVip;
+                  final themeVisual =
+                      (kind == 'theme' || vipOnly) ? themeVisualById(id) : null;
                   final isApplied = (kind == 'theme' && widget.app.themeId == id) ||
                       (kind == 'frame' && widget.app.frameId == id) ||
                       (kind == 'card' && widget.app.cardId == id);
+                  final accessible = owned || canApplyViaVip;
 
                   return Card(
                     elevation: isApplied ? 6 : 2,
@@ -180,28 +214,115 @@ class _StorePageState extends State<StorePage> {
                             style: const TextStyle(fontWeight: FontWeight.w900),
                           ),
                           const SizedBox(height: 4),
-                          Text('النوع: $kind', maxLines: 1, overflow: TextOverflow.ellipsis),
+                          Text(
+                            'النوع: ${_kindLabel(kind, vipOnly)}',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
                           const SizedBox(height: 4),
-                          Text('السعر: $price', maxLines: 1, overflow: TextOverflow.ellipsis),
+                          Text(
+                            isSubscription
+                                ? 'السعر الشهري: $price'
+                                : vipOnly
+                                    ? (widget.app.hasActiveVip
+                                        ? _vipExpiryLabel()
+                                        : 'متاح مع اشتراك VIP')
+                                    : 'السعر: $price',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
                           const SizedBox(height: 8),
                           Expanded(
                             child: Container(
                               decoration: BoxDecoration(
                                 borderRadius: BorderRadius.circular(12),
-                                color: Colors.grey.shade200,
+                                color: const Color(0xFF172238),
                               ),
                               child: Center(
-                                child: Text(
-                                  preview.isNotEmpty ? preview : desc,
-                                  textAlign: TextAlign.center,
-                                  maxLines: 3,
-                                  overflow: TextOverflow.ellipsis,
-                                ),
+                                child: themeVisual?.frame != null
+                                    ? Column(
+                                        mainAxisAlignment: MainAxisAlignment.center,
+                                        children: [
+                                          ProfileThemeFrameWidget(
+                                            frame: themeVisual!.frame!,
+                                            size: 92,
+                                            child: const CircleAvatar(
+                                              radius: 28,
+                                              backgroundColor: Color(0xFF2B3650),
+                                              child: Icon(
+                                                Icons.person,
+                                                color: Colors.white,
+                                              ),
+                                            ),
+                                          ),
+                                          const SizedBox(height: 10),
+                                          Padding(
+                                            padding: const EdgeInsets.symmetric(horizontal: 8),
+                                            child: Text(
+                                              preview.isNotEmpty ? preview : desc,
+                                              textAlign: TextAlign.center,
+                                              maxLines: 2,
+                                              overflow: TextOverflow.ellipsis,
+                                              style: TextStyle(
+                                                color: Colors.white.withValues(alpha: 0.72),
+                                                fontSize: 11,
+                                              ),
+                                            ),
+                                          ),
+                                        ],
+                                      )
+                                    : themeVisual != null
+                                        ? Column(
+                                            mainAxisAlignment: MainAxisAlignment.center,
+                                            children: [
+                                              buildAvatarThemeWidget(
+                                                themeId: themeVisual.id,
+                                                size: 84,
+                                                animate: true,
+                                                child: const CircleAvatar(
+                                                  radius: 28,
+                                                  backgroundColor: Color(0xFF2B3650),
+                                                  child: Icon(
+                                                    Icons.person,
+                                                    color: Colors.white,
+                                                  ),
+                                                ),
+                                              ),
+                                              const SizedBox(height: 10),
+                                              Padding(
+                                                padding: const EdgeInsets.symmetric(horizontal: 8),
+                                                child: Text(
+                                                  preview.isNotEmpty ? preview : desc,
+                                                  textAlign: TextAlign.center,
+                                                  maxLines: 2,
+                                                  overflow: TextOverflow.ellipsis,
+                                                  style: TextStyle(
+                                                    color: Colors.white.withValues(alpha: 0.72),
+                                                    fontSize: 11,
+                                                  ),
+                                                ),
+                                              ),
+                                            ],
+                                          )
+                                        : Text(
+                                            preview.isNotEmpty ? preview : desc,
+                                            textAlign: TextAlign.center,
+                                            maxLines: 3,
+                                            overflow: TextOverflow.ellipsis,
+                                            style: const TextStyle(color: Colors.white),
+                                          ),
                               ),
                             ),
                           ),
                           const SizedBox(height: 8),
-                          if (owned)
+                          if (isSubscription)
+                            FilledButton(
+                              onPressed: loading ? null : () => _buy(id),
+                              child: Text(
+                                widget.app.hasActiveVip ? 'جدّد الاشتراك' : 'اشترك',
+                              ),
+                            )
+                          else if (accessible)
                             FilledButton(
                               onPressed: () {
                                 if (kind == 'theme') _apply(themeId: id);
@@ -209,6 +330,11 @@ class _StorePageState extends State<StorePage> {
                                 if (kind == 'card') _apply(cardId: id);
                               },
                               child: Text(isApplied ? 'مُطبَّق' : 'تطبيق'),
+                            )
+                          else if (vipOnly)
+                            FilledButton(
+                              onPressed: null,
+                              child: const Text('يتطلب VIP'),
                             )
                           else
                             FilledButton(

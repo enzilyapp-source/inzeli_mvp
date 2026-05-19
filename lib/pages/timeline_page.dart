@@ -83,7 +83,7 @@ class _TimelinePageState extends State<TimelinePage> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(widget.app.tr(
-                ar: 'تعذر تحديث شسالفه: $e',
+                ar: 'تعذر تحديث النتائج: $e',
                 en: 'Could not refresh timeline: $e')),
             behavior: SnackBarBehavior.floating,
           ),

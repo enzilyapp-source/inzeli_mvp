@@ -208,7 +208,7 @@ class _GamesPageState extends State<GamesPage> {
       );
       setState(() {});
     } catch (e) {
-      _msg('فشل إنشاء الروم: $e');
+      _msg('فشل إنشاء الروم: ${ApiRoom.friendlyError(e)}');
     }
   }
 
@@ -259,7 +259,7 @@ class _GamesPageState extends State<GamesPage> {
       );
       setState(() {});
     } catch (e) {
-      _msg('تعذّر الشّرف: $e');
+      _msg('تعذّر الشّرف: ${ApiRoom.friendlyError(e)}');
     }
   }
 
@@ -309,7 +309,7 @@ class _GamesPageState extends State<GamesPage> {
       if (_isRoomNotFoundError(e)) {
         app.setRoomCode(null);
       }
-      _msg('فشل فتح الروم الحالي: $e');
+      _msg('فشل فتح الروم الحالي: ${ApiRoom.friendlyError(e)}');
     }
   }
 
@@ -462,21 +462,26 @@ class _GamesPageState extends State<GamesPage> {
   }
 
   Widget _buildCreateJoinRow() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
+    return Row(
       children: [
-        PrimaryPillButton(
-          onPressed: _createRoomForSelectedGame,
-          icon: Icons.add_box_outlined,
-          label: app.tr(ar: 'انــزلـي', en: 'Start'),
-          maxWidth: 240,
+        Expanded(
+          child: PrimaryPillButton(
+            onPressed: _createRoomForSelectedGame,
+            icon: Icons.add_box_outlined,
+            label: app.tr(ar: 'إنــــزّلــــي', en: 'Start'),
+            maxWidth: double.infinity,
+            minHeight: 76,
+          ),
         ),
-        const SizedBox(height: 10),
-        PrimaryPillButton(
-          onPressed: _scanAndJoin,
-          icon: Icons.qr_code_scanner,
-          label: app.tr(ar: 'شرّف', en: 'Join'),
-          maxWidth: 240,
+        const SizedBox(width: 10),
+        Expanded(
+          child: PrimaryPillButton(
+            onPressed: _scanAndJoin,
+            icon: Icons.qr_code_scanner,
+            label: app.tr(ar: 'شرّف', en: 'Join'),
+            maxWidth: double.infinity,
+            minHeight: 76,
+          ),
         ),
       ],
     );
@@ -529,6 +534,8 @@ class _GamesPageState extends State<GamesPage> {
           ],
           if (app.roomCode != null) _buildCurrentRoomSection(),
           const SizedBox(height: 8),
+          _buildCreateJoinRow(),
+          const SizedBox(height: 18),
           Align(
             alignment: AlignmentDirectional.centerStart,
             child: Text(
@@ -572,10 +579,8 @@ class _GamesPageState extends State<GamesPage> {
           ),
           const SizedBox(height: 12),
           _buildGamesGrid(),
-          const SizedBox(height: 24),
+          const SizedBox(height: 16),
           const _ProximityHint(),
-          const SizedBox(height: 12),
-          _buildCreateJoinRow(),
           const SizedBox(height: 32),
         ],
       ),

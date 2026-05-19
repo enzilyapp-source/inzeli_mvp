@@ -2,7 +2,7 @@ name: inzeli
 description: Inzeli MVP
 publish_to: "none"
 
-version: 1.0.10+11
+version: 1.0.11+12
 
 environment:
   sdk: ">=3.0.0 <4.0.0"
@@ -54,6 +54,7 @@ flutter:
     - lib/assets/games_png/
     - lib/assets/games_svg/
     - lib/assets/category_icons/
+    - lib/assets/sfx/
 
   fonts:
     - family: Tajawal

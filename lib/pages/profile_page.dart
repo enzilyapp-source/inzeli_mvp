@@ -9,13 +9,14 @@ import '../widgets/app_snackbar.dart';
 
 import '../state.dart';
 import '../biometric_auth.dart';
-import '../widgets/streak_flame.dart'; // uses: StreakFlame(streak: ...)
 import '../widgets/avatar_effects.dart';
+import '../widgets/challenge_rank_visuals.dart';
 import 'store_page.dart';
 import 'my_items_page.dart';
 import '../sfx.dart';
 import 'signin_page.dart';
 import '../api_user.dart';
+import 'player_profile_page.dart';
 
 class ProfilePage extends StatefulWidget {
   final AppState app;
@@ -29,7 +30,7 @@ class _ProfilePageState extends State<ProfilePage> {
   static const _deleteUrl = 'https://web.enzily.app/delete-account.html';
   // thresholds and labels for “الأنواط”
   static const List<int> _milestones = [5, 10, 15, 20, 30];
-  AvatarEffectType? _avatarEffect; // default: no theme until user picks
+  String? _selectedThemeId;
   int _cardThemeIndex = 0; // 0: blue, 1: navy, 2: violet
   List<String> _labels(AppState app) => [
         app.tr(ar: 'عليمي', en: 'Beginner'),
@@ -42,22 +43,21 @@ class _ProfilePageState extends State<ProfilePage> {
   final ImagePicker _picker = ImagePicker();
   int _wins = 0;
   int _losses = 0;
-  int _games = 0;
   bool _showPearlProgress = false;
+  bool _showChallenges = false;
   late final TextEditingController _nameCtrl;
   late final TextEditingController _emailCtrl;
   late final TextEditingController _phoneCtrl;
   @override
   void initState() {
     super.initState();
-    _avatarEffect = _effectFromId(widget.app.themeId);
+    _selectedThemeId = widget.app.themeId;
     _cardThemeIndex = _cardIndexFromId(widget.app.cardId);
     _nameCtrl = TextEditingController(text: _meName());
     _emailCtrl = TextEditingController(text: widget.app.email ?? '');
     _phoneCtrl = TextEditingController(text: widget.app.phone ?? '');
     _wins = widget.app.winsOf(_meName(), _currentGame());
     _losses = widget.app.lossesOf(_meName(), _currentGame());
-    _games = widget.app.totalGamesPlayed(_meName());
     _loadStats();
   }
 
@@ -87,14 +87,62 @@ class _ProfilePageState extends State<ProfilePage> {
     return (app.tr(ar: 'بدون لعبة', en: 'No game'), 0);
   }
 
-  List<(String, DateTime)> _recentWins(String player) {
+  Map<String, dynamic>? _bestBadgeForGame(String gameId) {
+    final candidates = widget.app.badges
+        .where((b) => (b['gameId'] ?? '').toString() == gameId)
+        .toList();
+    if (candidates.isEmpty) return null;
+    candidates.sort((a, b) {
+      final thresholdA = (a['threshold'] as num?)?.toInt() ?? 0;
+      final thresholdB = (b['threshold'] as num?)?.toInt() ?? 0;
+      if (thresholdA != thresholdB) return thresholdB.compareTo(thresholdA);
+      final dateA = DateTime.tryParse((a['lastEarnedAt'] ?? '').toString()) ??
+          DateTime.fromMillisecondsSinceEpoch(0);
+      final dateB = DateTime.tryParse((b['lastEarnedAt'] ?? '').toString()) ??
+          DateTime.fromMillisecondsSinceEpoch(0);
+      return dateB.compareTo(dateA);
+    });
+    return candidates.first;
+  }
+
+  String _scopeLabel(Map<String, dynamic>? badge) {
+    return switch ((badge?['scope'] ?? '').toString().toUpperCase()) {
+      'SPONSOR' => widget.app.tr(ar: 'سبونسر', en: 'Sponsor'),
+      'DEWANYAH' => widget.app.tr(ar: 'دوانية', en: 'Dewanyah'),
+      _ => widget.app.tr(ar: 'عام', en: 'General'),
+    };
+  }
+
+  int _badgeThresholdForGame(String gameId, int pearls) {
+    final saved =
+        (_bestBadgeForGame(gameId)?['threshold'] as num?)?.toInt() ?? 0;
+    final current = AppState.badgeThresholdForPearls(pearls);
+    return math.max(saved, current);
+  }
+
+  String _badgeLabelForGame(String gameId, int pearls) {
+    final badge = _bestBadgeForGame(gameId);
+    final label = badge?['label']?.toString();
+    if (label != null && label.isNotEmpty) return _rankName(label);
+    final threshold = AppState.badgeThresholdForPearls(pearls);
+    if (threshold <= 0) return _rankName('بدايات');
+    return _rankName(_labelFor(threshold));
+  }
+
+  List<_AchievementEntry> _recentWins(String player) {
     final wins = widget.app.timeline.where((t) => t.winner == player).toList()
       ..sort((a, b) => b.ts.compareTo(a.ts));
 
-    return wins
-        .take(3)
-        .map((t) => (widget.app.gameLabel(t.game), t.ts))
-        .toList();
+    return wins.take(10).map((t) {
+      final pearls = widget.app.pearlsForGame(t.game);
+      final badge = _bestBadgeForGame(t.game);
+      return _AchievementEntry(
+        game: widget.app.gameLabel(t.game),
+        typeLabel: _scopeLabel(badge),
+        badgeLabel: _badgeLabelForGame(t.game, pearls),
+        date: t.ts,
+      );
+    }).toList();
   }
 
   String _shortId(String id) {
@@ -106,42 +154,14 @@ class _ProfilePageState extends State<ProfilePage> {
     return '#$short';
   }
 
-  AvatarEffectType? _effectFromId(String? id) {
-    switch (id) {
-      case 'blueThunder':
-        return AvatarEffectType.blueThunder;
-      case 'goldLightning':
-        return AvatarEffectType.goldLightning;
-      case 'kuwait':
-        return AvatarEffectType.kuwaitSparkles;
-      case 'greenLeaf':
-        return AvatarEffectType.greenLeaf;
-      case 'flameBlue':
-        return AvatarEffectType.flameBlue;
-      case 'whiteSparkle':
-        return AvatarEffectType.whiteSparkle;
-      default:
-        return null;
-    }
-  }
-
-  String? _effectId(AvatarEffectType? effect) {
-    switch (effect) {
-      case AvatarEffectType.blueThunder:
-        return 'blueThunder';
-      case AvatarEffectType.goldLightning:
-        return 'goldLightning';
-      case AvatarEffectType.kuwaitSparkles:
-        return 'kuwait';
-      case AvatarEffectType.greenLeaf:
-        return 'greenLeaf';
-      case AvatarEffectType.flameBlue:
-        return 'flameBlue';
-      case AvatarEffectType.whiteSparkle:
-        return 'whiteSparkle';
-      default:
-        return null;
-    }
+  int _currentRankThreshold() {
+    final (_, topPearls) = _topPearlGame(widget.app);
+    final savedRank = widget.app.bestBadgeLabel();
+    final savedThreshold = widget.app.bestBadgeThreshold();
+    final currentThreshold = AppState.badgeThresholdForPearls(topPearls);
+    return savedRank != null && savedThreshold > currentThreshold
+        ? savedThreshold
+        : currentThreshold;
   }
 
   int _cardIndexFromId(String? id) {
@@ -176,7 +196,6 @@ class _ProfilePageState extends State<ProfilePage> {
       setState(() {
         _wins = (stats['wins'] as num?)?.toInt() ?? _wins;
         _losses = (stats['losses'] as num?)?.toInt() ?? _losses;
-        _games = _wins + _losses;
       });
       final gp = stats['gamePearls'];
       if (gp is Map) {
@@ -185,7 +204,72 @@ class _ProfilePageState extends State<ProfilePage> {
         await widget.app.saveState();
         if (mounted) setState(() {});
       }
+      await _syncChallengeUnlocks();
     } catch (_) {}
+  }
+
+  List<_ThemeChallenge> _themeChallenges() {
+    return const [
+      _ThemeChallenge(
+        id: 'blueThunder',
+        title: 'برق أزرق',
+        gameId: 'شطرنج',
+        targetWins: 3,
+        effect: AvatarEffectType.blueThunder,
+      ),
+      _ThemeChallenge(
+        id: 'goldLightning',
+        title: 'برق ذهبي',
+        gameId: 'كوت',
+        targetWins: 3,
+        effect: AvatarEffectType.goldLightning,
+      ),
+      _ThemeChallenge(
+        id: 'kuwait',
+        title: 'ألوان العلم',
+        gameId: 'بلوت',
+        targetWins: 3,
+        effect: AvatarEffectType.kuwaitSparkles,
+      ),
+      _ThemeChallenge(
+        id: 'greenLeaf',
+        title: 'أخضر',
+        gameId: 'جاكارو',
+        targetWins: 3,
+        effect: AvatarEffectType.greenLeaf,
+      ),
+      _ThemeChallenge(
+        id: 'flameBlue',
+        title: 'لهب أزرق',
+        gameId: 'بلياردو',
+        targetWins: 3,
+        effect: AvatarEffectType.flameBlue,
+      ),
+      _ThemeChallenge(
+        id: 'whiteSparkle',
+        title: 'سباركل أبيض',
+        gameId: 'تنس طاولة',
+        targetWins: 3,
+        effect: AvatarEffectType.whiteSparkle,
+      ),
+    ];
+  }
+
+  Future<void> _syncChallengeUnlocks() async {
+    bool changed = false;
+    final me = _meName();
+    for (final challenge in _themeChallenges()) {
+      final wins = widget.app.winsOf(me, challenge.gameId);
+      if (wins >= challenge.targetWins &&
+          !widget.app.freeThemesOwned.contains(challenge.id)) {
+        widget.app.freeThemesOwned.add(challenge.id);
+        changed = true;
+      }
+    }
+    if (changed) {
+      await widget.app.saveState();
+      if (mounted) setState(() {});
+    }
   }
 
   Future<void> _pickAvatar() async {
@@ -207,6 +291,20 @@ class _ProfilePageState extends State<ProfilePage> {
       if (!mounted) return;
       Sfx.error(mute: widget.app.soundMuted == true);
       _msg('فشل اختيار الصورة: $e');
+    }
+  }
+
+  Future<void> _removeAvatar() async {
+    try {
+      await widget.app.removeAvatar();
+      if (!mounted) return;
+      Sfx.tap(mute: widget.app.soundMuted == true);
+      setState(() {});
+      _msg('تمت إزالة الصورة', success: true);
+    } catch (e) {
+      if (!mounted) return;
+      Sfx.error(mute: widget.app.soundMuted == true);
+      _msg('فشل إزالة الصورة: $e', error: true);
     }
   }
 
@@ -355,6 +453,237 @@ class _ProfilePageState extends State<ProfilePage> {
     setState(() {});
   }
 
+  Future<void> _openPlayerSearch() async {
+    final ctrl = TextEditingController();
+    List<Map<String, dynamic>> results = const [];
+    var loading = false;
+
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      builder: (sheetCtx) => StatefulBuilder(
+        builder: (ctx, setSheetState) => Padding(
+          padding: EdgeInsets.fromLTRB(
+            16,
+            8,
+            16,
+            16 + MediaQuery.of(ctx).viewInsets.bottom,
+          ),
+          child: Directionality(
+            textDirection: TextDirection.rtl,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                const Text(
+                  'بحث عن لاعب',
+                  style: TextStyle(fontWeight: FontWeight.w900, fontSize: 18),
+                ),
+                const SizedBox(height: 10),
+                Row(
+                  children: [
+                    Expanded(
+                      child: TextField(
+                        controller: ctrl,
+                        textInputAction: TextInputAction.search,
+                        decoration: const InputDecoration(
+                          hintText: 'الاسم أو المعرّف',
+                        ),
+                        onSubmitted: (value) async {
+                          final query = value.trim();
+                          if (query.isEmpty) return;
+                          setSheetState(() => loading = true);
+                          try {
+                            results =
+                                await searchUsers(query, token: widget.app.token);
+                          } finally {
+                            if (sheetCtx.mounted) {
+                              setSheetState(() => loading = false);
+                            }
+                          }
+                        },
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    FilledButton(
+                      onPressed: () async {
+                        final query = ctrl.text.trim();
+                        if (query.isEmpty) return;
+                        setSheetState(() => loading = true);
+                        try {
+                          results =
+                              await searchUsers(query, token: widget.app.token);
+                        } finally {
+                          if (sheetCtx.mounted) {
+                            setSheetState(() => loading = false);
+                          }
+                        }
+                      },
+                      child: const Icon(Icons.search),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                if (loading)
+                  const Center(child: CircularProgressIndicator())
+                else if (results.isEmpty)
+                  const SizedBox.shrink()
+                else
+                  Flexible(
+                    child: ListView.separated(
+                      shrinkWrap: true,
+                      itemCount: results.length,
+                      separatorBuilder: (_, __) => const Divider(height: 0),
+                      itemBuilder: (_, i) {
+                        final user = results[i];
+                        final display = (user['displayName'] ??
+                                user['name'] ??
+                                user['email'] ??
+                                'لاعب')
+                            .toString();
+                        return ListTile(
+                          onTap: () async {
+                            widget.app.upsertUserProfile(display, user);
+                            final uid = (user['id'] ?? '').toString();
+                            if (uid.isNotEmpty) {
+                              final stats = await getUserStats(uid,
+                                  token: widget.app.token);
+                              if (stats != null) {
+                                widget.app.upsertUserStats(display, stats);
+                              }
+                            }
+                            if (!mounted || !sheetCtx.mounted) return;
+                            Navigator.pop(sheetCtx);
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (_) => PlayerProfilePage(
+                                  app: widget.app,
+                                  playerName: display,
+                                ),
+                              ),
+                            );
+                          },
+                          leading: const CircleAvatar(
+                            backgroundColor: Color(0xFF273347),
+                            child: Icon(Icons.person, color: Colors.white),
+                          ),
+                          title: Text(display),
+                          subtitle: Text(
+                            ((user['publicId'] ?? user['id'] ?? '') as Object)
+                                .toString(),
+                          ),
+                          trailing: const Icon(Icons.arrow_back_ios_new,
+                              size: 16),
+                        );
+                      },
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+
+    ctrl.dispose();
+  }
+
+  Future<void> _openAllAchievements(List<_AchievementEntry> entries) async {
+    await showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      isScrollControlled: true,
+      builder: (context) => Directionality(
+        textDirection: TextDirection.rtl,
+        child: SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'كل الإنجازات',
+                  style: TextStyle(fontWeight: FontWeight.w900, fontSize: 18),
+                ),
+                const SizedBox(height: 12),
+                Flexible(
+                  child: ListView.separated(
+                    shrinkWrap: true,
+                    itemCount: entries.length,
+                    separatorBuilder: (_, __) => Divider(
+                      height: 12,
+                      color: Colors.white.withValues(alpha: 0.08),
+                    ),
+                    itemBuilder: (_, i) {
+                      final win = entries[i];
+                      return Row(
+                        children: [
+                          Container(
+                            width: 34,
+                            height: 34,
+                            decoration: BoxDecoration(
+                              color: Colors.amber.withValues(alpha: .18),
+                              shape: BoxShape.circle,
+                            ),
+                            child: const Icon(
+                              Icons.workspace_premium,
+                              color: Colors.amber,
+                              size: 18,
+                            ),
+                          ),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  '${win.typeLabel} • ${win.game}',
+                                  style: const TextStyle(
+                                    fontWeight: FontWeight.w800,
+                                  ),
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                                Text(
+                                  'النوط: ${win.badgeLabel}',
+                                  style: TextStyle(
+                                    color: Colors.white.withValues(alpha: .68),
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ],
+                            ),
+                          ),
+                          Text(
+                            _formatAchievementDate(win.date),
+                            style: TextStyle(
+                              color: Colors.white.withValues(alpha: .65),
+                              fontSize: 12,
+                            ),
+                          ),
+                        ],
+                      );
+                    },
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  String _formatAchievementDate(DateTime date) {
+    final day = date.day.toString().padLeft(2, '0');
+    final month = date.month.toString().padLeft(2, '0');
+    return '$day/$month/${date.year}';
+  }
+
   void _openSettings(AppState app) {
     showModalBottomSheet(
       context: context,
@@ -406,6 +735,21 @@ class _ProfilePageState extends State<ProfilePage> {
                       label: const Text('تغيير الصورة'),
                       onPressed: _pickAvatar,
                     ),
+                    if ((app.avatarBase64?.isNotEmpty ?? false) ||
+                        (app.avatarPath?.isNotEmpty ?? false)) ...[
+                      const SizedBox(height: 8),
+                      OutlinedButton.icon(
+                        icon: const Icon(Icons.delete_outline),
+                        label: const Text('إزالة الصورة'),
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: Colors.redAccent,
+                        ),
+                        onPressed: () async {
+                          await _removeAvatar();
+                          if (ctx.mounted) Navigator.pop(ctx);
+                        },
+                      ),
+                    ],
                     const SizedBox(height: 16),
                     const Text('إعدادات التطبيق',
                         style: TextStyle(
@@ -449,7 +793,7 @@ class _ProfilePageState extends State<ProfilePage> {
                       },
                       title: const Text('إخفاء الملف الشخصي'),
                       subtitle: const Text(
-                          'عند الإخفاء يظهر في البحث الثيم + أفضل لعبة + فوز/خسارة فقط'),
+                          'يخفي تفاصيلك العامة ويترك الإحصاءات الأساسية فقط'),
                     ),
                     SwitchListTile(
                       value: biometricEnabled,
@@ -574,15 +918,27 @@ class _ProfilePageState extends State<ProfilePage> {
     showModalBottomSheet(
       context: context,
       showDragHandle: true,
+      backgroundColor: const Color(0xFF22324B),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+      ),
       builder: (ctx) {
-        final effects = <(AvatarEffectType?, String)>[
+        final currentRankThreshold = _currentRankThreshold();
+        final ownedThemeIds = <String>{
+          ...widget.app.freeThemesOwned,
+          if (_selectedThemeId != null && _selectedThemeId!.isNotEmpty)
+            _selectedThemeId!,
+        };
+        final availableThemes = kThemeVisualOptions.where((option) {
+          if (option.vipOnly && widget.app.hasActiveVip) return true;
+          if (option.unlockThreshold != null) {
+            return currentRankThreshold >= option.unlockThreshold!;
+          }
+          return ownedThemeIds.contains(option.id);
+        }).toList();
+        final effects = <(String?, String)>[
           (null, 'بدون ثيم'),
-          (AvatarEffectType.blueThunder, 'برق أزرق'),
-          (AvatarEffectType.goldLightning, 'برق ذهبي'),
-          (AvatarEffectType.kuwaitSparkles, 'ألوان العلم'),
-          (AvatarEffectType.greenLeaf, 'اخضر'),
-          (AvatarEffectType.flameBlue, 'لهب أزرق'),
-          (AvatarEffectType.whiteSparkle, 'سباركل أبيض'),
+          ...availableThemes.map((e) => (e.id, e.label)),
         ];
         final cardThemes = [
           ('أزرق', 0),
@@ -590,104 +946,207 @@ class _ProfilePageState extends State<ProfilePage> {
           ('بنفسجي', 2),
         ];
         return SafeArea(
-          child: Padding(
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text('تعديل الصورة والثيم',
-                    style:
-                        TextStyle(fontWeight: FontWeight.w900, fontSize: 16)),
-                const SizedBox(height: 12),
-                FilledButton.icon(
-                  onPressed: _pickAvatar,
-                  icon: const Icon(Icons.image_outlined),
-                  label: const Text('تغيير الصورة'),
-                ),
-                const SizedBox(height: 12),
-                const Text('ثيم الهالة حول الصورة',
-                    style: TextStyle(fontWeight: FontWeight.w800)),
-                const SizedBox(height: 8),
-                SingleChildScrollView(
-                  scrollDirection: Axis.horizontal,
-                  child: Row(
-                    children: effects.map((e) {
-                      final selected = _avatarEffect == e.$1;
-                      return Padding(
-                        padding: const EdgeInsets.only(right: 10),
-                        child: GestureDetector(
-                          onTap: () => setState(() => _avatarEffect = e.$1),
-                          child: Column(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              AvatarEffect(
-                                effect: e.$1 ?? AvatarEffectType.blueThunder,
-                                size: 74,
-                                animate: e.$1 != null,
-                                child: CircleAvatar(
-                                  radius: 26,
-                                  backgroundColor: Colors.white24,
-                                  child: Text(e.$2.characters.first,
-                                      style:
-                                          const TextStyle(color: Colors.white)),
-                                ),
+          child: Directionality(
+            textDirection: TextDirection.rtl,
+            child: LayoutBuilder(
+              builder: (context, constraints) => SingleChildScrollView(
+                padding: const EdgeInsets.all(16),
+                child: ConstrainedBox(
+                  constraints: BoxConstraints(minHeight: constraints.maxHeight),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        'تعديل الصورة والثيم',
+                        style: TextStyle(
+                          fontWeight: FontWeight.w900,
+                          fontSize: 16,
+                          color: Color(0xFFDBE7F6),
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        'كل ثيم ينعرض يمينك لليسار، والنوط يبقى ثابت فوق بشكل مستقل.',
+                        style: const TextStyle(
+                          color: Color(0xFFA8BCD8),
+                          fontSize: 12,
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      Wrap(
+                        spacing: 10,
+                        runSpacing: 10,
+                        children: [
+                          FilledButton.icon(
+                            onPressed: _pickAvatar,
+                            style: FilledButton.styleFrom(
+                              backgroundColor: const Color(0xFFDCE8F8),
+                              foregroundColor: const Color(0xFF22324B),
+                            ),
+                            icon: const Icon(Icons.image_outlined),
+                            label: const Text(
+                              'تغيير الصورة',
+                              style: TextStyle(fontWeight: FontWeight.w800),
+                            ),
+                          ),
+                          if ((widget.app.avatarBase64?.isNotEmpty ?? false) ||
+                              (widget.app.avatarPath?.isNotEmpty ?? false))
+                            OutlinedButton.icon(
+                              onPressed: () async {
+                                await _removeAvatar();
+                                if (ctx.mounted) Navigator.pop(ctx);
+                              },
+                              style: OutlinedButton.styleFrom(
+                                foregroundColor: const Color(0xFFDCE8F8),
+                                side:
+                                    const BorderSide(color: Color(0xFF8AA7C8)),
                               ),
-                              const SizedBox(height: 4),
-                              Text(
-                                e.$2,
-                                style: TextStyle(
-                                  fontSize: 11,
+                              icon: const Icon(Icons.delete_outline),
+                              label: const Text(
+                                'إزالة الصورة',
+                                style: TextStyle(fontWeight: FontWeight.w700),
+                              ),
+                            ),
+                        ],
+                      ),
+                      const SizedBox(height: 12),
+                      const Text(
+                        'ثيم الهالة حول الصورة',
+                        style: TextStyle(
+                          fontWeight: FontWeight.w800,
+                          color: Color(0xFFDBE7F6),
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      SizedBox(
+                        height: 140,
+                        child: ListView.separated(
+                          scrollDirection: Axis.horizontal,
+                          reverse: true,
+                          itemCount: effects.length,
+                          separatorBuilder: (_, __) => const SizedBox(width: 10),
+                          itemBuilder: (_, index) {
+                            final e = effects[index];
+                            final selected = _selectedThemeId == e.$1;
+                            final preview = CircleAvatar(
+                              radius: 26,
+                              backgroundColor: const Color(0xFF2A3953),
+                              child: Text(
+                                e.$2.characters.first,
+                                style: const TextStyle(color: Colors.white),
+                              ),
+                            );
+                            return GestureDetector(
+                              onTap: () => setState(() => _selectedThemeId = e.$1),
+                              child: AnimatedContainer(
+                                duration: const Duration(milliseconds: 160),
+                                width: 104,
+                                padding: const EdgeInsets.fromLTRB(8, 10, 8, 8),
+                                decoration: BoxDecoration(
                                   color: selected
-                                      ? Theme.of(context).colorScheme.primary
-                                      : Colors.white70,
-                                  fontWeight: selected
-                                      ? FontWeight.w800
-                                      : FontWeight.w600,
+                                      ? const Color(0xFFDCE8F8)
+                                      : const Color(0xFFCCDCEE),
+                                  borderRadius: BorderRadius.circular(22),
+                                  border: Border.all(
+                                    color: selected
+                                        ? const Color(0xFF8CB3DA)
+                                        : const Color(0xFF8AA7C8),
+                                    width: selected ? 2 : 1,
+                                  ),
+                                ),
+                                child: Column(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    buildAvatarThemeWidget(
+                                      themeId: e.$1,
+                                      size: 74,
+                                      animate: e.$1 != null,
+                                      child: preview,
+                                    ),
+                                    const SizedBox(height: 8),
+                                    Text(
+                                      e.$2,
+                                      textAlign: TextAlign.center,
+                                      maxLines: 2,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: TextStyle(
+                                        fontSize: 11,
+                                        color: const Color(0xFF22324B),
+                                        fontWeight: selected
+                                            ? FontWeight.w800
+                                            : FontWeight.w700,
+                                      ),
+                                    ),
+                                  ],
                                 ),
                               ),
-                            ],
+                            );
+                          },
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      const Text(
+                        'ثيم كرت الملف',
+                        style: TextStyle(
+                          fontWeight: FontWeight.w800,
+                          color: Color(0xFFDBE7F6),
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 8,
+                        children: cardThemes.map((c) {
+                          final selected = _cardThemeIndex == c.$2;
+                          return ChoiceChip(
+                            label: Text(
+                              c.$1,
+                              style: const TextStyle(color: Color(0xFF22324B)),
+                            ),
+                            selected: selected,
+                            selectedColor: const Color(0xFFDCE8F8),
+                            backgroundColor: const Color(0xFFCCDCEE),
+                            side: BorderSide(
+                              color: selected
+                                  ? const Color(0xFF8CB3DA)
+                                  : const Color(0xFF8AA7C8),
+                            ),
+                            onSelected: (_) =>
+                                setState(() => _cardThemeIndex = c.$2),
+                          );
+                        }).toList(),
+                      ),
+                      const SizedBox(height: 16),
+                      Align(
+                        alignment: Alignment.centerRight,
+                        child: FilledButton.icon(
+                          onPressed: () async {
+                            widget.app.themeId = _selectedThemeId;
+                            widget.app.cardId = _cardId(_cardThemeIndex);
+                            await widget.app.saveState();
+                            await widget.app.syncProfileToServer(
+                              includeAvatarData: false,
+                            );
+                            if (!ctx.mounted) return;
+                            Navigator.pop(ctx);
+                            setState(() {});
+                          },
+                          style: FilledButton.styleFrom(
+                            backgroundColor: const Color(0xFFDCE8F8),
+                            foregroundColor: const Color(0xFF22324B),
+                          ),
+                          icon: const Icon(Icons.save),
+                          label: const Text(
+                            'حفظ',
+                            style: TextStyle(fontWeight: FontWeight.w800),
                           ),
                         ),
-                      );
-                    }).toList(),
+                      ),
+                    ],
                   ),
                 ),
-                const SizedBox(height: 16),
-                const Text('ثيم كرت الملف',
-                    style: TextStyle(fontWeight: FontWeight.w800)),
-                const SizedBox(height: 8),
-                Wrap(
-                  spacing: 8,
-                  children: cardThemes.map((c) {
-                    final selected = _cardThemeIndex == c.$2;
-                    return ChoiceChip(
-                      label: Text(c.$1),
-                      selected: selected,
-                      onSelected: (_) => setState(() => _cardThemeIndex = c.$2),
-                    );
-                  }).toList(),
-                ),
-                const SizedBox(height: 12),
-                Align(
-                  alignment: Alignment.centerRight,
-                  child: FilledButton.icon(
-                    onPressed: () async {
-                      widget.app.themeId = _effectId(_avatarEffect);
-                      widget.app.cardId = _cardId(_cardThemeIndex);
-                      await widget.app.saveState();
-                      await widget.app.syncProfileToServer(
-                        includeAvatarData: false,
-                      );
-                      if (!ctx.mounted) return;
-                      Navigator.pop(ctx);
-                      setState(() {});
-                    },
-                    icon: const Icon(Icons.save),
-                    label: const Text('حفظ'),
-                  ),
-                ),
-              ],
+              ),
             ),
           ),
         );
@@ -695,10 +1154,66 @@ class _ProfilePageState extends State<ProfilePage> {
     );
   }
 
+  void _openRankSheet(int currentRankThreshold) {
+    final currentRank = playerRankForThreshold(currentRankThreshold);
+    final ranks = PlayerRank.values;
+    showModalBottomSheet(
+      context: context,
+      showDragHandle: true,
+      builder: (ctx) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'الأنواط',
+                style: TextStyle(fontWeight: FontWeight.w900, fontSize: 18),
+              ),
+              const SizedBox(height: 14),
+              ...ranks.map((rank) {
+                final data = getRankData(rank);
+                final active = rank == currentRank;
+                return Container(
+                  margin: const EdgeInsets.only(bottom: 10),
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withValues(alpha: active ? 0.08 : 0.04),
+                    borderRadius: BorderRadius.circular(18),
+                    border: Border.all(
+                      color: active
+                          ? data.colors.last.withValues(alpha: 0.8)
+                          : Colors.white12,
+                    ),
+                  ),
+                  child: Row(
+                    children: [
+                      RankBadge(rank: rank),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Text(
+                          '${data.arabic} • ${data.english}',
+                          style: const TextStyle(
+                            fontWeight: FontWeight.w800,
+                            color: Colors.white,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                );
+              }),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final app = widget.app;
-    final onSurface = Theme.of(context).colorScheme.onSurface;
     // أفضل لعبة = أعلى رصيد لآلئ، وإلا المختارة/أول لعبة
     String game = app.selectedGame ?? '—';
     if (app.gamePearls.isNotEmpty) {
@@ -710,24 +1225,18 @@ class _ProfilePageState extends State<ProfilePage> {
     final meName = app.displayName ?? app.name ?? 'لاعب';
     final displayUserId = app.publicId ?? app.userId ?? '';
     final (topGameName, topPearls) = _topPearlGame(app);
-    // النوطة الحالية بناءً على أعلى لؤلؤة
-    String currentRankLabelForPearls(int pearls) {
-      int milestone = _milestones.first;
-      for (final m in _milestones) {
-        if (pearls >= m) milestone = m;
-      }
-      return _rankName(_labelFor(milestone));
-    }
-
     final savedRank = app.bestBadgeLabel();
-    final currentRank = savedRank == null
-        ? currentRankLabelForPearls(topPearls)
-        : _rankName(savedRank);
+    final savedThreshold = app.bestBadgeThreshold();
+    final currentThreshold = AppState.badgeThresholdForPearls(topPearls);
+    final currentRankThreshold =
+        savedRank != null && savedThreshold > currentThreshold
+            ? savedThreshold
+            : currentThreshold;
+    final currentRankVisual = playerRankForThreshold(currentRankThreshold);
     final recentWins = _recentWins(meName);
     final screenWidth = MediaQuery.of(context).size.width;
     final compactHeader = screenWidth < 390;
     final headerHeight = compactHeader ? 184.0 : 192.0;
-    final avatarEffectSize = compactHeader ? 96.0 : 108.0;
     final avatarRadius = compactHeader ? 38.0 : 42.0;
     final pearlBadgeSize = compactHeader ? 54.0 : 60.0;
     final trophySize = compactHeader ? 36.0 : 42.0;
@@ -773,27 +1282,9 @@ class _ProfilePageState extends State<ProfilePage> {
                 PositionedDirectional(
                   top: 12,
                   start: 12,
-                  child: Container(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                    decoration: BoxDecoration(
-                      color: Colors.white.withValues(alpha: 0.12),
-                      borderRadius: BorderRadius.circular(14),
-                      border: Border.all(color: Colors.white24, width: 1),
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        const Icon(Icons.workspace_premium,
-                            size: 16, color: Color(0xFFF1A949)),
-                        const SizedBox(width: 6),
-                        Text(
-                          currentRank,
-                          style: const TextStyle(
-                              fontWeight: FontWeight.w800, color: Colors.white),
-                        ),
-                      ],
-                    ),
+                  child: GestureDetector(
+                    onTap: () => _openRankSheet(currentRankThreshold),
+                    child: RankBadge(rank: currentRankVisual),
                   ),
                 ),
                 PositionedDirectional(
@@ -819,31 +1310,11 @@ class _ProfilePageState extends State<ProfilePage> {
                       Stack(
                         alignment: Alignment.bottomRight,
                         children: [
-                          if (_avatarEffect != null)
-                            AvatarEffect(
-                              effect: _avatarEffect!,
-                              size: avatarEffectSize,
-                              animate: true,
-                              child: CircleAvatar(
-                                radius: avatarRadius,
-                                backgroundImage: avatarImage,
-                                backgroundColor:
-                                    Colors.white.withValues(alpha: 0.12),
-                                child: avatarImage == null
-                                    ? Text(
-                                        meName.isNotEmpty
-                                            ? meName.characters.first
-                                            : '؟',
-                                        style: const TextStyle(
-                                            fontSize: 26,
-                                            fontWeight: FontWeight.bold,
-                                            color: Colors.white),
-                                      )
-                                    : null,
-                              ),
-                            )
-                          else
-                            CircleAvatar(
+                          buildAvatarThemeWidget(
+                            themeId: _selectedThemeId,
+                            size: compactHeader ? 96.0 : 108.0,
+                            animate: true,
+                            child: CircleAvatar(
                               radius: avatarRadius,
                               backgroundImage: avatarImage,
                               backgroundColor:
@@ -860,6 +1331,7 @@ class _ProfilePageState extends State<ProfilePage> {
                                     )
                                   : null,
                             ),
+                          ),
                           Positioned(
                             bottom: 2,
                             right: 4,
@@ -949,8 +1421,14 @@ class _ProfilePageState extends State<ProfilePage> {
                 icon: Icons.cancel_outlined,
                 value: _losses,
                 sparkleColor: Colors.redAccent),
-            _IconStat(icon: Icons.sports_esports_outlined, value: _games),
           ],
+        ),
+
+        const SizedBox(height: 10),
+        _AchievementsCard(
+          recentWins: recentWins,
+          onShowAll:
+              recentWins.length > 5 ? () => _openAllAchievements(recentWins) : null,
         ),
 
         const SizedBox(height: 10),
@@ -1002,7 +1480,7 @@ class _ProfilePageState extends State<ProfilePage> {
             child: Padding(
               padding: const EdgeInsets.all(12),
               child: _PearlCircleGrid(
-                entries: _gamePearlEntries(app),
+                entries: _gamePearlEntries(app, meName),
                 maxValue: _milestones.last,
                 milestones: _milestones,
                 rankLabel: _labelFor,
@@ -1025,14 +1503,24 @@ class _ProfilePageState extends State<ProfilePage> {
               onTap: () => _openStore(app),
             ),
             _QuickActionChip(
+              icon: Icons.search,
+              label: app.tr(ar: 'بحث', en: 'Search'),
+              onTap: _openPlayerSearch,
+            ),
+            _QuickActionChip(
               icon: Icons.style_outlined,
               label: app.tr(ar: 'ثيماتي', en: 'My Themes'),
               onTap: () => _openItems(app),
             ),
+            _QuickActionChip(
+              icon: Icons.flag_outlined,
+              label: app.tr(ar: 'التحديات', en: 'Challenges'),
+              onTap: () => setState(() => _showChallenges = !_showChallenges),
+            ),
           ],
         ),
 
-        if (app.ownedDewanyahs.isNotEmpty) ...[
+        if (_showChallenges) ...[
           const SizedBox(height: 12),
           Card(
             child: Padding(
@@ -1040,32 +1528,85 @@ class _ProfilePageState extends State<ProfilePage> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
+                  const Text(
+                    'تحديات الثيمات',
+                    style: TextStyle(fontWeight: FontWeight.w900, fontSize: 16),
+                  ),
+                  const SizedBox(height: 6),
                   Text(
-                    app.tr(ar: 'ديوانياتي', en: 'My Dewanyahs'),
-                    style: const TextStyle(
-                      fontWeight: FontWeight.w900,
-                      fontSize: 16,
+                    'كل ما تخلص تحدي، ينفتح لك الثيم تلقائيًا داخل ثيماتك.',
+                    style: TextStyle(
+                      color: Colors.white.withValues(alpha: 0.72),
                     ),
                   ),
-                  const SizedBox(height: 8),
-                  ...app.ownedDewanyahs.map<Widget>((d) {
-                    final name = (d['name'] ?? 'ديوانية').toString();
-                    final gameId = (d['gameId'] ?? '—').toString();
-                    final status = (d['status'] ?? 'pending').toString();
-                    final pearls = (d['startingPearls'] ?? 5).toString();
-                    return Padding(
-                      padding: const EdgeInsets.only(bottom: 6),
-                      child: ListTile(
-                        contentPadding: EdgeInsets.zero,
-                        leading: const Icon(Icons.groups_3_outlined),
-                        title: Text(name,
-                            style:
-                                const TextStyle(fontWeight: FontWeight.w800)),
-                        subtitle: Text(app.tr(
-                          ar: 'اللعبة: $gameId • يبدأ بـ $pearls لؤلؤة',
-                          en: 'Game: $gameId • Starts with $pearls pearls',
-                        )),
-                        trailing: _StatusBadge(label: status),
+                  const SizedBox(height: 10),
+                  ..._themeChallenges().map((challenge) {
+                    final wins = widget.app.winsOf(meName, challenge.gameId);
+                    final unlocked =
+                        widget.app.freeThemesOwned.contains(challenge.id);
+                    final progress =
+                        (wins / challenge.targetWins).clamp(0.0, 1.0);
+                    return Container(
+                      margin: const EdgeInsets.only(bottom: 10),
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withValues(alpha: 0.05),
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(color: Colors.white12),
+                      ),
+                      child: Row(
+                        children: [
+                          AvatarEffect(
+                            effect: challenge.effect,
+                            size: 54,
+                            animate: unlocked,
+                            child: const CircleAvatar(
+                              radius: 18,
+                              backgroundColor: Colors.white24,
+                              child: Icon(Icons.style, color: Colors.white),
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  challenge.title,
+                                  style: const TextStyle(
+                                    fontWeight: FontWeight.w800,
+                                  ),
+                                ),
+                                const SizedBox(height: 4),
+                                Text(
+                                  'افز بـ ${widget.app.gameLabel(challenge.gameId)} ${challenge.targetWins} مرات',
+                                  style: TextStyle(
+                                    color: Colors.white.withValues(alpha: 0.72),
+                                    fontSize: 12,
+                                  ),
+                                ),
+                                const SizedBox(height: 6),
+                                LinearProgressIndicator(
+                                  value: progress,
+                                  minHeight: 6,
+                                  borderRadius: BorderRadius.circular(999),
+                                ),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(width: 10),
+                          Text(
+                            unlocked
+                                ? 'مفتوح'
+                                : '$wins/${challenge.targetWins}',
+                            style: TextStyle(
+                              color: unlocked
+                                  ? Colors.greenAccent
+                                  : Colors.white,
+                              fontWeight: FontWeight.w800,
+                            ),
+                          ),
+                        ],
                       ),
                     );
                   }),
@@ -1075,47 +1616,7 @@ class _ProfilePageState extends State<ProfilePage> {
           ),
         ],
 
-        if (_showPearlProgress) const SizedBox(height: 12),
-
-        if (_showPearlProgress) ...[
-          // Milestones (الأنواط) row as animated orbs
-          Card(
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(12, 12, 12, 4),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    app.tr(ar: 'الأنواط', en: 'Ranks'),
-                    style: const TextStyle(
-                      fontWeight: FontWeight.w900,
-                      fontSize: 16,
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  Wrap(
-                    spacing: 10,
-                    runSpacing: 10,
-                    children: _milestones.map((m) {
-                      final savedCount =
-                          app.badgeCountForLabel(_storedLabelFor(m));
-                      final achieved = savedCount > 0;
-                      return _RankOrb(
-                        label: _labelFor(m),
-                        count: savedCount,
-                        achieved: achieved,
-                      );
-                    }).toList(),
-                  ),
-                  const SizedBox(height: 8),
-                ],
-              ),
-            ),
-          ),
-          const SizedBox(height: 12),
-        ],
-
-        // Current game “level” ring + streak
+        // Current game level ring
         Card(
           child: Padding(
             padding: const EdgeInsets.all(16),
@@ -1153,21 +1654,6 @@ class _ProfilePageState extends State<ProfilePage> {
                           fontWeight: FontWeight.w700,
                         ),
                       ),
-                      const SizedBox(height: 6),
-                      Row(
-                        children: [
-                          StreakFlame(
-                            streak: _winStreak(meName, game),
-                          ),
-                          const SizedBox(width: 8),
-                          Text(
-                            app.tr(ar: 'سلسلة الانتصارات', en: 'Win streak'),
-                            style: TextStyle(
-                              color: onSurface.withValues(alpha: .75),
-                            ),
-                          ),
-                        ],
-                      ),
                     ],
                   ),
                 ),
@@ -1190,21 +1676,18 @@ class _ProfilePageState extends State<ProfilePage> {
     // 5: عليمي, 10: يمشي حاله, 15: زين, 20: فنان, 30: فلتة
   }
 
-  String _storedLabelFor(int milestone) {
-    return switch (milestone) {
-      5 => 'عليمي',
-      10 => 'يمشي حاله',
-      15 => 'زين',
-      20 => 'فنان',
-      30 => 'فلتة',
-      _ => '',
-    };
-  }
-
   String _rankName(String name) {
+    final arName = switch (name) {
+      'Beginner' => 'عليمي',
+      'Advance' => 'يمشي حاله',
+      'Professional' => 'زين',
+      'Legend' => 'فنان',
+      'GOAT' || 'فلته' => 'فلتة',
+      _ => name,
+    };
     return widget.app.tr(
-      ar: name,
-      en: switch (name) {
+      ar: arName,
+      en: switch (arName) {
         'عليمي' => 'Beginner',
         'يمشي حاله' => 'Advance',
         'زين' => 'Professional',
@@ -1216,43 +1699,84 @@ class _ProfilePageState extends State<ProfilePage> {
     );
   }
 
-  List<(String, int)> _gamePearlEntries(AppState app) {
-    final entries = <(String, int)>[];
+  List<_GamePearlEntry> _gamePearlEntries(AppState app, String player) {
+    final entries = <_GamePearlEntry>[];
     for (final cat in app.games.values) {
       for (final g in cat) {
-        entries.add((app.gameLabel(g), app.pearlsForGame(g)));
+        final pearls = app.pearlsForGame(g);
+        final played = app.winsOf(player, g) + app.lossesOf(player, g);
+        final threshold = _badgeThresholdForGame(g, pearls);
+        entries.add(_GamePearlEntry(
+          gameId: g,
+          label: app.gameLabel(g),
+          pearls: pearls,
+          threshold: threshold,
+          active: played > 0 || pearls != 5 || threshold > 0,
+        ));
       }
     }
     final seen = <String>{};
-    final uniq = <(String, int)>[];
+    final uniq = <_GamePearlEntry>[];
     for (final e in entries) {
-      if (seen.add(e.$1)) uniq.add(e);
+      if (seen.add(e.gameId)) uniq.add(e);
     }
-    uniq.sort((a, b) => a.$1.compareTo(b.$1));
+    uniq.sort((a, b) {
+      if (a.active != b.active) return a.active ? -1 : 1;
+      if (a.threshold != b.threshold) return b.threshold.compareTo(a.threshold);
+      if (a.pearls != b.pearls) return b.pearls.compareTo(a.pearls);
+      return a.label.compareTo(b.label);
+    });
     return uniq;
-  }
-
-  int _winStreak(String user, String game) {
-    // simple local streak using timeline (latest-first)
-    final list = widget.app
-        .userMatches(user)
-        .where((t) => t.game == game)
-        .toList()
-      ..sort((a, b) => b.ts.compareTo(a.ts));
-
-    int streak = 0;
-    for (final t in list) {
-      if (t.winner == user) {
-        streak += 1;
-      } else {
-        break;
-      }
-    }
-    return streak;
   }
 }
 
 /* ---------------- painters / small widgets ---------------- */
+
+class _AchievementEntry {
+  final String game;
+  final String typeLabel;
+  final String badgeLabel;
+  final DateTime date;
+
+  const _AchievementEntry({
+    required this.game,
+    required this.typeLabel,
+    required this.badgeLabel,
+    required this.date,
+  });
+}
+
+class _ThemeChallenge {
+  final String id;
+  final String title;
+  final String gameId;
+  final int targetWins;
+  final AvatarEffectType effect;
+
+  const _ThemeChallenge({
+    required this.id,
+    required this.title,
+    required this.gameId,
+    required this.targetWins,
+    required this.effect,
+  });
+}
+
+class _GamePearlEntry {
+  final String gameId;
+  final String label;
+  final int pearls;
+  final int threshold;
+  final bool active;
+
+  const _GamePearlEntry({
+    required this.gameId,
+    required this.label,
+    required this.pearls,
+    required this.threshold,
+    required this.active,
+  });
+}
 
 class _RingPainter extends CustomPainter {
   final double fill01; // 0..1
@@ -1362,8 +1886,125 @@ class _PearlBadge extends StatelessWidget {
   }
 }
 
+class _AchievementsCard extends StatelessWidget {
+  final List<_AchievementEntry> recentWins;
+  final VoidCallback? onShowAll;
+  const _AchievementsCard({required this.recentWins, this.onShowAll});
+
+  String _date(DateTime date) {
+    final day = date.day.toString().padLeft(2, '0');
+    final month = date.month.toString().padLeft(2, '0');
+    return '$day/$month/${date.year}';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final wins = recentWins.take(5).toList();
+    return Directionality(
+      textDirection: TextDirection.rtl,
+      child: Card(
+        child: Padding(
+          padding: const EdgeInsets.all(12),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Row(
+                children: [
+                  Icon(Icons.emoji_events_rounded, color: Colors.amber),
+                  SizedBox(width: 8),
+                  Text(
+                    'إنجازاتي',
+                    style: TextStyle(fontWeight: FontWeight.w900, fontSize: 16),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              if (wins.isEmpty)
+                Text(
+                  'أول فوز لك بيظهر هني.',
+                  textAlign: TextAlign.right,
+                  style: TextStyle(color: Colors.white.withValues(alpha: .7)),
+                )
+              else
+                ...wins.map(
+                  (win) => Padding(
+                    padding: const EdgeInsets.only(bottom: 6),
+                    child: Row(
+                      children: [
+                        Container(
+                          width: 30,
+                          height: 30,
+                          decoration: BoxDecoration(
+                            color: Colors.amber.withValues(alpha: .18),
+                            shape: BoxShape.circle,
+                          ),
+                          child: const Icon(
+                            Icons.workspace_premium,
+                            color: Colors.amber,
+                            size: 18,
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                '${win.typeLabel} • ${win.game}',
+                                textAlign: TextAlign.right,
+                                style: const TextStyle(
+                                    fontWeight: FontWeight.w800),
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                              Text(
+                                'النوط: ${win.badgeLabel}',
+                                textAlign: TextAlign.right,
+                                style: TextStyle(
+                                  color: Colors.white.withValues(alpha: .68),
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ],
+                          ),
+                        ),
+                        Text(
+                          _date(win.date),
+                          textAlign: TextAlign.left,
+                          style: TextStyle(
+                            color: Colors.white.withValues(alpha: .65),
+                            fontSize: 12,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              if (onShowAll != null) ...[
+                const SizedBox(height: 2),
+                Center(
+                  child: IconButton(
+                    onPressed: onShowAll,
+                    tooltip: 'عرض كل الإنجازات',
+                    icon: Icon(
+                      Icons.more_horiz_rounded,
+                      color: Colors.white.withValues(alpha: 0.9),
+                      size: 24,
+                    ),
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class _TrophyStrip extends StatelessWidget {
-  final List<(String, DateTime)> recentWins;
+  final List<_AchievementEntry> recentWins;
   final double size;
   const _TrophyStrip({required this.recentWins, this.size = 46});
 
@@ -1390,8 +2031,8 @@ class _TrophyStrip extends StatelessWidget {
         return Padding(
           padding: const EdgeInsets.symmetric(horizontal: 3),
           child: _TrophyCircle(
-            label: t.$1,
-            date: t.$2,
+            label: t.game,
+            date: t.date,
             filled: true,
             color: trophyFill,
             size: size,
@@ -1458,197 +2099,12 @@ class _TrophyCircle extends StatelessWidget {
   }
 }
 
-class _RankOrb extends StatelessWidget {
-  final String label;
-  final int count;
-  final bool achieved;
-  const _RankOrb(
-      {required this.label, required this.count, required this.achieved});
-
-  @override
-  Widget build(BuildContext context) {
-    final style = _rankStyle(label);
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Stack(
-          alignment: Alignment.center,
-          children: [
-            if (achieved && style.sparkle != null)
-              _SparkleOnce(
-                color: style.sparkle!,
-                size: 78,
-                duration: const Duration(milliseconds: 2200),
-              ),
-            Container(
-              width: 76,
-              height: 76,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                gradient: style.gradient,
-                boxShadow: [
-                  BoxShadow(
-                    color: (style.shadow ?? Colors.black26)
-                        .withValues(alpha: achieved ? 0.35 : 0.2),
-                    blurRadius: achieved ? 14 : 8,
-                    offset: const Offset(0, 6),
-                  ),
-                ],
-                border: Border.all(
-                  color: Colors.white.withValues(alpha: achieved ? 0.22 : 0.12),
-                  width: 1.4,
-                ),
-              ),
-              child: Stack(
-                alignment: Alignment.center,
-                children: [
-                  // metallic sheen
-                  Positioned.fill(
-                    child: DecoratedBox(
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        gradient: const LinearGradient(
-                          begin: Alignment.topLeft,
-                          end: Alignment.bottomRight,
-                          colors: [
-                            Colors.white24,
-                            Colors.transparent,
-                            Colors.white10,
-                          ],
-                          stops: [0.0, 0.45, 0.9],
-                        ),
-                      ),
-                    ),
-                  ),
-                  // inner highlight ring
-                  Container(
-                    width: 60,
-                    height: 60,
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      gradient: RadialGradient(
-                        colors: [
-                          Colors.white.withValues(alpha: 0.24),
-                          Colors.white.withValues(alpha: 0.0),
-                        ],
-                        stops: const [0.0, 1.0],
-                      ),
-                    ),
-                  ),
-                  Center(
-                    child: Text(
-                      '$count',
-                      style: TextStyle(
-                        fontFamily: 'Tajawal',
-                        fontVariations: const [FontVariation('wght', 800)],
-                        fontSize: 18,
-                        letterSpacing: 0.2,
-                        color: style.text ?? Colors.white,
-                        shadows: [
-                          Shadow(
-                              color: Colors.black.withValues(alpha: 0.35),
-                              blurRadius: 6),
-                        ],
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 4),
-        Text(
-          label,
-          style: TextStyle(
-            fontSize: 12,
-            color: Colors.white.withValues(alpha: .75),
-            fontWeight: FontWeight.w700,
-          ),
-        ),
-      ],
-    );
-  }
-
-  _RankStyle _rankStyle(String label) {
-    switch (label) {
-      case 'عليمي':
-      case 'Beginner':
-        return _RankStyle(
-          gradient: const LinearGradient(
-            colors: [Color(0xFFFFE082), Color(0xFFF6C453), Color(0xFFCE9E2B)],
-            stops: [0.0, 0.55, 1.0],
-          ),
-          sparkle: const Color(0xFFFFE082),
-        );
-      case 'يمشي حاله':
-      case 'Advance':
-        return _RankStyle(
-          gradient: const LinearGradient(
-            colors: [Color(0xFFD7A15F), Color(0xFFB87733), Color(0xFF8A4B2E)],
-            stops: [0.0, 0.45, 1.0],
-          ),
-          sparkle: const Color(0xFFD7A15F),
-        );
-      case 'زين':
-      case 'Professional':
-        return _RankStyle(
-          gradient: const LinearGradient(
-            colors: [Color(0xFFEFF3F8), Color(0xFFC9D0D9), Color(0xFF9FA9B5)],
-            stops: [0.0, 0.55, 1.0],
-          ),
-          sparkle: const Color(0xFFFFFFFF),
-          text: Colors.black87,
-          shadow: const Color(0xFF90A4AE),
-        );
-      case 'فنان':
-      case 'Legend':
-        return _RankStyle(
-          gradient: const LinearGradient(
-            colors: [Color(0xFFE0FEFF), Color(0xFFA0F3FF), Color(0xFF5CD7F7)],
-            stops: [0.0, 0.55, 1.0],
-          ),
-          sparkle: const Color(0xFFA5F2FF),
-          text: const Color(0xFF0A2C35),
-          shadow: const Color(0xFF4DD0E1),
-        );
-      case 'فلتة':
-      case 'GOAT':
-        return _RankStyle(
-          gradient: const LinearGradient(
-            colors: [Color(0xFFB388FF), Color(0xFF8E24AA), Color(0xFF512DA8)],
-            stops: [0.0, 0.5, 1.0],
-          ),
-          sparkle: const Color(0xFFE0E0FF),
-          text: const Color(0xFFF5F5F5),
-          shadow: const Color(0xFF7E57C2),
-        );
-      default:
-        return _RankStyle(
-          gradient: const LinearGradient(
-              colors: [Color(0xFF607D8B), Color(0xFF455A64)]),
-          sparkle: const Color(0xFF90A4AE),
-        );
-    }
-  }
-}
-
-class _RankStyle {
-  final Gradient gradient;
-  final Color? sparkle;
-  final Color? text;
-  final Color? shadow;
-  _RankStyle({required this.gradient, this.sparkle, this.text, this.shadow});
-}
-
 class _SparkleOnce extends StatefulWidget {
   final Color color;
   final double size;
-  final Duration duration;
   const _SparkleOnce({
     required this.color,
     this.size = 60,
-    this.duration = const Duration(milliseconds: 1800),
   });
 
   @override
@@ -1662,7 +2118,10 @@ class _SparkleOnceState extends State<_SparkleOnce>
   @override
   void initState() {
     super.initState();
-    _ctrl = AnimationController(vsync: this, duration: widget.duration)
+    _ctrl = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1800),
+    )
       ..forward();
   }
 
@@ -1718,44 +2177,6 @@ class _SparklePainter extends CustomPainter {
   @override
   bool shouldRepaint(covariant _SparklePainter oldDelegate) {
     return oldDelegate.progress != progress || oldDelegate.color != color;
-  }
-}
-
-class _StatusBadge extends StatelessWidget {
-  final String label;
-  const _StatusBadge({required this.label});
-
-  @override
-  Widget build(BuildContext context) {
-    final lc = label.toLowerCase();
-    Color color;
-    String text;
-    if (lc.contains('pending') || lc.contains('قيد')) {
-      color = Colors.amber;
-      text = 'قيد التفعيل';
-    } else if (lc.contains('live') || lc.contains('open')) {
-      color = Colors.greenAccent;
-      text = 'مفتوحة';
-    } else {
-      color = Colors.blueGrey.shade200;
-      text = label;
-    }
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.15),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: color.withValues(alpha: 0.6)),
-      ),
-      child: Text(
-        text,
-        style: TextStyle(
-          color: color,
-          fontWeight: FontWeight.w800,
-          fontSize: 12,
-        ),
-      ),
-    );
   }
 }
 
@@ -1858,7 +2279,7 @@ class _QuickActionChip extends StatelessWidget {
 }
 
 class _PearlCircleGrid extends StatelessWidget {
-  final List<(String, int)> entries;
+  final List<_GamePearlEntry> entries;
   final int maxValue;
   final List<int> milestones;
   final String Function(int) rankLabel;
@@ -1873,7 +2294,6 @@ class _PearlCircleGrid extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (entries.isEmpty) return const Text('لا توجد بيانات');
-    final color = Theme.of(context).colorScheme.primary;
     return LayoutBuilder(
       builder: (context, constraints) {
         const columns = 3;
@@ -1889,57 +2309,69 @@ class _PearlCircleGrid extends StatelessWidget {
           alignment: WrapAlignment.spaceBetween,
           runSpacing: vGap,
           children: entries.map((e) {
-            final game = e.$1;
-            final value = e.$2.clamp(0, maxValue);
+            final game = e.label;
+            final value = e.pearls.clamp(0, maxValue);
             final pct = value / maxValue;
+            final ringColor = _colorForThreshold(e.threshold);
+            final opacity = e.active ? 1.0 : 0.58;
             return SizedBox(
               width: tileWidth,
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Stack(
-                    alignment: Alignment.center,
-                    children: [
-                      TweenAnimationBuilder<double>(
-                        tween: Tween(begin: 0, end: pct),
-                        duration: const Duration(milliseconds: 700),
-                        curve: Curves.easeOutCubic,
-                        builder: (_, v, __) => SizedBox(
-                          width: ringSize,
-                          height: ringSize,
-                          child: CustomPaint(
-                            painter: _ArcPainter(
-                              progress: v,
-                              color: color,
-                              bgColor: Colors.grey.shade800,
-                              strokeWidth: 7,
+              child: Opacity(
+                opacity: opacity,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Stack(
+                      alignment: Alignment.center,
+                      children: [
+                        TweenAnimationBuilder<double>(
+                          tween: Tween(begin: 0, end: pct),
+                          duration: const Duration(milliseconds: 700),
+                          curve: Curves.easeOutCubic,
+                          builder: (_, v, __) => SizedBox(
+                            width: ringSize,
+                            height: ringSize,
+                            child: CustomPaint(
+                              painter: _ArcPainter(
+                                progress: v,
+                                color: ringColor,
+                                bgColor: Colors.grey.shade800,
+                                strokeWidth: 7,
+                              ),
                             ),
                           ),
                         ),
-                      ),
-                      Text('$value',
-                          style: const TextStyle(fontWeight: FontWeight.w900)),
-                    ],
-                  ),
-                  const SizedBox(height: 6),
-                  Text(
-                    game,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    textAlign: TextAlign.center,
-                    style: TextStyle(
-                      fontWeight: FontWeight.w700,
-                      fontSize: gameFont,
+                        Text('$value',
+                            style:
+                                const TextStyle(fontWeight: FontWeight.w900)),
+                      ],
                     ),
-                  ),
-                  Text(
-                    rankLabel(_nearestRank(value)),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    textAlign: TextAlign.center,
-                    style: TextStyle(fontSize: rankFont, color: Colors.white70),
-                  ),
-                ],
+                    const SizedBox(height: 6),
+                    Text(
+                      game,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        fontWeight: FontWeight.w700,
+                        fontSize: gameFont,
+                      ),
+                    ),
+                    Text(
+                      e.threshold > 0
+                          ? rankName(rankLabel(_nearestRank(e.threshold)))
+                          : rankLabel(_nearestRank(value)),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        fontSize: rankFont,
+                        color: e.threshold > 0 ? ringColor : Colors.white70,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                  ],
+                ),
               ),
             );
           }).toList(),
@@ -1953,6 +2385,17 @@ class _PearlCircleGrid extends StatelessWidget {
       if (value <= m) return m;
     }
     return milestones.last;
+  }
+
+  Color _colorForThreshold(int threshold) {
+    return switch (threshold) {
+      >= 30 => const Color(0xFFF1A949),
+      >= 20 => const Color(0xFFBA68C8),
+      >= 15 => const Color(0xFF4FC3F7),
+      >= 10 => const Color(0xFF81C784),
+      >= 5 => const Color(0xFFFFB74D),
+      _ => ThemeData.dark().colorScheme.primary,
+    };
   }
 }
 

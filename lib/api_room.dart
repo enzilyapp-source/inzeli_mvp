@@ -46,6 +46,31 @@ class ApiRoom {
     return {'data': data};
   }
 
+  static String friendlyError(Object error) {
+    final text = error.toString();
+    final active =
+        RegExp(r'PLAYER_ALREADY_IN_ACTIVE_ROOM:([A-Z0-9]+)').firstMatch(text);
+    if (active != null) {
+      return 'عندك قيم شغال حالياً (${active.group(1)}). خلّصه أو لغيه قبل لا تبلش قيم ثاني.';
+    }
+    if (text.contains('ROOM_NOT_JOINABLE')) {
+      return 'القيم بدأ أو انتهى، ما تقدر تدخل عليه الحين.';
+    }
+    if (text.contains('ROOM_LOCKED')) {
+      return 'القيم مقفل لين يخلص العدّاد.';
+    }
+    if (text.contains('ROOM_NOT_CANCELABLE')) {
+      return 'ما نقدر نلغي هالقيم حالياً.';
+    }
+    if (text.contains('Cannot POST /api/rooms/') && text.contains('/cancel')) {
+      return 'الإلغاء مو شغال لأن نسخة السيرفر الحالية ما فيها مسار إلغاء القيم. لازم تحديث الباكند.';
+    }
+    if (text.contains('Cannot DELETE /api/rooms/')) {
+      return 'الإلغاء مو شغال لأن نسخة السيرفر الحالية قديمة. لازم تحديث الباكند.';
+    }
+    return text;
+  }
+
   /// إنشاء روم (عادي أو مع سبونسر)
   static Future<Map<String, dynamic>> createRoom({
     required String gameId,
@@ -141,6 +166,70 @@ class ApiRoom {
         .timeout(_timeout);
 
     return _dataOrThrow(res, fallback: 'Failed to start room');
+  }
+
+  /// إلغاء الروم وإرجاع أي لآلئ محجوزة
+  static Future<Map<String, dynamic>> cancelRoom({
+    required String code,
+    required String? token,
+    String? reason,
+  }) async {
+    final body = <String, dynamic>{
+      if (reason != null && reason.trim().isNotEmpty) 'reason': reason.trim(),
+    };
+
+    Future<http.Response> postTo(String url, Map<String, dynamic> payload) {
+      return http
+          .post(
+            Uri.parse(url),
+            headers: _headers(token: token),
+            body: jsonEncode(payload),
+          )
+          .timeout(_timeout);
+    }
+
+    Future<http.Response> deleteTo(String url) {
+      return http
+          .delete(
+            Uri.parse(url),
+            headers: _headers(token: token),
+          )
+          .timeout(_timeout);
+    }
+
+    final attempts = <Future<http.Response> Function()>[
+      () => postTo('$apiBase/rooms/$code/cancel', body),
+      () => postTo('$apiBase/rooms/cancel', {
+            'code': code,
+            ...body,
+          }),
+      () => deleteTo('$apiBase/rooms/$code'),
+    ];
+
+    Map<String, dynamic>? lastError;
+    http.Response? lastResponse;
+
+    for (var i = 0; i < attempts.length; i++) {
+      final res = await attempts[i]();
+      final parsed = _decodeJson(res);
+      if (res.statusCode < 400 && parsed['ok'] == true) {
+        final data = parsed['data'];
+        return data is Map<String, dynamic> ? data : {'data': data};
+      }
+
+      lastError = parsed;
+      lastResponse = res;
+      final message = (parsed['message'] ?? '').toString();
+      final notFound = res.statusCode == 404 ||
+          message.contains('Cannot POST') ||
+          message.contains('Cannot DELETE') ||
+          message.contains('ROOM_NOT_FOUND');
+      if (!notFound || i == attempts.length - 1) {
+        break;
+      }
+    }
+
+    _throwApiErr(lastError, lastResponse!, 'Failed to cancel room');
   }
 
   /// تعديل نقاط الرهان/اللعب قبل البدء

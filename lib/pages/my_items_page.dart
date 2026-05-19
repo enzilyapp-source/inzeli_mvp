@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../api_store.dart';
 import '../state.dart';
 import '../widgets/app_snackbar.dart';
+import '../widgets/challenge_rank_visuals.dart';
 
 class MyItemsPage extends StatefulWidget {
   final AppState app;
@@ -46,6 +47,13 @@ class _MyItemsPageState extends State<MyItemsPage> {
 
   @override
   Widget build(BuildContext context) {
+    final topPearls = widget.app.gamePearls.isEmpty
+        ? 0
+        : widget.app.gamePearls.values.reduce((a, b) => a >= b ? a : b);
+    final currentThreshold = AppState.badgeThresholdForPearls(topPearls);
+    final unlockedRankThreshold = currentThreshold > widget.app.bestBadgeThreshold()
+        ? currentThreshold
+        : widget.app.bestBadgeThreshold();
     return Scaffold(
       appBar: AppBar(title: const Text('ممتلكاتي')),
       body: FutureBuilder<List<Map<String, dynamic>>>(
@@ -56,19 +64,25 @@ class _MyItemsPageState extends State<MyItemsPage> {
           }
           if (snap.hasError) return Center(child: Text('خطأ: ${snap.error}'));
           var items = snap.data ?? const [];
-          // أضف الثيمات المجانية المملوكة محلياً
-          const freeThemes = [
-            {'id': 'blueThunder', 'name': 'برق أزرق', 'kind': 'theme'},
-            {'id': 'goldLightning', 'name': 'برق ذهبي', 'kind': 'theme'},
-            {'id': 'kuwait', 'name': 'ألوان العلم', 'kind': 'theme'},
-            {'id': 'greenLeaf', 'name': 'اخضر', 'kind': 'theme'},
-            {'id': 'flameBlue', 'name': 'لهب أزرق', 'kind': 'theme'},
-            {'id': 'whiteSparkle', 'name': 'سباركل أبيض', 'kind': 'theme'},
-          ];
-          for (final t in freeThemes) {
-            if (widget.app.freeThemesOwned.contains(t['id'])) {
+          final existingIds = items
+              .map((e) => ((e['item'] as Map?)?['id'] ?? '').toString())
+              .toSet();
+          for (final t in kThemeVisualOptions) {
+            final unlocked = t.unlockThreshold != null
+                ? unlockedRankThreshold >= t.unlockThreshold!
+                : t.vipOnly
+                    ? widget.app.hasActiveVip
+                    : widget.app.freeThemesOwned.contains(t.id);
+            if (unlocked && !existingIds.contains(t.id)) {
               items = List<Map<String, dynamic>>.from(items)
-                ..add({'item': t});
+                ..add({
+                  'item': {
+                    'id': t.id,
+                    'name': t.label,
+                    'kind': 'theme',
+                  }
+                });
+              existingIds.add(t.id);
             }
           }
           if (items.isEmpty) return const Center(child: Text('لا تملك عناصر بعد'));

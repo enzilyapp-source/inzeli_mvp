@@ -3,7 +3,7 @@ import 'dart:convert';
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import '../state.dart';
-import '../widgets/avatar_effects.dart';
+import '../widgets/challenge_rank_visuals.dart';
 
 class PlayerProfilePage extends StatefulWidget {
   final AppState app;
@@ -79,16 +79,7 @@ class _PlayerProfilePageState extends State<PlayerProfilePage> {
 
     final (topGame, topPearls) = _topPearlGame(pearls, app);
     final recentWins = _recentWins(matches, profileKey, app);
-    String rankLabelForPearls(int pearls) {
-      if (pearls >= 30) return app.tr(ar: 'فلتة', en: 'GOAT');
-      if (pearls >= 20) return app.tr(ar: 'فنان', en: 'Legend');
-      if (pearls >= 15) return app.tr(ar: 'زين', en: 'Pro');
-      if (pearls >= 10) return app.tr(ar: 'يمشي حاله', en: 'Advance');
-      if (pearls >= 5) return app.tr(ar: 'عليمي', en: 'Beginner');
-      return app.tr(ar: 'بدايات', en: 'New');
-    }
-
-    final rankLabel = rankLabelForPearls(topPearls);
+    final rankVisual = playerRankForPearls(topPearls);
     final showMoreVisible = matches.length > 10;
     final visibleMatches =
         _showAllMatches ? matches : matches.take(10).toList();
@@ -96,9 +87,10 @@ class _PlayerProfilePageState extends State<PlayerProfilePage> {
     // avatar & theme
     ImageProvider? avatarImage;
     final avatarB64 =
-        p?.avatarBase64 ?? backendProfile?['avatarBase64']?.toString();
-    final avatarUrl = p?.avatarUrl ?? backendProfile?['avatarUrl']?.toString();
-    final themeId = p?.themeId ?? backendProfile?['themeId']?.toString();
+        backendProfile?['avatarBase64']?.toString() ?? p?.avatarBase64;
+    final avatarUrl =
+        backendProfile?['avatarUrl']?.toString() ?? p?.avatarUrl;
+    final themeId = backendProfile?['themeId']?.toString() ?? p?.themeId;
     if (avatarB64 != null && avatarB64.isNotEmpty) {
       try {
         avatarImage = MemoryImage(base64Decode(avatarB64));
@@ -106,26 +98,6 @@ class _PlayerProfilePageState extends State<PlayerProfilePage> {
     } else if (avatarUrl != null && avatarUrl.isNotEmpty) {
       avatarImage = NetworkImage(avatarUrl);
     }
-    AvatarEffectType? effectFromId(String? id) {
-      switch (id) {
-        case 'blueThunder':
-          return AvatarEffectType.blueThunder;
-        case 'goldLightning':
-          return AvatarEffectType.goldLightning;
-        case 'kuwait':
-          return AvatarEffectType.kuwaitSparkles;
-        case 'greenLeaf':
-          return AvatarEffectType.greenLeaf;
-        case 'flameBlue':
-          return AvatarEffectType.flameBlue;
-        case 'whiteSparkle':
-          return AvatarEffectType.whiteSparkle;
-        default:
-          return null;
-      }
-    }
-
-    final avatarEffect = effectFromId(themeId) ?? AvatarEffectType.blueThunder;
 
     return Scaffold(
       backgroundColor: const Color(0xFF0F1D32),
@@ -162,27 +134,7 @@ class _PlayerProfilePageState extends State<PlayerProfilePage> {
                   Positioned(
                     top: 10,
                     left: 12,
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 12, vertical: 6),
-                      decoration: BoxDecoration(
-                        color: Colors.white.withValues(alpha: 0.10),
-                        borderRadius: BorderRadius.circular(14),
-                        border: Border.all(color: Colors.white24, width: 1),
-                      ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          const Icon(Icons.workspace_premium,
-                              size: 16, color: Color(0xFFF1A949)),
-                          const SizedBox(width: 6),
-                          Text(rankLabel,
-                              style: const TextStyle(
-                                  fontWeight: FontWeight.w800,
-                                  color: Colors.white)),
-                        ],
-                      ),
-                    ),
+                    child: RankBadge(rank: rankVisual),
                   ),
                   Positioned(
                     right: 12,
@@ -196,8 +148,8 @@ class _PlayerProfilePageState extends State<PlayerProfilePage> {
                     child: Column(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        AvatarEffect(
-                          effect: avatarEffect,
+                        buildAvatarThemeWidget(
+                          themeId: themeId,
                           size: 112,
                           animate: true,
                           child: CircleAvatar(

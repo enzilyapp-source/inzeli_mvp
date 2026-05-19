@@ -8,6 +8,7 @@ import 'api_dewanyah.dart';
 import 'api_timeline.dart';
 import 'api_user.dart';
 import 'api_users.dart';
+import 'local_game_notifications.dart';
 import 'push/one_signal_bridge.dart';
 
 enum GameMode { solo, team, both }
@@ -29,6 +30,7 @@ class AppState extends ChangeNotifier {
 
   /// رصيد الشراء (عملة المتجر) - يظهر لصاحب الحساب فقط
   int? creditBalance;
+  DateTime? vipUntil;
 
   /// Permanent score / lifetime score (if you use it elsewhere)
   int? permanentScore;
@@ -73,6 +75,7 @@ class AppState extends ChangeNotifier {
   List<Map<String, dynamic>> badges = <Map<String, dynamic>>[];
   Map<String, int> badgeCounts = <String, int>{};
   Map<String, dynamic>? bestBadge;
+  bool _badgesSnapshotInitialized = false;
 
   // ---- Local demo data (used by old leaderboard/player profile/timeline) ----
   final List<TimelineEntry> timeline = <TimelineEntry>[];
@@ -195,6 +198,8 @@ class AppState extends ChangeNotifier {
   /// Convenience alias if you ever used "pearls" in older code.
   int get pearls => creditPoints ?? 0;
   int get storeCredit => creditBalance ?? 0;
+  bool get hasActiveVip =>
+      vipUntil != null && vipUntil!.isAfter(DateTime.now());
 
   /// ------------------------------
   /// Persistence (SharedPreferences)
@@ -218,6 +223,9 @@ class AppState extends ChangeNotifier {
 
       creditPoints = (m['creditPoints'] as num?)?.toInt();
       creditBalance = (m['creditBalance'] as num?)?.toInt();
+      final rawVipUntil = m['vipUntil']?.toString();
+      vipUntil =
+          rawVipUntil == null || rawVipUntil.isEmpty ? null : DateTime.tryParse(rawVipUntil);
       permanentScore = (m['permanentScore'] as num?)?.toInt();
 
       name = m['name'] as String?;
@@ -266,7 +274,7 @@ class AppState extends ChangeNotifier {
         managedBoards =
             rawBoards.map((e) => Map<String, dynamic>.from(e as Map)).toList();
       }
-      _applyBadges(m);
+      _applyBadges(m, notify: false);
       final rawStats = m['userStats'];
       if (rawStats is Map) {
         userStats = rawStats.map((k, v) =>
@@ -332,6 +340,7 @@ class AppState extends ChangeNotifier {
       'email': email,
       'creditPoints': creditPoints,
       'creditBalance': creditBalance,
+      'vipUntil': vipUntil?.toIso8601String(),
       'permanentScore': permanentScore,
       'name': name,
       'phone': phone,
@@ -387,8 +396,15 @@ class AppState extends ChangeNotifier {
   // جعل الحفظ متاحاً للصفحات الأخرى بشكل آمن
   Future<void> saveState() => _save();
 
-  void _applyBadges(Map<String, dynamic> data) {
+  void _applyBadges(Map<String, dynamic> data, {bool notify = true}) {
+    final hadSnapshot = _badgesSnapshotInitialized;
+    final previousCounts = Map<String, int>.from(badgeCounts);
     final rawBadges = data['badges'];
+    final rawCounts = data['badgeCounts'];
+    final rawBest = data['bestBadge'];
+    final hasBadgePayload =
+        rawBadges is List || rawCounts is Map || rawBest is Map;
+
     if (rawBadges is List) {
       badges = rawBadges
           .whereType<Map>()
@@ -396,7 +412,6 @@ class AppState extends ChangeNotifier {
           .toList();
     }
 
-    final rawCounts = data['badgeCounts'];
     if (rawCounts is Map) {
       badgeCounts = rawCounts.map(
         (k, v) => MapEntry(k.toString(), (v as num?)?.toInt() ?? 0),
@@ -412,7 +427,6 @@ class AppState extends ChangeNotifier {
       badgeCounts = counts;
     }
 
-    final rawBest = data['bestBadge'];
     if (rawBest is Map) {
       bestBadge = Map<String, dynamic>.from(rawBest);
     } else if (badges.isNotEmpty) {
@@ -421,6 +435,29 @@ class AppState extends ChangeNotifier {
             .compareTo((a['threshold'] as num?)?.toInt() ?? 0));
       bestBadge = sorted.first;
     }
+
+    if (!hasBadgePayload) return;
+    _badgesSnapshotInitialized = true;
+    if (notify && hadSnapshot) {
+      _notifyBadgeCountIncreases(previousCounts);
+    }
+  }
+
+  void _notifyBadgeCountIncreases(Map<String, int> previousCounts) {
+    final gained = badgeCounts.entries
+        .where((e) => e.value > (previousCounts[e.key] ?? 0))
+        .map((e) => e.key)
+        .toList();
+    if (gained.isEmpty) return;
+    gained.sort((a, b) =>
+        badgeThresholdForLabel(b).compareTo(badgeThresholdForLabel(a)));
+    final label = gained.first;
+    final count = badgeCounts[label] ?? 0;
+    unawaited(LocalGameNotifications.show(
+      id: LocalGameNotifications.idFor('badge-progress:$label:$count'),
+      title: 'نوطك تثبّت',
+      body: 'وصلت نوط $label مرة ثانية. حافظت عليه، وإذا تعديته يزيد نوطك.',
+    ));
   }
 
   int badgeCountForLabel(String label) => badgeCounts[label] ?? 0;
@@ -428,6 +465,32 @@ class AppState extends ChangeNotifier {
   String? bestBadgeLabel() {
     final label = bestBadge?['label']?.toString();
     return (label == null || label.isEmpty) ? null : label;
+  }
+
+  int bestBadgeThreshold() {
+    final explicit = (bestBadge?['threshold'] as num?)?.toInt();
+    if (explicit != null && explicit > 0) return explicit;
+    return badgeThresholdForLabel(bestBadgeLabel());
+  }
+
+  static int badgeThresholdForLabel(String? label) {
+    return switch ((label ?? '').trim()) {
+      'عليمي' || 'Beginner' => 5,
+      'يمشي حاله' || 'Advance' => 10,
+      'زين' || 'Professional' => 15,
+      'فنان' || 'Legend' => 20,
+      'فلتة' || 'فلته' || 'GOAT' => 30,
+      _ => 0,
+    };
+  }
+
+  static int badgeThresholdForPearls(int pearls) {
+    if (pearls >= 30) return 30;
+    if (pearls >= 20) return 20;
+    if (pearls >= 15) return 15;
+    if (pearls >= 10) return 10;
+    if (pearls >= 5) return 5;
+    return 0;
   }
 
   void upsertUserStats(String key, Map<String, dynamic> stats) {
@@ -467,6 +530,7 @@ class AppState extends ChangeNotifier {
 
     creditPoints = (user['creditPoints'] as num?)?.toInt();
     creditBalance = (user['creditBalance'] as num?)?.toInt();
+    vipUntil = DateTime.tryParse((user['vipUntil'] ?? '').toString());
     permanentScore = (user['permanentScore'] as num?)?.toInt();
     themeId = asNullableString(user['themeId']) ?? themeId;
     frameId = asNullableString(user['frameId']) ?? frameId;
@@ -530,6 +594,31 @@ class AppState extends ChangeNotifier {
     await _save();
     notifyListeners();
     await syncProfileToServer();
+  }
+
+  Future<void> removeAvatar() async {
+    avatarBase64 = null;
+    avatarPath = null;
+
+    for (final key in [userId, publicId, displayName, name]) {
+      if (key == null || key.isEmpty) continue;
+      final profile = userProfiles[key];
+      if (profile == null) continue;
+      profile.remove('avatarBase64');
+      profile.remove('avatarPath');
+      profile.remove('avatarUrl');
+    }
+
+    await _save();
+    notifyListeners();
+
+    final auth = token;
+    if (auth == null || auth.isEmpty) return;
+    await updateMyProfile(
+      token: auth,
+      avatarBase64: '',
+      avatarPath: '',
+    );
   }
 
   Future<bool> syncProfileToServer({
@@ -664,6 +753,9 @@ class AppState extends ChangeNotifier {
           (data['permanentScore'] as num?)?.toInt() ?? permanentScore;
       creditPoints = (data['creditPoints'] as num?)?.toInt() ?? creditPoints;
       creditBalance = (data['creditBalance'] as num?)?.toInt() ?? creditBalance;
+      final rawVipUntil = (data['vipUntil'] ?? '').toString().trim();
+      vipUntil =
+          rawVipUntil.isEmpty ? vipUntil : DateTime.tryParse(rawVipUntil);
       name = displayName ?? name;
 
       final gp = data['gamePearls'];
@@ -715,6 +807,7 @@ class AppState extends ChangeNotifier {
     email = null;
     creditPoints = null;
     creditBalance = null;
+    vipUntil = null;
     permanentScore = null;
 
     roomCode = null;
@@ -728,6 +821,7 @@ class AppState extends ChangeNotifier {
     badges = <Map<String, dynamic>>[];
     badgeCounts = <String, int>{};
     bestBadge = null;
+    _badgesSnapshotInitialized = false;
     // Keep one-time guidance flags across logouts so onboarding prompts
     // don't keep re-appearing for the same device user.
     soundMuted = null;
@@ -978,6 +1072,13 @@ class AppState extends ChangeNotifier {
     notifyListeners();
   }
 
+  void removeJoinedDewanyah(String dewanyahId) {
+    if (dewanyahId.isEmpty) return;
+    joinedDewanyahIds.remove(dewanyahId);
+    _save();
+    notifyListeners();
+  }
+
   Future<void> updateManagedBoardTheme({
     required String id,
     String? primaryColor,
@@ -1124,7 +1225,7 @@ class AppState extends ChangeNotifier {
   }
 
   /// Fetch timeline from server and store locally (requires auth token).
-  /// By default we fetch all games so "شسالفه" always shows full results feed.
+  /// By default we fetch all games so profile achievements can use full results.
   Future<void> syncTimelineFromServer(
       {String? gameId, bool global = true}) async {
     if (token == null || token!.isEmpty) return;

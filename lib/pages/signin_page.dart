@@ -137,15 +137,18 @@ class _SignInPageState extends State<SignInPage> {
       if (data['otpRequired'] == true &&
           requestId != null &&
           requestId.isNotEmpty) {
+        final channel = data['deliveryChannel']?.toString().toLowerCase();
+        final channelLabel = channel == 'whatsapp' ? 'واتساب' : 'رسالة نصية';
         setState(() {
           _awaitingOtp = true;
           _otpRequestId = requestId;
         });
 
         if (resend) {
-          _msg('تم إعادة إرسال رمز التحقق', success: true);
+          _msg('تم إعادة إرسال رمز التحقق عبر $channelLabel',
+              success: true);
         } else {
-          _msg('تم إرسال رمز التحقق إلى رقم الجوال', success: true);
+          _msg('تم إرسال رمز التحقق عبر $channelLabel', success: true);
         }
         return;
       }

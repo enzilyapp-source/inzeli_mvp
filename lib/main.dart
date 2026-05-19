@@ -5,15 +5,16 @@ import 'dart:convert';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'biometric_auth.dart';
 import 'state.dart';
-import 'widgets/avatar_effects.dart';
+import 'widgets/challenge_rank_visuals.dart';
 import 'widgets/primary_pill_button.dart';
 
 // pages
 import 'pages/games_page.dart';
 import 'pages/leaderboard_hub_page.dart'; // ✅ NEW (leaderboards first)
-import 'pages/timeline_page.dart';
+import 'pages/dewanyah_list_page.dart';
 import 'pages/profile_page.dart';
 import 'pages/signin_page.dart';
+import 'pages/sponsor_page.dart';
 
 void main() => runApp(const InzeliApp());
 
@@ -322,15 +323,12 @@ class _HomePageState extends State<HomePage> {
   Widget build(BuildContext context) {
     final app = widget.app;
 
-    // ✅ New order: Leaderboards first
+    // ترتيب التبّات من اليمين لليسار: الرئيسية، الألعاب، دواوين، سبونسرات، ملفي.
     final pages = [
       LeaderboardHubPage(key: const ValueKey('lb-regular'), app: app),
       GamesPage(app: app, embedded: true),
-      TimelinePage(app: app),
-      LeaderboardHubPage(
-          key: const ValueKey('lb-sponsor'),
-          app: app,
-          initialTab: 1), // الراعي جنب شسالفه؟
+      DewanyahListPage(app: app),
+      SponsorPage(app: app, embedded: true),
       ProfilePage(app: app), // الملف آخر أيقونة (يمين)
     ];
 
@@ -370,38 +368,39 @@ class _HomePageState extends State<HomePage> {
           ),
         ),
       ),
-
-      // ✅ Bottom Nav updated labels/icons order
-      bottomNavigationBar: NavigationBar(
-        selectedIndex: _index,
-        onDestinationSelected: (i) => setState(() => _index = i),
-        destinations: [
-          NavigationDestination(
-            icon: const Icon(Icons.emoji_events_outlined),
-            selectedIcon: const Icon(Icons.emoji_events),
-            label: app.tr(ar: 'المراتب', en: 'Leaders'),
-          ),
-          NavigationDestination(
-            icon: const Icon(Icons.sports_esports_outlined),
-            selectedIcon: const Icon(Icons.sports_esports),
-            label: app.tr(ar: 'الألعاب', en: 'Games'),
-          ),
-          NavigationDestination(
-            icon: const Icon(Icons.help_outline),
-            selectedIcon: const Icon(Icons.help),
-            label: app.tr(ar: 'شسالفة؟', en: 'Timeline'),
-          ),
-          NavigationDestination(
-            icon: const Icon(Icons.tv_outlined),
-            selectedIcon: const Icon(Icons.tv),
-            label: app.tr(ar: 'سبونسرات', en: 'Sponsors'),
-          ),
-          NavigationDestination(
-            icon: const Icon(Icons.person_outline),
-            selectedIcon: const Icon(Icons.person),
-            label: app.tr(ar: 'ملفي', en: 'Profile'),
-          ),
-        ],
+      bottomNavigationBar: Directionality(
+        textDirection: TextDirection.rtl,
+        child: NavigationBar(
+          selectedIndex: _index,
+          onDestinationSelected: (i) => setState(() => _index = i),
+          destinations: [
+            NavigationDestination(
+              icon: const Icon(Icons.home_outlined),
+              selectedIcon: const Icon(Icons.home),
+              label: app.tr(ar: 'الرئيسية', en: 'Home'),
+            ),
+            NavigationDestination(
+              icon: const Icon(Icons.sports_esports_outlined),
+              selectedIcon: const Icon(Icons.sports_esports),
+              label: app.tr(ar: 'الألعاب', en: 'Games'),
+            ),
+            NavigationDestination(
+              icon: const Icon(Icons.groups_3_outlined),
+              selectedIcon: const Icon(Icons.groups_3),
+              label: app.tr(ar: 'دواوين', en: 'Dewanyahs'),
+            ),
+            NavigationDestination(
+              icon: const Icon(Icons.tv_outlined),
+              selectedIcon: const Icon(Icons.tv),
+              label: app.tr(ar: 'سبونسرات', en: 'Sponsors'),
+            ),
+            NavigationDestination(
+              icon: const Icon(Icons.person_outline),
+              selectedIcon: const Icon(Icons.person),
+              label: app.tr(ar: 'ملفي', en: 'Profile'),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -418,15 +417,11 @@ class _TopProfileCard extends StatelessWidget {
     final name = app.displayName ?? app.name ?? '—';
     final id = app.publicId ?? app.userId ?? '';
     final (topGame, topPearls) = _topPearlGame(app);
-    final savedRank = app.bestBadgeLabel();
-    final rank = savedRank == null
-        ? _rankLabelForPearls(topPearls)
-        : _rankLabelForBadge(savedRank);
+    final rank = _bestRankLabel(topPearls);
     final recentWins = _recentWins(name);
     final screenWidth = MediaQuery.of(context).size.width;
     final compact = screenWidth < 430;
     final cardHeight = compact ? 156.0 : 164.0;
-    final avatarEffectSize = compact ? 98.0 : 102.0;
     final avatarRadius = compact ? 37.0 : 39.0;
     final badgeLift = compact ? -22.0 : -20.0;
     final pearlSize = compact ? 58.0 : 62.0;
@@ -434,7 +429,7 @@ class _TopProfileCard extends StatelessWidget {
     final badgeRowSlotHeight = compact ? 32.0 : 34.0;
     final badgeRowMaxHeight = compact ? 90.0 : 96.0;
     final cardColor = _cardColor(app.cardId);
-    final effect = _effectFromId(app.themeId);
+    final rankVisual = playerRankForLabel(rank);
     ImageProvider? avatarImage;
     if (app.avatarBase64 != null && app.avatarBase64!.isNotEmpty) {
       try {
@@ -467,58 +462,17 @@ class _TopProfileCard extends StatelessWidget {
                 PositionedDirectional(
                   top: 8,
                   start: 10,
-                  child: Container(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                    decoration: BoxDecoration(
-                      color: Colors.white.withValues(alpha: 0.12),
-                      borderRadius: BorderRadius.circular(14),
-                      border: Border.all(color: Colors.white24, width: 1),
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        const Icon(Icons.workspace_premium,
-                            size: 16, color: Color(0xFFF1A949)),
-                        const SizedBox(width: 6),
-                        Text(
-                          rank,
-                          style: const TextStyle(
-                              fontWeight: FontWeight.w800, color: Colors.white),
-                        ),
-                      ],
-                    ),
-                  ),
+                  child: RankBadge(rank: rankVisual, compact: true),
                 ),
                 Center(
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      if (effect != null)
-                        AvatarEffect(
-                          effect: effect,
-                          size: avatarEffectSize,
-                          animate: true,
-                          child: CircleAvatar(
-                            radius: avatarRadius,
-                            backgroundImage: avatarImage,
-                            backgroundColor: const Color(0xFF273347),
-                            child: avatarImage == null
-                                ? Text(
-                                    name.isNotEmpty
-                                        ? name.characters.first
-                                        : '؟',
-                                    style: const TextStyle(
-                                      fontWeight: FontWeight.w900,
-                                      fontSize: 24,
-                                      color: Colors.white,
-                                    ),
-                                  )
-                                : null,
-                          ),
-                        )
-                      else
-                        CircleAvatar(
+                      buildAvatarThemeWidget(
+                        themeId: app.themeId,
+                        size: compact ? 98.0 : 102.0,
+                        animate: true,
+                        child: CircleAvatar(
                           radius: avatarRadius,
                           backgroundImage: avatarImage,
                           backgroundColor: const Color(0xFF273347),
@@ -533,6 +487,7 @@ class _TopProfileCard extends StatelessWidget {
                                 )
                               : null,
                         ),
+                      ),
                       const SizedBox(height: 6),
                       Text(
                         name,
@@ -615,10 +570,28 @@ class _TopProfileCard extends StatelessWidget {
     return app.tr(ar: 'بدايات', en: 'New');
   }
 
+  String _bestRankLabel(int pearls) {
+    final savedRank = app.bestBadgeLabel();
+    final savedThreshold = app.bestBadgeThreshold();
+    final currentThreshold = AppState.badgeThresholdForPearls(pearls);
+    if (savedRank != null && savedThreshold > currentThreshold) {
+      return _rankLabelForBadge(savedRank);
+    }
+    return _rankLabelForPearls(pearls);
+  }
+
   String _rankLabelForBadge(String label) {
+    final arLabel = switch (label) {
+      'Beginner' => 'عليمي',
+      'Advance' => 'يمشي حاله',
+      'Professional' => 'زين',
+      'Legend' => 'فنان',
+      'GOAT' || 'فلته' => 'فلتة',
+      _ => label,
+    };
     return app.tr(
-      ar: label,
-      en: switch (label) {
+      ar: arLabel,
+      en: switch (arLabel) {
         'عليمي' => 'Beginner',
         'يمشي حاله' => 'Advance',
         'زين' => 'Professional',
@@ -650,24 +623,6 @@ class _TopProfileCard extends StatelessWidget {
     }
   }
 
-  AvatarEffectType? _effectFromId(String? id) {
-    switch (id) {
-      case 'blueThunder':
-        return AvatarEffectType.blueThunder;
-      case 'goldLightning':
-        return AvatarEffectType.goldLightning;
-      case 'kuwait':
-        return AvatarEffectType.kuwaitSparkles;
-      case 'greenLeaf':
-        return AvatarEffectType.greenLeaf;
-      case 'flameBlue':
-        return AvatarEffectType.flameBlue;
-      case 'whiteSparkle':
-        return AvatarEffectType.whiteSparkle;
-      default:
-        return null;
-    }
-  }
 }
 
 class _MainPearlBadge extends StatelessWidget {
