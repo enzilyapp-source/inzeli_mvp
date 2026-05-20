@@ -149,6 +149,13 @@ class _LeaderboardHubPageState extends State<LeaderboardHubPage> {
         _msg('الروم السابق انتهى');
         return;
       }
+      final roomGame = (room['gameId'] ?? '').toString().trim();
+      if (roomGame.isNotEmpty) {
+        widget.app.setSelectedGame(
+          roomGame,
+          category: _categoryForGame(roomGame),
+        );
+      }
       if (!mounted) return;
       await Navigator.push(
         context,
@@ -675,6 +682,18 @@ class _LeaderboardHubPageState extends State<LeaderboardHubPage> {
         lat: pos?.latitude,
         lng: pos?.longitude,
       );
+      final roomGame = (room['gameId'] ?? '').toString().trim();
+      if (roomGame.isNotEmpty && roomGame != gameId) {
+        final roomCode = room['code']?.toString().trim();
+        if (roomCode != null && roomCode.isNotEmpty) {
+          widget.app.setRoomCode(roomCode);
+        }
+        _msg(
+          'رجع السيرفر قيم ${widget.app.gameLabel(roomGame)} بدل ${widget.app.gameLabel(gameId)}. افتحي القيم الحالي أو حدّثي السيرفر.',
+          error: true,
+        );
+        return;
+      }
       final code = room['code']?.toString();
       widget.app.setRoomCode(code);
       if (!mounted) return;

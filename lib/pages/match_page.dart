@@ -984,9 +984,11 @@ class _MatchPageState extends State<MatchPage> with WidgetsBindingObserver {
 
   @override
   Widget build(BuildContext context) {
-    final code = (widget.room?['code'] ?? widget.app.roomCode ?? '').toString();
-    final game = (widget.room?['gameId'] ?? widget.app.selectedGame ?? 'لعبة')
-        .toString();
+    final effectiveRoom = _room ?? widget.room;
+    final code = (effectiveRoom?['code'] ?? widget.app.roomCode ?? '').toString();
+    final game =
+        (effectiveRoom?['gameId'] ?? widget.app.selectedGame ?? 'لعبة')
+            .toString();
     final sponsorCode = widget.sponsorCode;
     final timerMinutes = kGameRules[game]?.timerMinutes ?? 10;
     final timerSec = timerMinutes * 60;
@@ -1142,7 +1144,8 @@ class _MatchPageState extends State<MatchPage> with WidgetsBindingObserver {
                                   if (!_teamMode) {
                                     _teamOf.clear();
                                   }
-                                  final gameName = (widget.room?['gameId'] ??
+                                  final gameName = (_room?['gameId'] ??
+                                          widget.room?['gameId'] ??
                                           widget.app.selectedGame ??
                                           '')
                                       .toString();
@@ -1202,7 +1205,8 @@ class _MatchPageState extends State<MatchPage> with WidgetsBindingObserver {
                               animateIcon: true);
                           return;
                         }
-                        final gameName = (widget.room?['gameId'] ??
+                        final gameName = (_room?['gameId'] ??
+                                widget.room?['gameId'] ??
                                 widget.app.selectedGame ??
                                 '')
                             .toString();

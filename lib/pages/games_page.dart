@@ -160,6 +160,10 @@ class _GamesPageState extends State<GamesPage> {
         }
         return;
       }
+      final roomGame = (room['gameId'] ?? '').toString().trim();
+      if (roomGame.isNotEmpty) {
+        app.setSelectedGame(roomGame, category: _selectedCategory);
+      }
       if (!mounted) return;
       _msg('رجعناك للقيم الحالي ($code)', success: true);
       await Navigator.push(
@@ -231,6 +235,18 @@ class _GamesPageState extends State<GamesPage> {
         lat: pos?.latitude,
         lng: pos?.longitude,
       );
+      final roomGame = (room['gameId'] ?? '').toString().trim();
+      if (roomGame.isNotEmpty && roomGame != game) {
+        final roomCode = room['code']?.toString().trim();
+        if (roomCode != null && roomCode.isNotEmpty) {
+          app.setRoomCode(roomCode);
+        }
+        if (!mounted) return;
+        _msg(
+          'رجع السيرفر قيم ${app.gameLabel(roomGame)} بدل ${app.gameLabel(game)}. افتحي القيم الحالي أو حدّثي السيرفر.',
+        );
+        return;
+      }
       final code = room['code']?.toString();
       app.setRoomCode(code);
 

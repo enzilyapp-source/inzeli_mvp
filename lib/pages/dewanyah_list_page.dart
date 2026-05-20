@@ -189,7 +189,8 @@ class _DewanyahListPageState extends State<DewanyahListPage> {
       );
       return;
     }
-    if (gameId.isEmpty) {
+    final resolvedGameId = _resolvedGameForStart(dew, gameId);
+    if (resolvedGameId.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('اختر لعبة الديوانية أولاً')),
       );
@@ -253,8 +254,12 @@ class _DewanyahListPageState extends State<DewanyahListPage> {
         roomLng = pos?.longitude;
       }
 
+      widget.app.setSelectedGame(
+        resolvedGameId,
+        category: _categoryForGame(resolvedGameId),
+      );
       final room = await ApiRoom.createRoom(
-        gameId: gameId,
+        gameId: resolvedGameId,
         sponsorCode: null,
         dewanyahId: id,
         token: app.token,
@@ -262,6 +267,19 @@ class _DewanyahListPageState extends State<DewanyahListPage> {
         lng: roomLng,
         radiusMeters: roomRadius,
       );
+      final roomGame = (room['gameId'] ?? '').toString().trim();
+      if (roomGame.isNotEmpty && roomGame != resolvedGameId) {
+        if (!mounted) return;
+        Sfx.error(mute: widget.app.soundMuted == true);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'رجع السيرفر لعبة ${widget.app.gameLabel(roomGame)} بدل ${widget.app.gameLabel(resolvedGameId)}. افتحي القيم الحالي أو حدّثي السيرفر.',
+            ),
+          ),
+        );
+        return;
+      }
       if (!mounted) return;
       Sfx.tap(mute: widget.app.soundMuted == true);
       Navigator.push(
@@ -302,6 +320,13 @@ class _DewanyahListPageState extends State<DewanyahListPage> {
           const SnackBar(content: Text('القيم السابق انتهى')),
         );
         return;
+      }
+      final roomGame = (room['gameId'] ?? '').toString().trim();
+      if (roomGame.isNotEmpty) {
+        widget.app.setSelectedGame(
+          roomGame,
+          category: _categoryForGame(roomGame),
+        );
       }
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -470,9 +495,22 @@ class _DewanyahListPageState extends State<DewanyahListPage> {
     return _dewGames(dew).contains(filter);
   }
 
+  List<String> _visibleGames(Map<String, dynamic> dew) {
+    final games = _dewGames(dew);
+    final initialGame = widget.initialGameId?.trim() ?? '';
+    if (initialGame.isNotEmpty && games.contains(initialGame)) {
+      return [initialGame];
+    }
+    final filteredGame = _filterGameId?.trim() ?? '';
+    if (filteredGame.isNotEmpty && games.contains(filteredGame)) {
+      return [filteredGame];
+    }
+    return games;
+  }
+
   String _currentGame(Map<String, dynamic> dew) {
     final id = _dewId(dew);
-    final games = _dewGames(dew);
+    final games = _visibleGames(dew);
     final initialGame = widget.initialGameId?.trim() ?? '';
     if (initialGame.isNotEmpty && games.contains(initialGame)) {
       if (id.isNotEmpty) _selectedGameByDew[id] = initialGame;
@@ -490,6 +528,28 @@ class _DewanyahListPageState extends State<DewanyahListPage> {
       _selectedGameByDew[id] = fallback;
     }
     return fallback;
+  }
+
+  String _resolvedGameForStart(Map<String, dynamic> dew, String requestedGameId) {
+    final visibleGames = _visibleGames(dew);
+    final requested = requestedGameId.trim();
+    if (requested.isNotEmpty && visibleGames.contains(requested)) {
+      return requested;
+    }
+    final current = _currentGame(dew).trim();
+    if (current.isNotEmpty && visibleGames.contains(current)) {
+      return current;
+    }
+    return visibleGames.isNotEmpty ? visibleGames.first : requested;
+  }
+
+  String? _categoryForGame(String gameId) {
+    final normalized = gameId.trim();
+    if (normalized.isEmpty) return null;
+    for (final entry in widget.app.games.entries) {
+      if (entry.value.contains(normalized)) return entry.key;
+    }
+    return null;
   }
 
   List<String> _gameOptions() {
@@ -801,8 +861,11 @@ class _DewanyahListPageState extends State<DewanyahListPage> {
       ),
       builder: (_) => StatefulBuilder(
         builder: (sheetContext, sheetSetState) {
-          final games = _dewGames(dew);
-          final currentGame = _currentGame(dew);
+          final games = _visibleGames(dew);
+          final pickedGame = _currentGame(dew);
+          final currentGame = games.contains(pickedGame)
+              ? pickedGame
+              : (games.isNotEmpty ? games.first : '');
           return SafeArea(
             child: Padding(
               padding: EdgeInsets.fromLTRB(
