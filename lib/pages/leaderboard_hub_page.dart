@@ -272,13 +272,14 @@ class _LeaderboardHubPageState extends State<LeaderboardHubPage> {
     if (_tutorialShown || widget.app.tutorialSeen == true) return;
     _tutorialShown = true;
     if (!mounted) return;
+    var completed = false;
     await showModalBottomSheet(
       context: context,
       isScrollControlled: true,
       showDragHandle: true,
       shape: const RoundedRectangleBorder(
           borderRadius: BorderRadius.vertical(top: Radius.circular(18))),
-      builder: (_) => Directionality(
+      builder: (sheetContext) => Directionality(
         textDirection: TextDirection.rtl,
         child: Padding(
           padding: const EdgeInsets.all(16),
@@ -312,7 +313,9 @@ class _LeaderboardHubPageState extends State<LeaderboardHubPage> {
                 width: double.infinity,
                 child: FilledButton(
                   onPressed: () {
-                    Navigator.pop(context);
+                    completed = true;
+                    widget.app.markTutorialSeen();
+                    Navigator.pop(sheetContext);
                   },
                   child: const Text('تم'),
                 ),
@@ -322,8 +325,8 @@ class _LeaderboardHubPageState extends State<LeaderboardHubPage> {
         ),
       ),
     );
-    if (widget.app.tutorialSeen != true) {
-      widget.app.markTutorialSeen();
+    if (!completed) {
+      _tutorialShown = false;
     }
   }
 
@@ -489,10 +492,15 @@ class _LeaderboardHubPageState extends State<LeaderboardHubPage> {
     );
   }
 
-  void _openDewanyahList() {
+  void _openDewanyahList({String? initialGameId}) {
     Navigator.push(
       context,
-      MaterialPageRoute(builder: (_) => DewanyahListPage(app: widget.app)),
+      MaterialPageRoute(
+        builder: (_) => DewanyahListPage(
+          app: widget.app,
+          initialGameId: initialGameId,
+        ),
+      ),
     );
   }
 
@@ -748,25 +756,24 @@ class _LeaderboardHubPageState extends State<LeaderboardHubPage> {
 
   Widget _buildQuickHomeBar() {
     return Row(
-      mainAxisAlignment: MainAxisAlignment.center,
       children: [
-        Flexible(
-          flex: 5,
-          child: _QuickActionButton(
-            label: widget.app.tr(ar: 'إنزلي', en: 'Start'),
-            icon: null,
-            compact: false,
+        Expanded(
+          child: PrimaryPillButton(
             onPressed: () => _openQuickGamePicker(join: false),
+            icon: Icons.add_box_outlined,
+            label: widget.app.tr(ar: 'إنــــزّلــــي', en: 'Start'),
+            maxWidth: double.infinity,
+            minHeight: 76,
           ),
         ),
-        const SizedBox(width: 8),
-        Flexible(
-          flex: 2,
-          child: _QuickActionButton(
-            label: widget.app.tr(ar: 'شرّف', en: 'Join'),
-            icon: Icons.qr_code_scanner,
-            compact: true,
+        const SizedBox(width: 10),
+        Expanded(
+          child: PrimaryPillButton(
             onPressed: _scanAndJoinFromHome,
+            icon: Icons.qr_code_scanner,
+            label: widget.app.tr(ar: 'شرّف', en: 'Join'),
+            maxWidth: double.infinity,
+            minHeight: 76,
           ),
         ),
       ],
@@ -907,6 +914,7 @@ class _LeaderboardHubPageState extends State<LeaderboardHubPage> {
       return _BoardSpec(
         title: 'Top Players • ${app.gameLabel(g)}',
         gameId: g,
+        displayGameLabel: app.gameLabel(g),
         prize: null,
         showSponsorPearls: false,
         loader: (limit) async {
@@ -947,10 +955,12 @@ class _LeaderboardHubPageState extends State<LeaderboardHubPage> {
           _BoardSpec(
             title: '${d['name']?.toString() ?? 'ديوانية'} • $gid',
             gameId: gid.isNotEmpty ? gid : '—',
+            displayGameLabel:
+                gid.isEmpty ? '—' : widget.app.gameLabel(gid),
             prize: d['prizeAmount'] is int ? d['prizeAmount'] as int : null,
             showSponsorPearls: false,
             fallback: (d['players'] as List?)?.cast<Map<String, dynamic>>() ??
-                _mockBoard(basePearls: 5),
+                const <Map<String, dynamic>>[],
             badge: d['status']?.toString(),
             owner: d['owner']?.toString(),
             fivePearlsNote: true,
@@ -1348,7 +1358,14 @@ class _LeaderboardHubPageState extends State<LeaderboardHubPage> {
               imageUrl: _hubDewanyahImageUrl(dew),
               isMine: _isMyHubDewanyah(dew),
               status: dew['status']?.toString(),
-              onTap: _openDewanyahList,
+              onTap: () {
+                final dewGames = _dewGameIds(dew);
+                final initialGameId = _homeSelectedGameId != null &&
+                        _dewMatchesGame(dew, _homeSelectedGameId!)
+                    ? _homeSelectedGameId
+                    : (dewGames.isNotEmpty ? dewGames.first : null);
+                _openDewanyahList(initialGameId: initialGameId);
+              },
             );
           },
         );
@@ -1446,6 +1463,7 @@ class _LeaderboardHubPageState extends State<LeaderboardHubPage> {
 class _BoardSpec {
   final String title;
   final String gameId;
+  final String displayGameLabel;
   final int? prize;
   final bool showSponsorPearls;
   final Future<List<Map<String, dynamic>>> Function(int limit)? loader;
@@ -1457,6 +1475,7 @@ class _BoardSpec {
   const _BoardSpec({
     required this.title,
     required this.gameId,
+    required this.displayGameLabel,
     this.prize,
     required this.showSponsorPearls,
     this.loader,
@@ -1555,7 +1574,7 @@ class _LeaderboardPanel extends StatelessWidget {
                         style: const TextStyle(fontWeight: FontWeight.w900),
                       ),
                       Text(
-                        'اللعبة الحالية: ${spec.gameId}',
+                        'اللعبة الحالية: ${spec.displayGameLabel}',
                         style: TextStyle(
                           color: Colors.white.withValues(alpha: 0.6),
                           fontSize: 12,
@@ -1626,6 +1645,13 @@ class _LeaderboardPanel extends StatelessWidget {
                     );
                   }
                   final list = snap.data ?? spec.fallback;
+                  if (list.isEmpty) {
+                    return const Card(
+                      child: Center(
+                        child: Text('لا توجد نتائج بعد'),
+                      ),
+                    );
+                  }
                   return buildCard(list);
                 },
               ),

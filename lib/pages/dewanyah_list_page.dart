@@ -473,6 +473,16 @@ class _DewanyahListPageState extends State<DewanyahListPage> {
   String _currentGame(Map<String, dynamic> dew) {
     final id = _dewId(dew);
     final games = _dewGames(dew);
+    final initialGame = widget.initialGameId?.trim() ?? '';
+    if (initialGame.isNotEmpty && games.contains(initialGame)) {
+      if (id.isNotEmpty) _selectedGameByDew[id] = initialGame;
+      return initialGame;
+    }
+    final filteredGame = _filterGameId?.trim() ?? '';
+    if (filteredGame.isNotEmpty && games.contains(filteredGame)) {
+      if (id.isNotEmpty) _selectedGameByDew[id] = filteredGame;
+      return filteredGame;
+    }
     final selected = id.isEmpty ? null : _selectedGameByDew[id];
     if (selected != null && games.contains(selected)) return selected;
     final fallback = games.isNotEmpty ? games.first : '';
