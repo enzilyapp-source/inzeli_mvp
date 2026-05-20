@@ -144,6 +144,44 @@ class _GamesPageState extends State<GamesPage> {
     return s.contains('ROOM_NOT_FOUND') || s.contains('HTTP 404');
   }
 
+  Future<void> _resumeActiveRoom(String code) async {
+    if (code.trim().isEmpty) return;
+    try {
+      final room = await ApiRoom.getRoomByCode(
+        code,
+        token: app.token,
+      );
+      final status = room['status']?.toString();
+      if (status != null && status != 'waiting' && status != 'running') {
+        app.setRoomCode(null);
+        if (mounted) {
+          setState(() {});
+          _msg('القيم السابق انتهى');
+        }
+        return;
+      }
+      if (!mounted) return;
+      _msg('رجعناك للقيم الحالي ($code)', success: true);
+      await Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => MatchPage(
+            app: app,
+            room: room,
+          ),
+        ),
+      );
+      if (mounted) setState(() {});
+    } catch (e) {
+      if (_isRoomNotFoundError(e)) {
+        app.setRoomCode(null);
+      }
+      if (!mounted) return;
+      _msg('عندك قيم شغال، بس تعذر فتحه: ${ApiRoom.friendlyError(e)}',
+          error: true);
+    }
+  }
+
   // ------------ Actions: Create / Join ------------
   Future<void> _checkCurrentRoomStatus() async {
     final code = app.roomCode;
@@ -208,6 +246,18 @@ class _GamesPageState extends State<GamesPage> {
       );
       setState(() {});
     } catch (e) {
+      final active =
+          RegExp(r'PLAYER_ALREADY_IN_ACTIVE_ROOM:([A-Z0-9]+)').firstMatch(
+        e.toString(),
+      );
+      if (active != null) {
+        final activeCode = active.group(1) ?? '';
+        if (activeCode.isNotEmpty) {
+          app.setRoomCode(activeCode);
+          await _resumeActiveRoom(activeCode);
+          return;
+        }
+      }
       _msg('فشل إنشاء الروم: ${ApiRoom.friendlyError(e)}');
     }
   }
@@ -259,6 +309,18 @@ class _GamesPageState extends State<GamesPage> {
       );
       setState(() {});
     } catch (e) {
+      final active =
+          RegExp(r'PLAYER_ALREADY_IN_ACTIVE_ROOM:([A-Z0-9]+)').firstMatch(
+        e.toString(),
+      );
+      if (active != null) {
+        final activeCode = active.group(1) ?? '';
+        if (activeCode.isNotEmpty) {
+          app.setRoomCode(activeCode);
+          await _resumeActiveRoom(activeCode);
+          return;
+        }
+      }
       _msg('تعذّر الشّرف: ${ApiRoom.friendlyError(e)}');
     }
   }
