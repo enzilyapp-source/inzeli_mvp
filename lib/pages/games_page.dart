@@ -144,7 +144,7 @@ class _GamesPageState extends State<GamesPage> {
     return s.contains('ROOM_NOT_FOUND') || s.contains('HTTP 404');
   }
 
-  Future<void> _resumeActiveRoom(String code) async {
+  Future<void> _resumeActiveRoom(String code, {String? expectedGameId}) async {
     if (code.trim().isEmpty) return;
     try {
       final room = await ApiRoom.getRoomByCode(
@@ -161,6 +161,16 @@ class _GamesPageState extends State<GamesPage> {
         return;
       }
       final roomGame = (room['gameId'] ?? '').toString().trim();
+      final wantedGame = expectedGameId?.trim() ?? '';
+      if (wantedGame.isNotEmpty &&
+          roomGame.isNotEmpty &&
+          roomGame != wantedGame) {
+        if (!mounted) return;
+        _msg(
+          'عندك قيم شغال للعبة ${app.gameLabel(roomGame)}. لغيه أول قبل ما تبدين ${app.gameLabel(wantedGame)}.',
+        );
+        return;
+      }
       if (roomGame.isNotEmpty) {
         app.setSelectedGame(roomGame, category: _selectedCategory);
       }
@@ -270,7 +280,7 @@ class _GamesPageState extends State<GamesPage> {
         final activeCode = active.group(1) ?? '';
         if (activeCode.isNotEmpty) {
           app.setRoomCode(activeCode);
-          await _resumeActiveRoom(activeCode);
+          await _resumeActiveRoom(activeCode, expectedGameId: game);
           return;
         }
       }
@@ -333,7 +343,7 @@ class _GamesPageState extends State<GamesPage> {
         final activeCode = active.group(1) ?? '';
         if (activeCode.isNotEmpty) {
           app.setRoomCode(activeCode);
-          await _resumeActiveRoom(activeCode);
+          await _resumeActiveRoom(activeCode, expectedGameId: game);
           return;
         }
       }

@@ -942,7 +942,7 @@ class _LeaderboardHubPageState extends State<LeaderboardHubPage> {
             gameId: g,
             limit: limit,
           );
-          if (rows.isEmpty) return _mockBoard(basePearls: 5);
+          if (rows.isEmpty) return const <Map<String, dynamic>>[];
           return _normalizeBoardRows(rows
               .map((r) => {
                     'displayName':
@@ -953,7 +953,7 @@ class _LeaderboardHubPageState extends State<LeaderboardHubPage> {
                   })
               .toList());
         },
-        fallback: _mockBoard(basePearls: 5),
+        fallback: const <Map<String, dynamic>>[],
       );
     }).toList();
   }

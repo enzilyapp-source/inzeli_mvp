@@ -297,7 +297,11 @@ class _DewanyahListPageState extends State<DewanyahListPage> {
         final activeCode = active.group(1) ?? '';
         if (activeCode.isNotEmpty) {
           app.setRoomCode(activeCode);
-          await _resumeActiveRoom(activeCode);
+          await _resumeActiveRoom(
+            activeCode,
+            expectedGameId: resolvedGameId,
+            expectedDewanyahId: id,
+          );
           return;
         }
       }
@@ -308,7 +312,11 @@ class _DewanyahListPageState extends State<DewanyahListPage> {
     }
   }
 
-  Future<void> _resumeActiveRoom(String code) async {
+  Future<void> _resumeActiveRoom(
+    String code, {
+    String? expectedGameId,
+    String? expectedDewanyahId,
+  }) async {
     if (code.trim().isEmpty) return;
     try {
       final room = await ApiRoom.getRoomByCode(code, token: widget.app.token);
@@ -322,6 +330,35 @@ class _DewanyahListPageState extends State<DewanyahListPage> {
         return;
       }
       final roomGame = (room['gameId'] ?? '').toString().trim();
+      final roomDewanyahId = (room['dewanyahId'] ?? '').toString().trim();
+      final wantedGame = expectedGameId?.trim() ?? '';
+      final wantedDewanyah = expectedDewanyahId?.trim() ?? '';
+      if (wantedGame.isNotEmpty &&
+          roomGame.isNotEmpty &&
+          roomGame != wantedGame) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'عندك قيم شغال للعبة ${widget.app.gameLabel(roomGame)}. لغيه أول قبل ما تبدين ${widget.app.gameLabel(wantedGame)}.',
+            ),
+          ),
+        );
+        return;
+      }
+      if (wantedDewanyah.isNotEmpty &&
+          roomDewanyahId.isNotEmpty &&
+          roomDewanyahId != wantedDewanyah) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'عندك قيم شغال في ديوانية ثانية. لغيه أول قبل ما تبدين قيم جديد.',
+            ),
+          ),
+        );
+        return;
+      }
       if (roomGame.isNotEmpty) {
         widget.app.setSelectedGame(
           roomGame,
