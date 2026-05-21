@@ -620,12 +620,55 @@ class _DewanyahListPageState extends State<DewanyahListPage> {
       final map = Map<String, dynamic>.from(owned);
       final id = _dewId(map);
       if (id.isNotEmpty && serverIds.contains(id)) continue;
+      if (_hasMatchingApprovedDewanyah(map, serverList)) continue;
       map['ownerId'] ??= widget.app.userId;
       map['ownerName'] ??= widget.app.displayName ?? widget.app.name;
       map['status'] ??= 'pending';
       merged.insert(0, map);
     }
     return merged;
+  }
+
+  bool _hasMatchingApprovedDewanyah(
+    Map<String, dynamic> localOwned,
+    List<Map<String, dynamic>> serverList,
+  ) {
+    final localStatus = (localOwned['status'] ?? '').toString().trim();
+    if (localStatus != 'pending') return false;
+
+    final localName = _normalizeDewanyahName(_dewName(localOwned));
+    if (localName.isEmpty) return false;
+
+    final myUserId = widget.app.userId?.trim() ?? '';
+    final myDisplay =
+        _normalizeDewanyahName(widget.app.displayName ?? widget.app.name ?? '');
+
+    return serverList.any((server) {
+      final serverId = _dewId(server).trim();
+      if (serverId.isEmpty) return false;
+
+      final serverName = _normalizeDewanyahName(_dewName(server));
+      if (serverName != localName) return false;
+
+      final serverOwnerId =
+          ((server['ownerUserId'] ?? server['ownerId']) ?? '').toString().trim();
+      if (myUserId.isNotEmpty && serverOwnerId.isNotEmpty) {
+        return serverOwnerId == myUserId;
+      }
+
+      final serverOwnerName =
+          _normalizeDewanyahName(_ownerName(server));
+      return myDisplay.isNotEmpty &&
+          serverOwnerName.isNotEmpty &&
+          serverOwnerName == myDisplay;
+    });
+  }
+
+  String _normalizeDewanyahName(String value) {
+    return value
+        .trim()
+        .replaceAll(RegExp(r'\s+'), ' ')
+        .toLowerCase();
   }
 
   Future<void> _showMembers(Map<String, dynamic> dew) async {
