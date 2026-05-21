@@ -49,7 +49,7 @@ class _DewanyahListPageState extends State<DewanyahListPage> {
   @override
   void initState() {
     super.initState();
-    _future = ApiDewanyah.listAll();
+    _future = _loadDewanyahs();
     final games = _gameOptions();
     _filterGameId = games.contains(widget.initialGameId)
         ? widget.initialGameId
@@ -72,9 +72,15 @@ class _DewanyahListPageState extends State<DewanyahListPage> {
   Future<void> _refresh() async {
     setState(() {
       _membershipCache.clear();
-      _future = ApiDewanyah.listAll();
+      _future = _loadDewanyahs();
     });
     await _refreshOwnerPending(showToastOnIncrease: false);
+  }
+
+  Future<List<Map<String, dynamic>>> _loadDewanyahs() async {
+    final list = await ApiDewanyah.listAll();
+    await widget.app.pruneResolvedOwnedDewanyahRequests(list);
+    return list;
   }
 
   void _startPendingPoll() {

@@ -129,20 +129,48 @@ class _ProfilePageState extends State<ProfilePage> {
     return _rankName(_labelFor(threshold));
   }
 
+  bool _isAchievementMatch(TimelineEntry entry, String player) {
+    final isWinner = entry.winner == player || entry.winners.contains(player);
+    final isLoser = entry.losers.contains(player);
+    if (!isWinner && !isLoser) return false;
+    final kind = entry.kind.trim().toUpperCase();
+    if (kind.isEmpty) return true;
+    return kind == 'MATCH' ||
+        kind == 'MATCH_WIN' ||
+        kind == 'MATCH_LOSS' ||
+        kind == 'MATCH_FINISHED';
+  }
+
   List<_AchievementEntry> _recentWins(String player) {
-    final wins = widget.app.timeline.where((t) => t.winner == player).toList()
+    final matches = widget.app.timeline
+        .where((t) => _isAchievementMatch(t, player))
+        .toList()
       ..sort((a, b) => b.ts.compareTo(a.ts));
 
-    return wins.take(10).map((t) {
+    final deduped = <_AchievementEntry>[];
+    final seen = <String>{};
+    for (final t in matches) {
+      final isWin = t.winner == player || t.winners.contains(player);
+      final outcome = isWin ? 'win' : 'loss';
+      final roomKey = t.roomCode.trim().isNotEmpty
+          ? t.roomCode.trim()
+          : '${t.game}|${t.ts.toIso8601String()}|$outcome';
+      final key = '${t.game}|$roomKey|$outcome';
+      if (!seen.add(key)) continue;
+
       final pearls = widget.app.pearlsForGame(t.game);
       final badge = _bestBadgeForGame(t.game);
-      return _AchievementEntry(
+      deduped.add(_AchievementEntry(
         game: widget.app.gameLabel(t.game),
         typeLabel: _scopeLabel(badge),
         badgeLabel: _badgeLabelForGame(t.game, pearls),
+        outcomeLabel: isWin ? 'فاز' : 'خسر',
+        isWin: isWin,
         date: t.ts,
-      );
-    }).toList();
+      ));
+      if (deduped.length >= 10) break;
+    }
+    return deduped;
   }
 
   String _shortId(String id) {
@@ -1579,7 +1607,7 @@ class _ProfilePageState extends State<ProfilePage> {
                                 ),
                                 const SizedBox(height: 4),
                                 Text(
-                                  'افز بـ ${widget.app.gameLabel(challenge.gameId)} ${challenge.targetWins} مرات',
+                                  'الفوز في لعبة ${widget.app.gameLabel(challenge.gameId)} ${challenge.targetWins} مرات',
                                   style: TextStyle(
                                     color: Colors.white.withValues(alpha: 0.72),
                                     fontSize: 12,
@@ -1722,8 +1750,8 @@ class _ProfilePageState extends State<ProfilePage> {
     }
     uniq.sort((a, b) {
       if (a.active != b.active) return a.active ? -1 : 1;
-      if (a.threshold != b.threshold) return b.threshold.compareTo(a.threshold);
       if (a.pearls != b.pearls) return b.pearls.compareTo(a.pearls);
+      if (a.threshold != b.threshold) return b.threshold.compareTo(a.threshold);
       return a.label.compareTo(b.label);
     });
     return uniq;
@@ -1736,12 +1764,16 @@ class _AchievementEntry {
   final String game;
   final String typeLabel;
   final String badgeLabel;
+  final String outcomeLabel;
+  final bool isWin;
   final DateTime date;
 
   const _AchievementEntry({
     required this.game,
     required this.typeLabel,
     required this.badgeLabel,
+    required this.outcomeLabel,
+    required this.isWin,
     required this.date,
   });
 }
@@ -1919,13 +1951,7 @@ class _AchievementsCard extends StatelessWidget {
                 ],
               ),
               const SizedBox(height: 8),
-              if (wins.isEmpty)
-                Text(
-                  'أول فوز لك بيظهر هني.',
-                  textAlign: TextAlign.right,
-                  style: TextStyle(color: Colors.white.withValues(alpha: .7)),
-                )
-              else
+              if (wins.isNotEmpty)
                 ...wins.map(
                   (win) => Padding(
                     padding: const EdgeInsets.only(bottom: 6),
@@ -1935,12 +1961,18 @@ class _AchievementsCard extends StatelessWidget {
                           width: 30,
                           height: 30,
                           decoration: BoxDecoration(
-                            color: Colors.amber.withValues(alpha: .18),
+                            color: (win.isWin
+                                    ? Colors.amber
+                                    : Colors.redAccent)
+                                .withValues(alpha: .18),
                             shape: BoxShape.circle,
                           ),
-                          child: const Icon(
-                            Icons.workspace_premium,
-                            color: Colors.amber,
+                          child: Icon(
+                            win.isWin
+                                ? Icons.workspace_premium
+                                : Icons.close_rounded,
+                            color:
+                                win.isWin ? Colors.amber : Colors.redAccent,
                             size: 18,
                           ),
                         ),
@@ -1950,7 +1982,7 @@ class _AchievementsCard extends StatelessWidget {
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Text(
-                                '${win.typeLabel} • ${win.game}',
+                                '${win.outcomeLabel} • ${win.game}',
                                 textAlign: TextAlign.right,
                                 style: const TextStyle(
                                     fontWeight: FontWeight.w800),

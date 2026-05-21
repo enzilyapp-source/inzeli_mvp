@@ -1040,6 +1040,69 @@ class AppState extends ChangeNotifier {
     notifyListeners();
   }
 
+  Future<void> pruneResolvedOwnedDewanyahRequests(
+    List<Map<String, dynamic>> serverDewanyahs,
+  ) async {
+    if (ownedDewanyahs.isEmpty || serverDewanyahs.isEmpty) return;
+
+    String normalize(String? value) {
+      return (value ?? '')
+          .trim()
+          .replaceAll(RegExp(r'\s+'), ' ')
+          .toLowerCase();
+    }
+
+    final myUserId = (userId ?? '').trim();
+    final myDisplay = normalize(displayName ?? name);
+    var changed = false;
+
+    bool hasApprovedMatch(Map<String, dynamic> local) {
+      final localStatus = (local['status'] ?? '').toString().trim();
+      if (localStatus != 'pending') return false;
+
+      final localName =
+          normalize((local['name'] ?? local['title'] ?? '').toString());
+      if (localName.isEmpty) return false;
+
+      return serverDewanyahs.any((server) {
+        final serverId = (server['id'] ?? '').toString().trim();
+        if (serverId.isEmpty) return false;
+
+        final serverName = normalize(
+          (server['name'] ?? server['title'] ?? '').toString(),
+        );
+        if (serverName != localName) return false;
+
+        final serverOwnerId =
+            ((server['ownerUserId'] ?? server['ownerId']) ?? '')
+                .toString()
+                .trim();
+        if (myUserId.isNotEmpty && serverOwnerId.isNotEmpty) {
+          return serverOwnerId == myUserId;
+        }
+
+        final serverOwnerName = normalize(
+          (server['ownerName'] ?? server['owner'] ?? '').toString(),
+        );
+        return myDisplay.isNotEmpty &&
+            serverOwnerName.isNotEmpty &&
+            serverOwnerName == myDisplay;
+      });
+    }
+
+    final next = <Map<String, dynamic>>[];
+    for (final item in ownedDewanyahs) {
+      final keep = !hasApprovedMatch(item);
+      if (!keep) changed = true;
+      if (keep) next.add(item);
+    }
+
+    if (!changed) return;
+    ownedDewanyahs = next;
+    await _save();
+    notifyListeners();
+  }
+
   Future<void> addManagedBoard({
     required String title,
     required String type, // sponsor or dewanyah

@@ -221,7 +221,16 @@ class _LeaderboardHubPageState extends State<LeaderboardHubPage> {
 
   List<Map<String, dynamic>> _ownedAsSpaces() {
     if (widget.app.ownedDewanyahs.isEmpty) return const [];
-    return widget.app.ownedDewanyahs.map((d) {
+    final liveNames = _dewanyahSpaces
+        .map((d) => (d['name'] ?? '').toString().trim().toLowerCase())
+        .where((name) => name.isNotEmpty)
+        .toSet();
+    return widget.app.ownedDewanyahs.where((d) {
+      final status = (d['status'] ?? '').toString().trim();
+      final name = (d['name'] ?? '').toString().trim().toLowerCase();
+      if (status != 'pending' || name.isEmpty) return true;
+      return !liveNames.contains(name);
+    }).map((d) {
       return {
         'name': d['name'] ?? 'ديوانية جديدة',
         'owner': d['ownerName'] ?? widget.app.displayName ?? 'أنت',
@@ -242,6 +251,7 @@ class _LeaderboardHubPageState extends State<LeaderboardHubPage> {
     });
     try {
       final list = await ApiDewanyah.listAll();
+      await widget.app.pruneResolvedOwnedDewanyahRequests(list);
       final mapped = list.map((d) {
         final games = (d['games'] as List?) ?? const [];
         final gid = games.isNotEmpty
@@ -775,6 +785,7 @@ class _LeaderboardHubPageState extends State<LeaderboardHubPage> {
 
   Widget _buildQuickHomeBar() {
     return Row(
+      textDirection: TextDirection.rtl,
       children: [
         Expanded(
           child: PrimaryPillButton(

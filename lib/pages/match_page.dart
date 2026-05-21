@@ -1403,7 +1403,10 @@ class _MatchPageState extends State<MatchPage> with WidgetsBindingObserver {
                             horizontal: 28, vertical: 18),
                         minimumSize: const Size.fromHeight(62),
                         textStyle: const TextStyle(
-                            fontSize: 18, fontWeight: FontWeight.w700),
+                          fontSize: 18,
+                          fontWeight: FontWeight.w700,
+                          fontFamily: 'Tajawal',
+                        ),
                       ),
                       label: Text(_resultStatus == 'pending'
                           ? 'النتيجة قيد الموافقة'
