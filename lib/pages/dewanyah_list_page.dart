@@ -6,6 +6,7 @@ import 'package:geolocator/geolocator.dart';
 import '../api_dewanyah.dart';
 import '../api_room.dart';
 import '../api_user.dart';
+import '../local_game_notifications.dart';
 import '../sfx.dart';
 import '../state.dart';
 import '../widgets/primary_pill_button.dart';
@@ -50,6 +51,7 @@ class _DewanyahListPageState extends State<DewanyahListPage> {
   void initState() {
     super.initState();
     _future = _loadDewanyahs();
+    unawaited(LocalGameNotifications.requestPermission());
     final games = _gameOptions();
     _filterGameId = games.contains(widget.initialGameId)
         ? widget.initialGameId
@@ -120,6 +122,15 @@ class _DewanyahListPageState extends State<DewanyahListPage> {
       }
       if (!mounted) return;
       final diff = total - previousTotal;
+      unawaited(
+        LocalGameNotifications.show(
+          id: LocalGameNotifications.idFor('dewanyah-owner-pending'),
+          title: 'طلبات انضمام جديدة',
+          body: diff == 1
+              ? 'وصل طلب انضمام جديد إلى إحدى ديوانياتك'
+              : 'وصلت $diff طلبات انضمام جديدة إلى ديوانياتك',
+        ),
+      );
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('وصل $diff طلب جديد للديوانية')),
       );
@@ -702,80 +713,136 @@ class _DewanyahListPageState extends State<DewanyahListPage> {
                       final mid = (m['userId'] ?? '').toString();
                       final canRemove =
                           mid.isNotEmpty && mid != widget.app.userId;
-                      return ListTile(
-                        leading: CircleAvatar(child: Text('${i + 1}')),
-                        title: Text(
-                          m['user']?['displayName']?.toString() ?? 'لاعب',
-                        ),
-                        subtitle: Text('حالة: $status'),
-                        trailing: status == 'pending' || canRemove
-                            ? Wrap(
-                                spacing: 6,
+                      final user = (m['user'] as Map?)?.cast<String, dynamic>();
+                      final displayName =
+                          (user?['displayName'] ??
+                                  user?['name'] ??
+                                  user?['email'] ??
+                                  m['displayName'] ??
+                                  m['name'] ??
+                                  m['email'])
+                              ?.toString()
+                              .trim();
+                      final statusLabel = switch (status) {
+                        'pending' => 'قيد المراجعة',
+                        'approved' => 'مقبول',
+                        'rejected' => 'مرفوض',
+                        _ => status.isEmpty ? 'غير معروف' : status,
+                      };
+                      return Directionality(
+                        textDirection: TextDirection.rtl,
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 4),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              Row(
+                                crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                  if (status == 'pending') ...[
-                                    TextButton(
-                                      onPressed: () async {
-                                        await ApiDewanyah.setMemberStatus(
-                                          dewanyahId: id,
-                                          memberUserId: mid,
-                                          status: 'approved',
-                                          token: widget.app.token,
-                                        );
-                                        if (!mounted ||
-                                            !dialogContext.mounted) {
-                                          return;
-                                        }
-                                        Navigator.pop(dialogContext);
-                                        await _refresh();
-                                        if (!mounted) return;
-                                        ScaffoldMessenger.of(context)
-                                            .showSnackBar(
-                                          const SnackBar(
-                                            content: Text('تمت الموافقة'),
+                                  CircleAvatar(child: Text('${i + 1}')),
+                                  const SizedBox(width: 12),
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        Text(
+                                          displayName?.isNotEmpty == true
+                                              ? displayName!
+                                              : 'لاعب',
+                                          maxLines: 2,
+                                          overflow: TextOverflow.ellipsis,
+                                          style: const TextStyle(
+                                            fontWeight: FontWeight.w700,
                                           ),
-                                        );
-                                      },
-                                      child: const Text('قبول'),
+                                        ),
+                                        const SizedBox(height: 4),
+                                        Text(
+                                          'الحالة: $statusLabel',
+                                          style: TextStyle(
+                                            color: Colors.white
+                                                .withValues(alpha: 0.72),
+                                            fontSize: 13,
+                                          ),
+                                        ),
+                                      ],
                                     ),
-                                    TextButton(
-                                      onPressed: () async {
-                                        await ApiDewanyah.setMemberStatus(
-                                          dewanyahId: id,
-                                          memberUserId: mid,
-                                          status: 'rejected',
-                                          token: widget.app.token,
-                                        );
-                                        if (!mounted ||
-                                            !dialogContext.mounted) {
-                                          return;
-                                        }
-                                        Navigator.pop(dialogContext);
-                                        await _refresh();
-                                        if (!mounted) return;
-                                        ScaffoldMessenger.of(context)
-                                            .showSnackBar(
-                                          const SnackBar(
-                                              content: Text('تم الرفض')),
-                                        );
-                                      },
-                                      child: const Text('رفض'),
-                                    ),
-                                  ],
-                                  if (canRemove)
-                                    TextButton(
-                                      onPressed: () => _removeMember(
-                                        id,
-                                        mid,
-                                        dialogContext,
-                                      ),
-                                      style: TextButton.styleFrom(
-                                        foregroundColor: Colors.redAccent,
-                                      ),
-                                      child: const Text('حذف'),
-                                    ),
+                                  ),
                                 ],
-                              )
-                            : null,
+                              ),
+                              if (status == 'pending' || canRemove) ...[
+                                const SizedBox(height: 10),
+                                Wrap(
+                                  spacing: 8,
+                                  runSpacing: 8,
+                                  children: [
+                                    if (status == 'pending') ...[
+                                      TextButton(
+                                        onPressed: () async {
+                                          await ApiDewanyah.setMemberStatus(
+                                            dewanyahId: id,
+                                            memberUserId: mid,
+                                            status: 'approved',
+                                            token: widget.app.token,
+                                          );
+                                          if (!mounted ||
+                                              !dialogContext.mounted) {
+                                            return;
+                                          }
+                                          Navigator.pop(dialogContext);
+                                          await _refresh();
+                                          if (!mounted) return;
+                                          ScaffoldMessenger.of(context)
+                                              .showSnackBar(
+                                            const SnackBar(
+                                              content: Text('تمت الموافقة'),
+                                            ),
+                                          );
+                                        },
+                                        child: const Text('قبول'),
+                                      ),
+                                      TextButton(
+                                        onPressed: () async {
+                                          await ApiDewanyah.setMemberStatus(
+                                            dewanyahId: id,
+                                            memberUserId: mid,
+                                            status: 'rejected',
+                                            token: widget.app.token,
+                                          );
+                                          if (!mounted ||
+                                              !dialogContext.mounted) {
+                                            return;
+                                          }
+                                          Navigator.pop(dialogContext);
+                                          await _refresh();
+                                          if (!mounted) return;
+                                          ScaffoldMessenger.of(context)
+                                              .showSnackBar(
+                                            const SnackBar(
+                                                content: Text('تم الرفض')),
+                                          );
+                                        },
+                                        child: const Text('رفض'),
+                                      ),
+                                    ],
+                                    if (canRemove)
+                                      TextButton(
+                                        onPressed: () => _removeMember(
+                                          id,
+                                          mid,
+                                          dialogContext,
+                                        ),
+                                        style: TextButton.styleFrom(
+                                          foregroundColor: Colors.redAccent,
+                                        ),
+                                        child: const Text('حذف'),
+                                      ),
+                                  ],
+                                ),
+                              ],
+                            ],
+                          ),
+                        ),
                       );
                     },
                   ),
