@@ -1,5 +1,6 @@
 // lib/main.dart
 import 'dart:async';
+import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'dart:convert';
 import 'package:flutter_localizations/flutter_localizations.dart';
@@ -201,9 +202,7 @@ class _AuthGateState extends State<AuthGate> with WidgetsBindingObserver {
   @override
   Widget build(BuildContext context) {
     if (_loading) {
-      return const Scaffold(
-        body: Center(child: CircularProgressIndicator()),
-      );
+      return const _LaunchSplashScreen();
     }
 
     if (app.isSignedIn && app.biometricEnabled && !_biometricUnlocked) {
@@ -215,6 +214,116 @@ class _AuthGateState extends State<AuthGate> with WidgetsBindingObserver {
     }
 
     return app.isSignedIn ? HomePage(app: app) : SignInPage(app: app);
+  }
+}
+
+class _LaunchSplashScreen extends StatefulWidget {
+  const _LaunchSplashScreen();
+
+  @override
+  State<_LaunchSplashScreen> createState() => _LaunchSplashScreenState();
+}
+
+class _LaunchSplashScreenState extends State<_LaunchSplashScreen>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 2200),
+    )..repeat(reverse: true);
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final curved = CurvedAnimation(
+      parent: _controller,
+      curve: Curves.easeInOut,
+    );
+    return Scaffold(
+      body: Container(
+        width: double.infinity,
+        decoration: const BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [
+              Color(0xFF609EB3),
+              Color(0xFF5792A6),
+            ],
+          ),
+        ),
+        child: SafeArea(
+          child: Center(
+            child: FadeTransition(
+              opacity: Tween<double>(begin: 0.82, end: 1).animate(curved),
+              child: AnimatedBuilder(
+                animation: curved,
+                builder: (context, child) {
+                  final pulse = 1 + math.sin(curved.value * math.pi) * 0.035;
+                  return Transform.scale(scale: pulse, child: child);
+                },
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Container(
+                      width: 148,
+                      height: 148,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        boxShadow: [
+                          BoxShadow(
+                            color: const Color(0xFFB8DFFF).withValues(
+                              alpha: 0.22,
+                            ),
+                            blurRadius: 34,
+                            spreadRadius: 4,
+                          ),
+                        ],
+                      ),
+                      child: ClipOval(
+                        child: Image.asset(
+                          'lib/assets/enzeli_logo.png',
+                          fit: BoxFit.cover,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 22),
+                    const Text(
+                      'إنزلي',
+                      style: TextStyle(
+                        fontFamily: 'Tajawal',
+                        fontSize: 32,
+                        fontWeight: FontWeight.w800,
+                        color: Colors.white,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      'نجتمع، نلعب، ونحسبها صح',
+                      style: TextStyle(
+                        fontFamily: 'Tajawal',
+                        fontSize: 14,
+                        color: Colors.white.withValues(alpha: 0.82),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
   }
 }
 

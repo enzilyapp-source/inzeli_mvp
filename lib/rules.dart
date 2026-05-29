@@ -47,7 +47,7 @@ const Map<String, GameRule> kGameRules = {
   ),
   'بلوت': GameRule(
     name: 'بلوت',
-    timerMinutes: 30,
+    timerMinutes: 10,
     minPlayers: 4,
     maxPlayers: 4,
     modes: [PlayMode.team2v2],
@@ -133,7 +133,7 @@ const Map<String, GameRule> kGameRules = {
   ),
   'جاكارو': GameRule(
     name: 'جاكارو',
-    timerMinutes: 40,
+    timerMinutes: 30,
     minPlayers: 4,
     maxPlayers: 4,
     modes: [PlayMode.team2v2],
