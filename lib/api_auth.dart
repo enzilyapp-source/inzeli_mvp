@@ -54,6 +54,10 @@ String _friendlyAuthMessage(String message, String? code) {
       return 'خدمة التحقق بالمكالمة أو الرسالة غير مفعلة على الخادم';
     case 'OTP_EMAIL_NOT_CONFIGURED':
       return 'خدمة إرسال رمز التحقق بالإيميل غير مفعلة على الخادم';
+    case 'OTP_EMAIL_SEND_FAILED':
+      return 'تعذر إرسال رمز التحقق بالإيميل، جرّب الرسالة النصية';
+    case 'OTP_CALL_SEND_FAILED':
+      return 'تعذر إرسال رمز التحقق بالمكالمة، جرّب الرسالة النصية';
     case 'OTP_SEND_FAILED':
       return 'تعذّر إرسال رمز التحقق، حاول مرة أخرى';
     case 'PASSWORD_RESET_NOT_FOUND':
