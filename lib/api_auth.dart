@@ -50,6 +50,10 @@ String _friendlyAuthMessage(String message, String? code) {
       return 'تم إرسال رمز قبل لحظات، حاول بعد قليل';
     case 'OTP_PROVIDER_NOT_CONFIGURED':
       return 'خدمة رسائل OTP غير مفعلة على الخادم';
+    case 'OTP_VERIFY_NOT_CONFIGURED':
+      return 'خدمة التحقق بالمكالمة أو الرسالة غير مفعلة على الخادم';
+    case 'OTP_EMAIL_NOT_CONFIGURED':
+      return 'خدمة إرسال رمز التحقق بالإيميل غير مفعلة على الخادم';
     case 'OTP_SEND_FAILED':
       return 'تعذّر إرسال رمز التحقق، حاول مرة أخرى';
     case 'PASSWORD_RESET_NOT_FOUND':
@@ -114,6 +118,7 @@ Future<ApiResponse<Map<String, dynamic>>> requestRegisterOtp({
   required String displayName,
   required String phone,
   String? birthDate,
+  String? channel,
 }) =>
     _post('/auth/register/request-otp', {
       'email': email,
@@ -121,13 +126,16 @@ Future<ApiResponse<Map<String, dynamic>>> requestRegisterOtp({
       'displayName': displayName,
       'phone': phone,
       if (birthDate != null) 'birthDate': birthDate,
+      if (channel != null) 'channel': channel,
     });
 
 Future<ApiResponse<Map<String, dynamic>>> requestPasswordResetOtp({
   required String email,
+  String? channel,
 }) =>
     _post('/auth/password/request-otp', {
       'email': email,
+      if (channel != null) 'channel': channel,
     });
 
 Future<ApiResponse<Map<String, dynamic>>> resetPasswordWithOtp({

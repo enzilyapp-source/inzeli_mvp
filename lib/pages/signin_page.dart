@@ -39,6 +39,7 @@ class _SignInPageState extends State<SignInPage> {
 
   bool _awaitingOtp = false;
   String? _otpRequestId;
+  String _otpChannel = 'sms';
 
   @override
   void dispose() {
@@ -118,6 +119,7 @@ class _SignInPageState extends State<SignInPage> {
         displayName: _name.text.trim(),
         phone: _phoneForApi(),
         birthDate: _birthDate!.toIso8601String(),
+        channel: _otpChannel,
       );
 
       if (!r.ok) {
@@ -138,15 +140,17 @@ class _SignInPageState extends State<SignInPage> {
           requestId != null &&
           requestId.isNotEmpty) {
         final channel = data['deliveryChannel']?.toString().toLowerCase();
-        final channelLabel = channel == 'whatsapp' ? 'واتساب' : 'رسالة نصية';
+        final channelLabel = _otpChannelLabel(channel);
         setState(() {
           _awaitingOtp = true;
           _otpRequestId = requestId;
+          if (channel == 'sms' || channel == 'call' || channel == 'email') {
+            _otpChannel = channel!;
+          }
         });
 
         if (resend) {
-          _msg('تم إعادة إرسال رمز التحقق عبر $channelLabel',
-              success: true);
+          _msg('تم إعادة إرسال رمز التحقق عبر $channelLabel', success: true);
         } else {
           _msg('تم إرسال رمز التحقق عبر $channelLabel', success: true);
         }
@@ -403,10 +407,16 @@ class _SignInPageState extends State<SignInPage> {
                               enabled: !lockIdentityFields,
                               onChanged: (d) => setState(() => _birthDate = d),
                             ),
+                            const SizedBox(height: 10),
+                            _OtpChannelSelector(
+                              value: _otpChannel,
+                              enabled: !lockIdentityFields && !_busy,
+                              onChanged: (v) => setState(() => _otpChannel = v),
+                            ),
                             if (_awaitingOtp) ...[
                               const SizedBox(height: 14),
                               Text(
-                                'تم إرسال رمز التحقق إلى ${_phoneForApi()}',
+                                'تم إرسال رمز التحقق عبر ${_otpChannelLabel(_otpChannel)} إلى ${_otpChannel == 'email' ? _email.text.trim() : _phoneForApi()}',
                                 style: const TextStyle(color: Colors.white70),
                               ),
                               const SizedBox(height: 10),
@@ -489,6 +499,82 @@ class _SignInPageState extends State<SignInPage> {
   }
 }
 
+String _otpChannelLabel(String? channel) {
+  switch (channel) {
+    case 'call':
+      return 'مكالمة';
+    case 'email':
+      return 'الإيميل';
+    case 'whatsapp':
+      return 'واتساب';
+    case 'sms':
+    default:
+      return 'رسالة نصية';
+  }
+}
+
+IconData _otpChannelIcon(String channel) {
+  switch (channel) {
+    case 'call':
+      return Icons.call_outlined;
+    case 'email':
+      return Icons.email_outlined;
+    case 'sms':
+    default:
+      return Icons.sms_outlined;
+  }
+}
+
+class _OtpChannelSelector extends StatelessWidget {
+  final String value;
+  final bool enabled;
+  final ValueChanged<String> onChanged;
+
+  const _OtpChannelSelector({
+    required this.value,
+    required this.enabled,
+    required this.onChanged,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    const options = <String, String>{
+      'sms': 'رسالة',
+      'call': 'مكالمة',
+      'email': 'إيميل',
+    };
+
+    return Wrap(
+      alignment: WrapAlignment.center,
+      spacing: 8,
+      runSpacing: 8,
+      children: options.entries.map((entry) {
+        final selected = value == entry.key;
+        return ChoiceChip(
+          selected: selected,
+          onSelected: enabled ? (_) => onChanged(entry.key) : null,
+          avatar: Icon(
+            _otpChannelIcon(entry.key),
+            size: 18,
+            color: selected ? const Color(0xFF12243C) : Colors.white70,
+          ),
+          label: Text(entry.value),
+          labelStyle: TextStyle(
+            color: selected ? const Color(0xFF12243C) : Colors.white,
+            fontWeight: FontWeight.w800,
+          ),
+          selectedColor: const Color(0xFFE7A73B),
+          backgroundColor: const Color(0x334B6388),
+          disabledColor: const Color(0x224B6388),
+          side: BorderSide(
+            color: selected ? const Color(0xFFE7A73B) : Colors.white24,
+          ),
+        );
+      }).toList(),
+    );
+  }
+}
+
 class _ForgotPasswordSheet extends StatefulWidget {
   final String initialEmail;
   final Future<void> Function(Map<String, dynamic> data) onCompleted;
@@ -511,6 +597,8 @@ class _ForgotPasswordSheetState extends State<_ForgotPasswordSheet> {
   bool _busy = false;
   String? _requestId;
   String? _phoneHint;
+  String? _emailHint;
+  String _otpChannel = 'sms';
 
   bool get _awaitingOtp => _requestId != null && _requestId!.isNotEmpty;
 
@@ -538,7 +626,10 @@ class _ForgotPasswordSheetState extends State<_ForgotPasswordSheet> {
     if (!_formKey.currentState!.validate()) return;
     setState(() => _busy = true);
     try {
-      final r = await requestPasswordResetOtp(email: _email.text.trim());
+      final r = await requestPasswordResetOtp(
+        email: _email.text.trim(),
+        channel: _otpChannel,
+      );
       if (!r.ok) {
         _msg(r.message, error: true);
         return;
@@ -554,11 +645,19 @@ class _ForgotPasswordSheetState extends State<_ForgotPasswordSheet> {
       setState(() {
         _requestId = requestId;
         _phoneHint = data['phoneHint']?.toString();
+        _emailHint = data['emailHint']?.toString();
+        final channel = data['deliveryChannel']?.toString().toLowerCase();
+        if (channel == 'sms' || channel == 'call' || channel == 'email') {
+          _otpChannel = channel!;
+        }
       });
-      final target = (_phoneHint == null || _phoneHint!.isEmpty)
-          ? 'رقم جوالك'
-          : 'رقمك $_phoneHint';
-      _msg('أرسلنا رمز التحقق إلى $target', success: true);
+      final target = _otpChannel == 'email'
+          ? (_emailHint?.isNotEmpty == true ? _emailHint! : _email.text.trim())
+          : (_phoneHint == null || _phoneHint!.isEmpty)
+              ? 'رقم جوالك'
+              : 'رقمك $_phoneHint';
+      _msg('أرسلنا رمز التحقق عبر ${_otpChannelLabel(_otpChannel)} إلى $target',
+          success: true);
     } catch (e) {
       _msg(e.toString(), error: true);
     } finally {
@@ -632,6 +731,12 @@ class _ForgotPasswordSheetState extends State<_ForgotPasswordSheet> {
                     return null;
                   },
                 ),
+                const SizedBox(height: 10),
+                _OtpChannelSelector(
+                  value: _otpChannel,
+                  enabled: !_awaitingOtp && !_busy,
+                  onChanged: (v) => setState(() => _otpChannel = v),
+                ),
                 if (_awaitingOtp) ...[
                   const SizedBox(height: 10),
                   TextFormField(
@@ -673,6 +778,7 @@ class _ForgotPasswordSheetState extends State<_ForgotPasswordSheet> {
                               setState(() {
                                 _requestId = null;
                                 _phoneHint = null;
+                                _emailHint = null;
                                 _otp.clear();
                                 _password.clear();
                                 _confirm.clear();
