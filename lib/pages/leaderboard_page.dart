@@ -220,11 +220,6 @@ class _PlayerPearlRow extends StatelessWidget {
                     row.name,
                     style: const TextStyle(fontWeight: FontWeight.w900),
                   ),
-                  const SizedBox(height: 2),
-                  Text(
-                    'لآلئ: ${row.pts}',
-                    style: TextStyle(color: Colors.white.withValues(alpha: 0.7), fontSize: 12),
-                  ),
                 ],
               ),
             ),

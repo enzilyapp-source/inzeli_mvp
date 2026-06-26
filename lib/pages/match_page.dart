@@ -98,8 +98,9 @@ class _MatchPageState extends State<MatchPage> with WidgetsBindingObserver {
   static const Set<int> _hindSoloSizes = {
     2,
     3,
-    4
-  }; // هند فردي = 2 أو 3 أو 4 لاعبين
+    4,
+    5
+  }; // هند فردي = 2 أو 3 أو 4 أو 5 لاعبين
   static const int _spitaSoloSize = 5; // سبيتة فردي = 5 لاعبين
   static const bool _scoreEntryEnabled = false;
   bool get _iAmInRoom {
@@ -677,7 +678,7 @@ class _MatchPageState extends State<MatchPage> with WidgetsBindingObserver {
         return false;
       }
       if (game == 'هند' && !_hindSoloSizes.contains(count)) {
-        _msg('هند فردي يسمح بـ 2 أو 3 أو 4 لاعبين',
+        _msg('هند فردي يسمح بـ 2 أو 3 أو 4 أو 5 لاعبين',
             icon: Icons.error, color: Colors.orange);
         return false;
       }

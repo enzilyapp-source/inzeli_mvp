@@ -17,14 +17,14 @@ const Map<String, String> _quickGamePngAssetById = <String, String>{
   'قدم': 'lib/assets/games_png/games-01.png',
   'طائره': 'lib/assets/games_png/games-02.png',
   'سله': 'lib/assets/games_png/games-03.png',
-  'دفان': 'lib/assets/games_png/games-10.png',
+  'دفان': 'lib/assets/games_png/games-26.png',
   'تنس ارضي': 'lib/assets/games_png/games-05.png',
   'بيبيفوت': 'lib/assets/games_png/games-06.png',
   'بادل': 'lib/assets/games_png/games-07.png',
-  'بلوت': 'lib/assets/games_png/games-10.png',
+  'بلوت': 'lib/assets/games_png/games-24.png',
   'هند': 'lib/assets/games_png/games-09.png',
   'كوت': 'lib/assets/games_png/games-08.png',
-  'سبيتة': 'lib/assets/games_png/games-12.png',
+  'سبيتة': 'lib/assets/games_png/games-25.png',
   'بولنج': 'lib/assets/games_png/games-16.png',
   'بلياردو': 'lib/assets/games_png/games-15.png',
   'تنس طاولة': 'lib/assets/games_png/games-17.png',
@@ -42,14 +42,14 @@ const Map<String, String> _quickGameSvgAssetById = <String, String>{
   'قدم': 'lib/assets/games_svg/games-01.svg',
   'طائره': 'lib/assets/games_svg/games-02.svg',
   'سله': 'lib/assets/games_svg/games-03.svg',
-  'دفان': 'lib/assets/games_svg/games-10.svg',
+  'دفان': 'lib/assets/games_svg/games-26.svg',
   'تنس ارضي': 'lib/assets/games_svg/games-05.svg',
   'بيبيفوت': 'lib/assets/games_svg/games-06.svg',
   'بادل': 'lib/assets/games_svg/games-07.svg',
-  'بلوت': 'lib/assets/games_svg/games-10.svg',
+  'بلوت': 'lib/assets/games_svg/games-24.svg',
   'هند': 'lib/assets/games_svg/games-09.svg',
   'كوت': 'lib/assets/games_svg/games-08.svg',
-  'سبيتة': 'lib/assets/games_svg/games-12.svg',
+  'سبيتة': 'lib/assets/games_svg/games-25.svg',
   'بولنج': 'lib/assets/games_svg/games-16.svg',
   'بلياردو': 'lib/assets/games_svg/games-15.svg',
   'تنس طاولة': 'lib/assets/games_svg/games-17.svg',
@@ -164,7 +164,8 @@ class _LeaderboardHubPageState extends State<LeaderboardHubPage> {
         ),
       );
     } catch (e) {
-      if (e.toString().contains('ROOM_NOT_FOUND') || e.toString().contains('HTTP 404')) {
+      if (e.toString().contains('ROOM_NOT_FOUND') ||
+          e.toString().contains('HTTP 404')) {
         widget.app.setRoomCode(null);
       }
       if (!mounted) return;
@@ -185,7 +186,8 @@ class _LeaderboardHubPageState extends State<LeaderboardHubPage> {
 
   List<String> _dewGameIds(Map<String, dynamic> dew) {
     final games = ((dew['games'] as List?) ?? const [])
-        .map((g) => g is Map ? (g['gameId'] ?? g['id']).toString() : g.toString())
+        .map((g) =>
+            g is Map ? (g['gameId'] ?? g['id']).toString() : g.toString())
         .where((g) => g.isNotEmpty)
         .toList();
     final fallback = (dew['gameId'] ?? '').toString();
@@ -376,11 +378,38 @@ class _LeaderboardHubPageState extends State<LeaderboardHubPage> {
         {"displayName": "Futun", "pearls": basePearls - 3, "streak": 0},
       ];
 
+  int _rowInt(Map<String, dynamic> row, String key) {
+    final value = row[key];
+    if (value is num) return value.toInt();
+    return int.tryParse(value?.toString() ?? '') ?? 0;
+  }
+
+  bool _rowBool(Map<String, dynamic> row, String key) {
+    final value = row[key];
+    if (value is bool) return value;
+    final text = value?.toString().trim().toLowerCase();
+    return text == 'true' || text == '1' || text == 'yes';
+  }
+
+  bool _rowPlayedForSort(Map<String, dynamic> row) {
+    final participation = _rowInt(row, 'playedCount') +
+        _rowInt(row, 'matches') +
+        _rowInt(row, 'matchCount');
+    if (participation > 0) return true;
+    if (_rowInt(row, 'wins') + _rowInt(row, 'losses') > 0) return true;
+    final pearls = _rowInt(row, 'pearls');
+    if (pearls != 0 && pearls != 5) return true;
+    if (row.containsKey('played') && _rowBool(row, 'played')) return true;
+    final rankLabel = (row['rankLabel'] ?? '').toString().trim();
+    if (rankLabel == '--') return false;
+    return false;
+  }
+
   List<Map<String, dynamic>> _normalizeBoardRows(
       List<Map<String, dynamic>> rows) {
     final myId = widget.app.userId;
     final myName = (widget.app.displayName ?? '').trim();
-    return rows.map((r) {
+    final normalized = rows.map((r) {
       final row = Map<String, dynamic>.from(r);
       final uid = (row['userId'] ?? row['id'] ?? '').toString();
       if (myId != null && myId.isNotEmpty && uid == myId && myName.isNotEmpty) {
@@ -389,6 +418,28 @@ class _LeaderboardHubPageState extends State<LeaderboardHubPage> {
       }
       return row;
     }).toList();
+    normalized.sort((a, b) {
+      final aPlayed = _rowPlayedForSort(a);
+      final bPlayed = _rowPlayedForSort(b);
+      if (aPlayed != bPlayed) return aPlayed ? -1 : 1;
+      if (aPlayed && bPlayed) {
+        final pearls = _rowInt(b, 'pearls') - _rowInt(a, 'pearls');
+        if (pearls != 0) return pearls;
+        final last = (DateTime.tryParse(
+                  (b['lastPlayedAt'] ?? b['updatedAt'] ?? '').toString(),
+                )?.millisecondsSinceEpoch ??
+                0) -
+            (DateTime.tryParse(
+                  (a['lastPlayedAt'] ?? a['updatedAt'] ?? '').toString(),
+                )?.millisecondsSinceEpoch ??
+                0);
+        if (last != 0) return last;
+      }
+      final aName = (a['displayName'] ?? a['name'] ?? '').toString();
+      final bName = (b['displayName'] ?? b['name'] ?? '').toString();
+      return aName.compareTo(bName);
+    });
+    return normalized;
   }
 
   void _msg(String text, {bool error = false, bool success = false}) {
@@ -663,7 +714,8 @@ class _LeaderboardHubPageState extends State<LeaderboardHubPage> {
         final room = await ApiRoom.getRoomByCode(code, token: widget.app.token);
         final roomGame = (room['gameId'] ?? '').toString();
         if (roomGame.isNotEmpty && roomGame != gameId) {
-          _msg('هذا القيم للعبة ${widget.app.gameLabel(roomGame)} مو ${widget.app.gameLabel(gameId)}',
+          _msg(
+              'هذا القيم للعبة ${widget.app.gameLabel(roomGame)} مو ${widget.app.gameLabel(gameId)}',
               error: true);
           return;
         }
@@ -954,15 +1006,15 @@ class _LeaderboardHubPageState extends State<LeaderboardHubPage> {
             limit: limit,
           );
           if (rows.isEmpty) return const <Map<String, dynamic>>[];
-          return _normalizeBoardRows(rows
-              .map((r) => {
-                    'displayName':
-                        (r['displayName'] ?? r['name'] ?? '').toString(),
-                    'pearls': (r['pearls'] ?? r['permanentScore'] ?? 0),
-                    'userId': (r['userId'] ?? '').toString(),
-                    'streak': 0,
-                  })
-              .toList());
+          return _normalizeBoardRows(rows.map((r) {
+            final row = Map<String, dynamic>.from(r);
+            row['displayName'] =
+                (row['displayName'] ?? row['name'] ?? '').toString();
+            row['pearls'] = row['pearls'] ?? row['permanentScore'] ?? 0;
+            row['userId'] = (row['userId'] ?? row['id'] ?? '').toString();
+            row['streak'] = row['streak'] ?? 0;
+            return row;
+          }).toList());
         },
         fallback: const <Map<String, dynamic>>[],
       );
@@ -985,8 +1037,7 @@ class _LeaderboardHubPageState extends State<LeaderboardHubPage> {
           _BoardSpec(
             title: '${d['name']?.toString() ?? 'ديوانية'} • $gid',
             gameId: gid.isNotEmpty ? gid : '—',
-            displayGameLabel:
-                gid.isEmpty ? '—' : widget.app.gameLabel(gid),
+            displayGameLabel: gid.isEmpty ? '—' : widget.app.gameLabel(gid),
             prize: d['prizeAmount'] is int ? d['prizeAmount'] as int : null,
             showSponsorPearls: false,
             fallback: (d['players'] as List?)?.cast<Map<String, dynamic>>() ??
@@ -1020,6 +1071,8 @@ class _LeaderboardHubPageState extends State<LeaderboardHubPage> {
           specs: specs,
           initialIndex: index.clamp(0, specs.length - 1),
           onOpenPlayer: _openBoardPlayerProfile,
+          currentUserId: widget.app.userId,
+          currentPlayerName: widget.app.displayName ?? widget.app.name,
         ),
       ),
     );
@@ -1188,6 +1241,8 @@ class _LeaderboardHubPageState extends State<LeaderboardHubPage> {
             onPageChanged: (i) => setState(() => _regularPage = i),
             onOpen: (i) => _openBoardDetail(regularSpecs, i),
             onOpenPlayer: _openBoardPlayerProfile,
+            currentUserId: app.userId,
+            currentPlayerName: app.displayName ?? app.name,
           ),
         ] else if (tab == 1) ...[
           _buildSponsorComingSoon(),
@@ -1268,94 +1323,100 @@ class _LeaderboardHubPageState extends State<LeaderboardHubPage> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-        if (_loadingDew)
-          const Card(
-            child: Padding(
-              padding: EdgeInsets.all(12),
-              child: Center(child: CircularProgressIndicator()),
-            ),
-          )
-        else if (_dewError != null)
-          Card(
-            child: Padding(
-              padding: const EdgeInsets.all(12),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  Text(
-                    'تعذّر تحميل الدواوين',
-                    style: TextStyle(
-                      fontWeight: FontWeight.w900,
-                      color: onSurface,
-                    ),
-                  ),
-                  const SizedBox(height: 6),
-                  Text(
-                    _dewError!,
-                    style: TextStyle(color: onSurface.withValues(alpha: 0.7)),
-                  ),
-                  const SizedBox(height: 8),
-                  FilledButton.icon(
-                    onPressed: _loadDewanyahs,
-                    icon: const Icon(Icons.refresh),
-                    label: const Text('إعادة المحاولة'),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        const SizedBox(height: 10),
-        _SectionTitle('دواويني', icon: Icons.home_work_outlined),
-        const SizedBox(height: 10),
-        if (mine.isEmpty)
-          const _HubPanelMessage(
-            icon: Icons.groups_2_outlined,
-            title: 'ما عندك ديوانية مفعلة',
-            text: 'انضم لديوانية أو ارسل طلب ديوانية من الزر تحت.',
-          )
-        else
-          _buildHubDewanyahGrid(mine),
-        if (discover.isNotEmpty) ...[
-          const SizedBox(height: 14),
-          OutlinedButton.icon(
-            onPressed: () => setState(
-              () => _showMoreDewanyahs = !_showMoreDewanyahs,
-            ),
-            icon: Icon(
-              _showMoreDewanyahs
-                  ? Icons.keyboard_arrow_up
-                  : Icons.keyboard_arrow_down,
-            ),
-            label: Text(
-              _showMoreDewanyahs ? 'إخفاء الدواوين' : 'اكتشف دواوين أكثر',
-            ),
-          ),
-          if (_showMoreDewanyahs) ...[
-            const SizedBox(height: 10),
-            _buildHubDewanyahGrid(discover),
-          ],
-        ],
-        const SizedBox(height: 16),
-        _SectionTitle('لوحة الديوانيات', icon: Icons.groups_3),
-        const SizedBox(height: 8),
-        if (filteredSpecs.isEmpty)
-          const _HubPanelMessage(
-            icon: Icons.home_work_outlined,
-            title: 'ما عندك لوحات لهاللعبة',
-            text: 'اختار لعبة ثانية أو ارجع للمراتب العامة.',
-          )
-        else
-          _LeaderboardPager(
-            controller: _dewPager,
-            current: _dewPage,
-            specs: filteredSpecs,
-            onPageChanged: (i) => setState(() => _dewPage = i),
-            onOpen: (i) => _openBoardDetail(filteredSpecs, i),
-            onOpenPlayer: _openBoardPlayerProfile,
-            showDots: false,
-          ),
-        const SizedBox(height: 14),
-        _buildApplyCard(),
+                    if (_loadingDew)
+                      const Card(
+                        child: Padding(
+                          padding: EdgeInsets.all(12),
+                          child: Center(child: CircularProgressIndicator()),
+                        ),
+                      )
+                    else if (_dewError != null)
+                      Card(
+                        child: Padding(
+                          padding: const EdgeInsets.all(12),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              Text(
+                                'تعذّر تحميل الدواوين',
+                                style: TextStyle(
+                                  fontWeight: FontWeight.w900,
+                                  color: onSurface,
+                                ),
+                              ),
+                              const SizedBox(height: 6),
+                              Text(
+                                _dewError!,
+                                style: TextStyle(
+                                    color: onSurface.withValues(alpha: 0.7)),
+                              ),
+                              const SizedBox(height: 8),
+                              FilledButton.icon(
+                                onPressed: _loadDewanyahs,
+                                icon: const Icon(Icons.refresh),
+                                label: const Text('إعادة المحاولة'),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    const SizedBox(height: 10),
+                    _SectionTitle('دواويني', icon: Icons.home_work_outlined),
+                    const SizedBox(height: 10),
+                    if (mine.isEmpty)
+                      const _HubPanelMessage(
+                        icon: Icons.groups_2_outlined,
+                        title: 'ما عندك ديوانية مفعلة',
+                        text: 'انضم لديوانية أو ارسل طلب ديوانية من الزر تحت.',
+                      )
+                    else
+                      _buildHubDewanyahGrid(mine),
+                    if (discover.isNotEmpty) ...[
+                      const SizedBox(height: 14),
+                      OutlinedButton.icon(
+                        onPressed: () => setState(
+                          () => _showMoreDewanyahs = !_showMoreDewanyahs,
+                        ),
+                        icon: Icon(
+                          _showMoreDewanyahs
+                              ? Icons.keyboard_arrow_up
+                              : Icons.keyboard_arrow_down,
+                        ),
+                        label: Text(
+                          _showMoreDewanyahs
+                              ? 'إخفاء الدواوين'
+                              : 'اكتشف دواوين أكثر',
+                        ),
+                      ),
+                      if (_showMoreDewanyahs) ...[
+                        const SizedBox(height: 10),
+                        _buildHubDewanyahGrid(discover),
+                      ],
+                    ],
+                    const SizedBox(height: 16),
+                    _SectionTitle('لوحة الديوانيات', icon: Icons.groups_3),
+                    const SizedBox(height: 8),
+                    if (filteredSpecs.isEmpty)
+                      const _HubPanelMessage(
+                        icon: Icons.home_work_outlined,
+                        title: 'ما عندك لوحات لهاللعبة',
+                        text: 'اختار لعبة ثانية أو ارجع للمراتب العامة.',
+                      )
+                    else
+                      _LeaderboardPager(
+                        controller: _dewPager,
+                        current: _dewPage,
+                        specs: filteredSpecs,
+                        onPageChanged: (i) => setState(() => _dewPage = i),
+                        onOpen: (i) => _openBoardDetail(filteredSpecs, i),
+                        onOpenPlayer: _openBoardPlayerProfile,
+                        currentUserId: widget.app.userId,
+                        currentPlayerName:
+                            widget.app.displayName ?? widget.app.name,
+                        showDots: false,
+                      ),
+                    const SizedBox(height: 14),
+                    _buildApplyCard(),
                   ],
                 ),
               ),
@@ -1523,6 +1584,8 @@ class _LeaderboardPager extends StatelessWidget {
   final ValueChanged<int> onPageChanged;
   final ValueChanged<int>? onOpen;
   final void Function(Map<String, dynamic> row, _BoardSpec spec)? onOpenPlayer;
+  final String? currentUserId;
+  final String? currentPlayerName;
   final bool showDots;
   const _LeaderboardPager({
     required this.controller,
@@ -1531,6 +1594,8 @@ class _LeaderboardPager extends StatelessWidget {
     required this.onPageChanged,
     this.onOpen,
     this.onOpenPlayer,
+    this.currentUserId,
+    this.currentPlayerName,
     this.showDots = true,
   });
 
@@ -1559,6 +1624,8 @@ class _LeaderboardPager extends StatelessWidget {
                 child: _LeaderboardPanel(
                   spec: specs[i],
                   onOpenPlayer: onOpenPlayer,
+                  currentUserId: currentUserId,
+                  currentPlayerName: currentPlayerName,
                 ),
               ),
             ),
@@ -1574,7 +1641,14 @@ class _LeaderboardPager extends StatelessWidget {
 class _LeaderboardPanel extends StatelessWidget {
   final _BoardSpec spec;
   final void Function(Map<String, dynamic> row, _BoardSpec spec)? onOpenPlayer;
-  const _LeaderboardPanel({required this.spec, this.onOpenPlayer});
+  final String? currentUserId;
+  final String? currentPlayerName;
+  const _LeaderboardPanel({
+    required this.spec,
+    this.onOpenPlayer,
+    this.currentUserId,
+    this.currentPlayerName,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -1582,6 +1656,8 @@ class _LeaderboardPanel extends StatelessWidget {
       return _BoardCard(
         items: list,
         showSponsorPearls: spec.showSponsorPearls,
+        currentUserId: currentUserId,
+        currentPlayerName: currentPlayerName,
         onOpenPlayer:
             onOpenPlayer == null ? null : (row) => onOpenPlayer!(row, spec),
       );
@@ -1867,78 +1943,197 @@ class _HubPanelMessage extends StatelessWidget {
 class _BoardCard extends StatelessWidget {
   final List<Map<String, dynamic>> items;
   final bool showSponsorPearls;
+  final String? currentUserId;
+  final String? currentPlayerName;
   final ValueChanged<Map<String, dynamic>>? onOpenPlayer;
   const _BoardCard({
     required this.items,
     required this.showSponsorPearls,
+    this.currentUserId,
+    this.currentPlayerName,
     this.onOpenPlayer,
   });
 
+  int _asInt(dynamic value) {
+    if (value is num) return value.toInt();
+    return int.tryParse(value?.toString() ?? '') ?? 0;
+  }
+
+  bool _asBool(dynamic value) {
+    if (value is bool) return value;
+    final text = value?.toString().trim().toLowerCase();
+    return text == 'true' || text == '1' || text == 'yes';
+  }
+
+  bool _played(Map<String, dynamic> row) {
+    final participation = _asInt(row['playedCount']) +
+        _asInt(row['matches']) +
+        _asInt(row['matchCount']);
+    if (participation > 0) return true;
+    if (_asInt(row['wins']) + _asInt(row['losses']) > 0) return true;
+    final pearls = _asInt(row['pearls']);
+    if (pearls != 0 && pearls != 5) return true;
+    if (row.containsKey('played') && _asBool(row['played'])) return true;
+    final rankLabel = (row['rankLabel'] ?? '').toString().trim();
+    if (rankLabel == '--') return false;
+    return false;
+  }
+
+  List<Map<String, dynamic>> _sortedItems() {
+    final sorted = List<Map<String, dynamic>>.from(items);
+    sorted.sort((a, b) {
+      final aPlayed = _played(a);
+      final bPlayed = _played(b);
+      if (aPlayed != bPlayed) return aPlayed ? -1 : 1;
+
+      if (aPlayed && bPlayed) {
+        final pearls = _asInt(b['pearls']) - _asInt(a['pearls']);
+        if (pearls != 0) return pearls;
+
+        final last = (DateTime.tryParse(
+                  (b['lastPlayedAt'] ?? b['updatedAt'] ?? '').toString(),
+                )?.millisecondsSinceEpoch ??
+                0) -
+            (DateTime.tryParse(
+                  (a['lastPlayedAt'] ?? a['updatedAt'] ?? '').toString(),
+                )?.millisecondsSinceEpoch ??
+                0);
+        if (last != 0) return last;
+      }
+
+      final aName = (a['displayName'] ?? a['name'] ?? '').toString();
+      final bName = (b['displayName'] ?? b['name'] ?? '').toString();
+      return aName.compareTo(bName);
+    });
+    return sorted;
+  }
+
+  String _rankLabel(Map<String, dynamic> row, int index) {
+    if (!_played(row)) return '--';
+    return '${index + 1}';
+  }
+
+  bool _isCurrentPlayer(Map<String, dynamic> row, String name) {
+    final uid = (row['userId'] ?? row['id'] ?? '').toString();
+    final currentUid = (currentUserId ?? '').trim();
+    if (currentUid.isNotEmpty && uid == currentUid) return true;
+
+    final currentName = (currentPlayerName ?? '').trim().toLowerCase();
+    if (currentName.isEmpty) return false;
+    return name.trim().toLowerCase() == currentName;
+  }
+
+  String? _recentOutcome(Map<String, dynamic> row) {
+    final rawOutcome = (row['lastOutcome'] ?? row['outcome'] ?? '')
+        .toString()
+        .trim()
+        .toUpperCase();
+    if (rawOutcome != 'WIN' && rawOutcome != 'LOSS') return null;
+    final rawDate = (row['lastPlayedAt'] ?? row['updatedAt'] ?? '').toString();
+    final date = DateTime.tryParse(rawDate);
+    if (date == null) return null;
+    if (DateTime.now().difference(date).inHours > 24) return null;
+    return rawOutcome;
+  }
+
   @override
   Widget build(BuildContext context) {
+    final sortedItems = _sortedItems();
     return Card(
       child: ListView.separated(
         padding: const EdgeInsets.symmetric(vertical: 4),
-        itemCount: items.length,
+        itemCount: sortedItems.length,
         separatorBuilder: (_, __) => const Divider(height: 0),
         physics: const BouncingScrollPhysics(),
         itemBuilder: (_, i) {
-          final it = items[i];
+          final it = sortedItems[i];
           final name = (it['displayName'] ?? it['name'] ?? '—').toString();
           final pearls = (it['pearls'] ?? 0);
-          final isTop = i == 0;
+          final played = _played(it);
+          final rankLabel = _rankLabel(it, i);
+          final isTop = played && rankLabel == '1';
+          final isMe = _isCurrentPlayer(it, name);
+          final outcome = _recentOutcome(it);
+          final bgColor = outcome == 'WIN'
+              ? Colors.greenAccent.withValues(alpha: 0.13)
+              : outcome == 'LOSS'
+                  ? Colors.redAccent.withValues(alpha: 0.12)
+                  : isMe
+                      ? const Color(0xFFFFA53A).withValues(alpha: 0.13)
+                      : Colors.transparent;
+          final borderColor = isMe
+              ? const Color(0xFFFFA53A)
+              : outcome == 'WIN'
+                  ? Colors.greenAccent.withValues(alpha: 0.55)
+                  : outcome == 'LOSS'
+                      ? Colors.redAccent.withValues(alpha: 0.5)
+                      : Colors.transparent;
 
-          return ListTile(
-            onTap: onOpenPlayer == null ? null : () => onOpenPlayer!(it),
-            leading: Stack(
-              clipBehavior: Clip.none,
-              children: [
-                CircleAvatar(
-                  backgroundColor:
-                      isTop ? const Color(0xFFFFC16B) : const Color(0xFF273347),
-                  child: Text(
-                    '${i + 1}',
-                    style: TextStyle(
-                      fontWeight: FontWeight.w900,
-                      color: isTop ? Colors.black : Colors.white,
+          return Container(
+            margin: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+            decoration: BoxDecoration(
+              color: bgColor,
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(
+                color: borderColor,
+                width: isMe ? 1.8 : 1,
+              ),
+            ),
+            child: ListTile(
+              onTap: onOpenPlayer == null ? null : () => onOpenPlayer!(it),
+              leading: Stack(
+                clipBehavior: Clip.none,
+                children: [
+                  CircleAvatar(
+                    backgroundColor: isTop
+                        ? const Color(0xFFFFC16B)
+                        : const Color(0xFF273347),
+                    child: Text(
+                      rankLabel,
+                      style: TextStyle(
+                        fontWeight: FontWeight.w900,
+                        color: isTop ? Colors.black : Colors.white,
+                      ),
                     ),
                   ),
-                ),
-                if (isTop)
-                  Positioned(
-                    top: -6,
-                    right: -10,
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 6, vertical: 2),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFFFFA53A),
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: const Text(
-                        'الأول',
-                        style: TextStyle(
-                          color: Colors.black,
-                          fontWeight: FontWeight.w800,
-                          fontSize: 10,
+                  if (isTop)
+                    Positioned(
+                      top: -6,
+                      right: -10,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 6, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFFFA53A),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: const Text(
+                          'الأول',
+                          style: TextStyle(
+                            color: Colors.black,
+                            fontWeight: FontWeight.w800,
+                            fontSize: 10,
+                          ),
                         ),
                       ),
                     ),
+                ],
+              ),
+              title: Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      name,
+                      style: TextStyle(
+                        fontWeight: FontWeight.w900,
+                        color: isMe ? const Color(0xFFFFC16B) : null,
+                      ),
+                    ),
                   ),
-              ],
+                ],
+              ),
+              trailing: _PearlPill(value: pearls),
             ),
-            title: Row(
-              children: [
-                Expanded(
-                  child: Text(name,
-                      style: const TextStyle(fontWeight: FontWeight.w900)),
-                ),
-              ],
-            ),
-            subtitle: showSponsorPearls
-                ? const Text('لآلئ السبونسر')
-                : const Text('اللآلئ العامة'),
-            trailing: _PearlPill(value: pearls),
           );
         },
       ),
@@ -2020,8 +2215,9 @@ class _QuickGamePickerPageState extends State<_QuickGamePickerPage> {
         ? widget.initialCategoryId
         : (widget.categories.isNotEmpty ? widget.categories.first : '');
     final initialGames = _gamesForCurrentCategory;
-    _selectedGameId =
-        initialGames.contains(widget.initialGameId) ? widget.initialGameId : null;
+    _selectedGameId = initialGames.contains(widget.initialGameId)
+        ? widget.initialGameId
+        : null;
     _selectedGameId ??= initialGames.isNotEmpty ? initialGames.first : null;
     final initialIndex = widget.categories.indexOf(_selectedCategoryId);
     if (initialIndex > 0) {
@@ -2039,8 +2235,8 @@ class _QuickGamePickerPageState extends State<_QuickGamePickerPage> {
     super.dispose();
   }
 
-  List<String> get _gamesForCurrentCategory =>
-      List<String>.from(widget.gamesByCategory[_selectedCategoryId] ?? const []);
+  List<String> get _gamesForCurrentCategory => List<String>.from(
+      widget.gamesByCategory[_selectedCategoryId] ?? const []);
 
   String _categoryLabel(String categoryId) {
     final base = widget.app.categoryLabel(categoryId);
@@ -2074,7 +2270,9 @@ class _QuickGamePickerPageState extends State<_QuickGamePickerPage> {
             padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
             children: [
               Text(
-                widget.join ? 'اختار اللعبة اللي بتشرّف عليها' : 'اختار اللعبة اللي بتنزل فيها',
+                widget.join
+                    ? 'اختار اللعبة اللي بتشرّف عليها'
+                    : 'اختار اللعبة اللي بتنزل فيها',
                 textAlign: TextAlign.right,
                 style: const TextStyle(
                   color: Colors.white,
@@ -2112,11 +2310,13 @@ class _QuickGamePickerPageState extends State<_QuickGamePickerPage> {
               ],
               const SizedBox(height: 18),
               Container(
-                padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 16),
+                padding:
+                    const EdgeInsets.symmetric(vertical: 14, horizontal: 16),
                 decoration: BoxDecoration(
                   color: Colors.white.withValues(alpha: 0.08),
                   borderRadius: BorderRadius.circular(18),
-                  border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
+                  border:
+                      Border.all(color: Colors.white.withValues(alpha: 0.08)),
                 ),
                 child: Column(
                   children: [
@@ -2245,8 +2445,7 @@ class _QuickScopePickerPage extends StatelessWidget {
               const SizedBox(height: 18),
               _QuickScopeCard(
                 title: 'عام',
-                subtitle:
-                    '${join ? 'شرّف' : 'إنزلي'} $gameLabel بالعام',
+                subtitle: '${join ? 'شرّف' : 'إنزلي'} $gameLabel بالعام',
                 icon: Icons.public,
                 onTap: () => Navigator.pop(
                   context,
@@ -2368,7 +2567,8 @@ class _QuickActionButtonState extends State<_QuickActionButton> {
                         children: [
                           if (widget.icon != null) ...[
                             Icon(widget.icon,
-                                size: 19, color: _pressed ? pressedAccent : accent),
+                                size: 19,
+                                color: _pressed ? pressedAccent : accent),
                             const SizedBox(height: 4),
                           ],
                           Text(
@@ -2731,10 +2931,14 @@ class _BoardDetailPage extends StatefulWidget {
   final List<_BoardSpec> specs;
   final int initialIndex;
   final void Function(Map<String, dynamic> row, _BoardSpec spec)? onOpenPlayer;
+  final String? currentUserId;
+  final String? currentPlayerName;
   const _BoardDetailPage({
     required this.specs,
     required this.initialIndex,
     this.onOpenPlayer,
+    this.currentUserId,
+    this.currentPlayerName,
   });
 
   @override
@@ -2836,6 +3040,8 @@ class _BoardDetailPageState extends State<_BoardDetailPage> {
                             child: _BoardCard(
                               items: list,
                               showSponsorPearls: spec.showSponsorPearls,
+                              currentUserId: widget.currentUserId,
+                              currentPlayerName: widget.currentPlayerName,
                               onOpenPlayer: widget.onOpenPlayer == null
                                   ? null
                                   : (row) => widget.onOpenPlayer!(row, spec),

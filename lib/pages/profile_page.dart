@@ -120,20 +120,19 @@ class _ProfilePageState extends State<ProfilePage> {
     return math.max(saved, current);
   }
 
-  String _badgeLabelForGame(String gameId, int pearls) {
+  String? _badgeLabelForGame(String gameId) {
     final badge = _bestBadgeForGame(gameId);
     final label = badge?['label']?.toString();
     if (label != null && label.isNotEmpty) return _rankName(label);
-    final threshold = AppState.badgeThresholdForPearls(pearls);
-    if (threshold <= 0) return _rankName('بدايات');
-    return _rankName(_labelFor(threshold));
+    return null;
   }
 
   bool _isAchievementMatch(TimelineEntry entry, String player) {
+    final kind = entry.kind.trim().toUpperCase();
+    if (kind.startsWith('SEASON_LEADERBOARD')) return true;
     final isWinner = entry.winner == player || entry.winners.contains(player);
     final isLoser = entry.losers.contains(player);
     if (!isWinner && !isLoser) return false;
-    final kind = entry.kind.trim().toUpperCase();
     if (kind.isEmpty) return true;
     return kind == 'MATCH' ||
         kind == 'MATCH_WIN' ||
@@ -150,6 +149,46 @@ class _ProfilePageState extends State<ProfilePage> {
     final deduped = <_AchievementEntry>[];
     final seen = <String>{};
     for (final t in matches) {
+      final kind = t.kind.trim().toUpperCase();
+      if (kind.startsWith('SEASON_LEADERBOARD')) {
+        final meta = t.meta ?? const <String, dynamic>{};
+        final seasonYm = (meta['seasonYm'] ?? '').toString();
+        final scope = (meta['scope'] ?? '').toString();
+        final scopeName = (meta['scopeName'] ?? '').toString().trim();
+        final gameName = (meta['gameName'] ?? '').toString().trim();
+        final scopeLabel =
+            (meta['scopeLabelAr'] ?? widget.app.tr(ar: 'العام', en: 'General'))
+                .toString();
+        final rankLabel =
+            (meta['rankLabelAr'] ?? meta['achievementAr'] ?? 'مركز متقدم')
+                .toString();
+        final detail = scopeName.isNotEmpty
+            ? 'ليدر بورد: $scopeLabel - $scopeName'
+            : 'ليدر بورد: $scopeLabel';
+        final key = [
+          'season',
+          seasonYm,
+          scope,
+          t.game,
+          (meta['rank'] ?? '').toString(),
+          (meta['sponsorCode'] ?? '').toString(),
+          (meta['dewanyahId'] ?? '').toString(),
+        ].join('|');
+        if (!seen.add(key)) continue;
+        deduped.add(_AchievementEntry(
+          game: gameName.isNotEmpty ? gameName : widget.app.gameLabel(t.game),
+          typeLabel: scopeLabel,
+          badgeLabel: rankLabel,
+          outcomeLabel: rankLabel,
+          detailLabel: detail,
+          isWin: true,
+          isSeasonAward: true,
+          date: t.ts,
+        ));
+        if (deduped.length >= 10) break;
+        continue;
+      }
+
       final isWin = t.winner == player || t.winners.contains(player);
       final outcome = isWin ? 'win' : 'loss';
       final roomKey = t.roomCode.trim().isNotEmpty
@@ -158,14 +197,19 @@ class _ProfilePageState extends State<ProfilePage> {
       final key = '${t.game}|$roomKey|$outcome';
       if (!seen.add(key)) continue;
 
-      final pearls = widget.app.pearlsForGame(t.game);
       final badge = _bestBadgeForGame(t.game);
+      final badgeLabel = _badgeLabelForGame(t.game);
       deduped.add(_AchievementEntry(
         game: widget.app.gameLabel(t.game),
-        typeLabel: _scopeLabel(badge),
-        badgeLabel: _badgeLabelForGame(t.game, pearls),
+        typeLabel: badge == null
+            ? widget.app.tr(ar: 'لعب', en: 'Match')
+            : _scopeLabel(badge),
+        badgeLabel: badgeLabel ?? '',
         outcomeLabel: isWin ? 'فاز' : 'خسر',
+        detailLabel:
+            badgeLabel == null ? 'نتيجة لعب حقيقية' : 'النوط: $badgeLabel',
         isWin: isWin,
+        isSeasonAward: false,
         date: t.ts,
       ));
       if (deduped.length >= 10) break;
@@ -523,8 +567,8 @@ class _ProfilePageState extends State<ProfilePage> {
                           if (query.isEmpty) return;
                           setSheetState(() => loading = true);
                           try {
-                            results =
-                                await searchUsers(query, token: widget.app.token);
+                            results = await searchUsers(query,
+                                token: widget.app.token);
                           } finally {
                             if (sheetCtx.mounted) {
                               setSheetState(() => loading = false);
@@ -602,8 +646,8 @@ class _ProfilePageState extends State<ProfilePage> {
                             ((user['publicId'] ?? user['id'] ?? '') as Object)
                                 .toString(),
                           ),
-                          trailing: const Icon(Icons.arrow_back_ios_new,
-                              size: 16),
+                          trailing:
+                              const Icon(Icons.arrow_back_ios_new, size: 16),
                         );
                       },
                     ),
@@ -633,7 +677,7 @@ class _ProfilePageState extends State<ProfilePage> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 const Text(
-                  'كل الإنجازات',
+                  'كل المسيرة',
                   style: TextStyle(fontWeight: FontWeight.w900, fontSize: 18),
                 ),
                 const SizedBox(height: 12),
@@ -653,12 +697,19 @@ class _ProfilePageState extends State<ProfilePage> {
                             width: 34,
                             height: 34,
                             decoration: BoxDecoration(
-                              color: Colors.amber.withValues(alpha: .18),
+                              color:
+                                  (win.isWin ? Colors.amber : Colors.redAccent)
+                                      .withValues(alpha: .18),
                               shape: BoxShape.circle,
                             ),
-                            child: const Icon(
-                              Icons.workspace_premium,
-                              color: Colors.amber,
+                            child: Icon(
+                              win.isSeasonAward
+                                  ? Icons.auto_awesome_rounded
+                                  : win.isWin
+                                      ? Icons.workspace_premium
+                                      : Icons.close_rounded,
+                              color:
+                                  win.isWin ? Colors.amber : Colors.redAccent,
                               size: 18,
                             ),
                           ),
@@ -668,14 +719,14 @@ class _ProfilePageState extends State<ProfilePage> {
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
                                 Text(
-                                  '${win.typeLabel} • ${win.game}',
+                                  '${win.outcomeLabel} • ${win.game}',
                                   style: const TextStyle(
                                     fontWeight: FontWeight.w800,
                                   ),
                                   overflow: TextOverflow.ellipsis,
                                 ),
                                 Text(
-                                  'النوط: ${win.badgeLabel}',
+                                  win.detailLabel,
                                   style: TextStyle(
                                     color: Colors.white.withValues(alpha: .68),
                                     fontSize: 12,
@@ -1053,7 +1104,8 @@ class _ProfilePageState extends State<ProfilePage> {
                           scrollDirection: Axis.horizontal,
                           reverse: true,
                           itemCount: effects.length,
-                          separatorBuilder: (_, __) => const SizedBox(width: 10),
+                          separatorBuilder: (_, __) =>
+                              const SizedBox(width: 10),
                           itemBuilder: (_, index) {
                             final e = effects[index];
                             final selected = _selectedThemeId == e.$1;
@@ -1066,7 +1118,8 @@ class _ProfilePageState extends State<ProfilePage> {
                               ),
                             );
                             return GestureDetector(
-                              onTap: () => setState(() => _selectedThemeId = e.$1),
+                              onTap: () =>
+                                  setState(() => _selectedThemeId = e.$1),
                               child: AnimatedContainer(
                                 duration: const Duration(milliseconds: 160),
                                 width: 104,
@@ -1242,14 +1295,6 @@ class _ProfilePageState extends State<ProfilePage> {
   @override
   Widget build(BuildContext context) {
     final app = widget.app;
-    // أفضل لعبة = أعلى رصيد لآلئ، وإلا المختارة/أول لعبة
-    String game = app.selectedGame ?? '—';
-    if (app.gamePearls.isNotEmpty) {
-      final top =
-          app.gamePearls.entries.reduce((a, b) => a.value >= b.value ? a : b);
-      game = top.key;
-    }
-    final gameLabel = app.gameLabel(game);
     final meName = app.displayName ?? app.name ?? 'لاعب';
     final displayUserId = app.publicId ?? app.userId ?? '';
     final (topGameName, topPearls) = _topPearlGame(app);
@@ -1278,8 +1323,6 @@ class _ProfilePageState extends State<ProfilePage> {
             ? const Color(0xFF0F1D32)
             : const Color(0xFF2D1B46); // violet theme option
 
-    // level ring uses wins/losses for the currently selected game
-    final lvl = app.levelForGame(meName, game);
     ImageProvider? avatarImage;
     if (app.avatarBase64 != null && app.avatarBase64!.isNotEmpty) {
       try {
@@ -1455,8 +1498,9 @@ class _ProfilePageState extends State<ProfilePage> {
         const SizedBox(height: 10),
         _AchievementsCard(
           recentWins: recentWins,
-          onShowAll:
-              recentWins.length > 5 ? () => _openAllAchievements(recentWins) : null,
+          onShowAll: recentWins.length > 5
+              ? () => _openAllAchievements(recentWins)
+              : null,
         ),
 
         const SizedBox(height: 10),
@@ -1628,9 +1672,8 @@ class _ProfilePageState extends State<ProfilePage> {
                                 ? 'مفتوح'
                                 : '$wins/${challenge.targetWins}',
                             style: TextStyle(
-                              color: unlocked
-                                  ? Colors.greenAccent
-                                  : Colors.white,
+                              color:
+                                  unlocked ? Colors.greenAccent : Colors.white,
                               fontWeight: FontWeight.w800,
                             ),
                           ),
@@ -1643,53 +1686,6 @@ class _ProfilePageState extends State<ProfilePage> {
             ),
           ),
         ],
-
-        // Current game level ring
-        Card(
-          child: Padding(
-            padding: const EdgeInsets.all(16),
-            child: Row(
-              children: [
-                SizedBox(
-                  width: 110,
-                  height: 110,
-                  child: Stack(
-                    alignment: Alignment.center,
-                    children: [
-                      CustomPaint(
-                        painter: _RingPainter(fill01: lvl.fill01),
-                      ),
-                      Text(
-                        _rankName(lvl.name),
-                        textAlign: TextAlign.center,
-                        style: const TextStyle(
-                          fontWeight: FontWeight.w900,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        app.tr(
-                            ar: 'اللعبة الحالية: $gameLabel',
-                            en: 'Current game: $gameLabel'),
-                        style: const TextStyle(
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-
         const SizedBox(height: 12),
       ],
     );
@@ -1734,12 +1730,13 @@ class _ProfilePageState extends State<ProfilePage> {
         final pearls = app.pearlsForGame(g);
         final played = app.winsOf(player, g) + app.lossesOf(player, g);
         final threshold = _badgeThresholdForGame(g, pearls);
+        final hasEarnedBadge = _bestBadgeForGame(g) != null;
         entries.add(_GamePearlEntry(
           gameId: g,
           label: app.gameLabel(g),
           pearls: pearls,
           threshold: threshold,
-          active: played > 0 || pearls != 5 || threshold > 0,
+          active: played > 0 || pearls != 5 || hasEarnedBadge,
         ));
       }
     }
@@ -1765,7 +1762,9 @@ class _AchievementEntry {
   final String typeLabel;
   final String badgeLabel;
   final String outcomeLabel;
+  final String detailLabel;
   final bool isWin;
+  final bool isSeasonAward;
   final DateTime date;
 
   const _AchievementEntry({
@@ -1773,7 +1772,9 @@ class _AchievementEntry {
     required this.typeLabel,
     required this.badgeLabel,
     required this.outcomeLabel,
+    required this.detailLabel,
     required this.isWin,
+    required this.isSeasonAward,
     required this.date,
   });
 }
@@ -1808,42 +1809,6 @@ class _GamePearlEntry {
     required this.threshold,
     required this.active,
   });
-}
-
-class _RingPainter extends CustomPainter {
-  final double fill01; // 0..1
-  _RingPainter({required this.fill01});
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final c = Offset(size.width / 2, size.height / 2);
-    final r = math.min(size.width, size.height) / 2 - 3;
-
-    final bg = Paint()
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 6
-      ..color = const Color(0xFF90CAF9).withValues(alpha: .25);
-
-    final fg = Paint()
-      ..style = PaintingStyle.stroke
-      ..strokeCap = StrokeCap.round
-      ..strokeWidth = 8
-      ..color = const Color(0xFF29B6F6);
-
-    canvas.drawCircle(c, r, bg);
-    final sweep = (fill01.clamp(0, 1) as double) * 2 * math.pi;
-    canvas.drawArc(
-      Rect.fromCircle(center: c, radius: r),
-      -math.pi / 2,
-      sweep,
-      false,
-      fg,
-    );
-  }
-
-  @override
-  bool shouldRepaint(covariant _RingPainter oldDelegate) =>
-      oldDelegate.fill01 != fill01;
 }
 
 class _PearlBadge extends StatelessWidget {
@@ -1945,7 +1910,7 @@ class _AchievementsCard extends StatelessWidget {
                   Icon(Icons.emoji_events_rounded, color: Colors.amber),
                   SizedBox(width: 8),
                   Text(
-                    'إنجازاتي',
+                    'مسيرتي',
                     style: TextStyle(fontWeight: FontWeight.w900, fontSize: 16),
                   ),
                 ],
@@ -1961,18 +1926,17 @@ class _AchievementsCard extends StatelessWidget {
                           width: 30,
                           height: 30,
                           decoration: BoxDecoration(
-                            color: (win.isWin
-                                    ? Colors.amber
-                                    : Colors.redAccent)
+                            color: (win.isWin ? Colors.amber : Colors.redAccent)
                                 .withValues(alpha: .18),
                             shape: BoxShape.circle,
                           ),
                           child: Icon(
-                            win.isWin
-                                ? Icons.workspace_premium
-                                : Icons.close_rounded,
-                            color:
-                                win.isWin ? Colors.amber : Colors.redAccent,
+                            win.isSeasonAward
+                                ? Icons.auto_awesome_rounded
+                                : win.isWin
+                                    ? Icons.workspace_premium
+                                    : Icons.close_rounded,
+                            color: win.isWin ? Colors.amber : Colors.redAccent,
                             size: 18,
                           ),
                         ),
@@ -1989,7 +1953,7 @@ class _AchievementsCard extends StatelessWidget {
                                 overflow: TextOverflow.ellipsis,
                               ),
                               Text(
-                                'النوط: ${win.badgeLabel}',
+                                win.detailLabel,
                                 textAlign: TextAlign.right,
                                 style: TextStyle(
                                   color: Colors.white.withValues(alpha: .68),
@@ -2018,7 +1982,7 @@ class _AchievementsCard extends StatelessWidget {
                 Center(
                   child: IconButton(
                     onPressed: onShowAll,
-                    tooltip: 'عرض كل الإنجازات',
+                    tooltip: 'عرض كل المسيرة',
                     icon: Icon(
                       Icons.more_horiz_rounded,
                       color: Colors.white.withValues(alpha: 0.9),
@@ -2153,8 +2117,7 @@ class _SparkleOnceState extends State<_SparkleOnce>
     _ctrl = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 1800),
-    )
-      ..forward();
+    )..forward();
   }
 
   @override

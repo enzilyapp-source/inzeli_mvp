@@ -1368,7 +1368,6 @@ class _DewanyahListPageState extends State<DewanyahListPage> {
                                 'لاعب',
                             style: const TextStyle(fontWeight: FontWeight.w900),
                           ),
-                          subtitle: const Text('اللآلئ العامة'),
                           trailing: _MiniPearlPill(value: row['pearls'] ?? 0),
                         );
                       },
