@@ -396,12 +396,7 @@ class _LeaderboardHubPageState extends State<LeaderboardHubPage> {
         _rowInt(row, 'matches') +
         _rowInt(row, 'matchCount');
     if (participation > 0) return true;
-    if (_rowInt(row, 'wins') + _rowInt(row, 'losses') > 0) return true;
-    final pearls = _rowInt(row, 'pearls');
-    if (pearls != 0 && pearls != 5) return true;
-    if (row.containsKey('played') && _rowBool(row, 'played')) return true;
-    final rankLabel = (row['rankLabel'] ?? '').toString().trim();
-    if (rankLabel == '--') return false;
+    if (row.containsKey('played')) return _rowBool(row, 'played');
     return false;
   }
 
@@ -1970,12 +1965,7 @@ class _BoardCard extends StatelessWidget {
         _asInt(row['matches']) +
         _asInt(row['matchCount']);
     if (participation > 0) return true;
-    if (_asInt(row['wins']) + _asInt(row['losses']) > 0) return true;
-    final pearls = _asInt(row['pearls']);
-    if (pearls != 0 && pearls != 5) return true;
-    if (row.containsKey('played') && _asBool(row['played'])) return true;
-    final rankLabel = (row['rankLabel'] ?? '').toString().trim();
-    if (rankLabel == '--') return false;
+    if (row.containsKey('played')) return _asBool(row['played']);
     return false;
   }
 
@@ -2010,6 +2000,10 @@ class _BoardCard extends StatelessWidget {
 
   String _rankLabel(Map<String, dynamic> row, int index) {
     if (!_played(row)) return '--';
+    final label = (row['rankLabel'] ?? '').toString().trim();
+    if (label.isNotEmpty && label != '--') return label;
+    final rank = _asInt(row['rank']);
+    if (rank > 0) return '$rank';
     return '${index + 1}';
   }
 

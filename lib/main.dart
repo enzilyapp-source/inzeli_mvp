@@ -2,6 +2,7 @@
 import 'dart:async';
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:convert';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'biometric_auth.dart';
@@ -16,8 +17,15 @@ import 'pages/dewanyah_list_page.dart';
 import 'pages/profile_page.dart';
 import 'pages/signin_page.dart';
 import 'pages/sponsor_page.dart';
+import 'push/one_signal_bridge.dart';
 
-void main() => runApp(const InzeliApp());
+const String _oneSignalPromptSeenKey = 'onesignal_permission_prompt_seen';
+
+Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  await OneSignalBridge.initialize();
+  runApp(const InzeliApp());
+}
 
 class InzeliApp extends StatelessWidget {
   const InzeliApp({super.key});
@@ -125,6 +133,7 @@ class _AuthGateState extends State<AuthGate> with WidgetsBindingObserver {
   bool _loading = true;
   bool _biometricUnlocked = false;
   bool _biometricPrompting = false;
+  bool _notificationPromptQueued = false;
 
   @override
   void initState() {
@@ -152,7 +161,11 @@ class _AuthGateState extends State<AuthGate> with WidgetsBindingObserver {
     if (!app.isSignedIn || !app.biometricEnabled) {
       _biometricUnlocked = true;
     }
+    if (!app.isSignedIn) {
+      _notificationPromptQueued = false;
+    }
     if (mounted) setState(() {});
+    _scheduleNotificationPrompt();
   }
 
   Future<void> _boot() async {
@@ -167,6 +180,8 @@ class _AuthGateState extends State<AuthGate> with WidgetsBindingObserver {
         WidgetsBinding.instance.addPostFrameCallback((_) {
           if (mounted) unawaited(_unlockWithBiometrics());
         });
+      } else {
+        _scheduleNotificationPrompt();
       }
     }
   }
@@ -190,6 +205,63 @@ class _AuthGateState extends State<AuthGate> with WidgetsBindingObserver {
     } finally {
       _biometricPrompting = false;
       if (mounted) setState(() {});
+      if (_biometricUnlocked) _scheduleNotificationPrompt();
+    }
+  }
+
+  void _scheduleNotificationPrompt() {
+    if (_notificationPromptQueued) return;
+    if (!mounted || !app.isSignedIn) return;
+    if (app.biometricEnabled && !_biometricUnlocked) return;
+    if (!OneSignalBridge.isSupported) return;
+
+    _notificationPromptQueued = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) unawaited(_maybeAskForNotificationPermission());
+    });
+  }
+
+  Future<void> _maybeAskForNotificationPermission() async {
+    if (!mounted || !app.isSignedIn) return;
+    if (app.biometricEnabled && !_biometricUnlocked) return;
+    if (!OneSignalBridge.isSupported) return;
+
+    final prefs = await SharedPreferences.getInstance();
+    if (!mounted) return;
+    if (prefs.getBool(_oneSignalPromptSeenKey) ?? false) return;
+
+    final enable = await showDialog<bool>(
+      context: context,
+      barrierDismissible: true,
+      builder: (dialogContext) => Directionality(
+        textDirection: TextDirection.rtl,
+        child: AlertDialog(
+          backgroundColor: const Color(0xFF1C273B),
+          title: const Text(
+            'فعّلي إشعارات إنزلي',
+            style: TextStyle(color: Colors.white),
+          ),
+          content: const Text(
+            'بنطرش لك تنبيهات النتائج، تغييرات الليدر بورد، وانتهاء السيزن.',
+            style: TextStyle(color: Color(0xFFE5ECF7)),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(false),
+              child: const Text('لاحقاً'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.of(dialogContext).pop(true),
+              child: const Text('تفعيل'),
+            ),
+          ],
+        ),
+      ),
+    );
+
+    await prefs.setBool(_oneSignalPromptSeenKey, true);
+    if (enable == true) {
+      await OneSignalBridge.requestPermission();
     }
   }
 
