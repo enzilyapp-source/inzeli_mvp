@@ -75,6 +75,7 @@ class AppState extends ChangeNotifier {
   List<Map<String, dynamic>> badges = <Map<String, dynamic>>[];
   Map<String, int> badgeCounts = <String, int>{};
   Map<String, dynamic>? bestBadge;
+  Set<String> playedGameIds = <String>{};
   bool _badgesSnapshotInitialized = false;
 
   // ---- Local demo data (used by old leaderboard/player profile/timeline) ----
@@ -224,8 +225,9 @@ class AppState extends ChangeNotifier {
       creditPoints = (m['creditPoints'] as num?)?.toInt();
       creditBalance = (m['creditBalance'] as num?)?.toInt();
       final rawVipUntil = m['vipUntil']?.toString();
-      vipUntil =
-          rawVipUntil == null || rawVipUntil.isEmpty ? null : DateTime.tryParse(rawVipUntil);
+      vipUntil = rawVipUntil == null || rawVipUntil.isEmpty
+          ? null
+          : DateTime.tryParse(rawVipUntil);
       permanentScore = (m['permanentScore'] as num?)?.toInt();
 
       name = m['name'] as String?;
@@ -258,6 +260,7 @@ class AppState extends ChangeNotifier {
         gamePearls = rawGamePearls
             .map((k, v) => MapEntry(k.toString(), (v as num?)?.toInt() ?? 0));
       }
+      _applyPlayedGames(m);
       rulesPromptSeen = m['rulesPromptSeen'] as bool?;
       pearlsResetMonth = m['pearlsResetMonth'] as String?;
       final rawDew = m['ownedDewanyahs'];
@@ -370,6 +373,7 @@ class AppState extends ChangeNotifier {
       'badges': badges,
       'badgeCounts': badgeCounts,
       'bestBadge': bestBadge,
+      'playedGames': playedGameIds.toList(),
       'userStats': userStats,
       'userProfiles': userProfiles,
       'timeline': timeline
@@ -395,6 +399,23 @@ class AppState extends ChangeNotifier {
 
   // جعل الحفظ متاحاً للصفحات الأخرى بشكل آمن
   Future<void> saveState() => _save();
+
+  Future<void> applyAchievementSnapshot(Map<String, dynamic> data,
+      {bool notify = true}) async {
+    _applyBadges(data, notify: notify);
+    _applyPlayedGames(data);
+    await _save();
+    notifyListeners();
+  }
+
+  void _applyPlayedGames(Map<String, dynamic> data) {
+    final rawPlayedGames = data['playedGames'];
+    if (rawPlayedGames is! List) return;
+    playedGameIds = rawPlayedGames
+        .map((e) => e.toString().trim())
+        .where((gameId) => gameId.isNotEmpty)
+        .toSet();
+  }
 
   void _applyBadges(Map<String, dynamic> data, {bool notify = true}) {
     final hadSnapshot = _badgesSnapshotInitialized;
@@ -434,6 +455,8 @@ class AppState extends ChangeNotifier {
         ..sort((a, b) => ((b['threshold'] as num?)?.toInt() ?? 0)
             .compareTo((a['threshold'] as num?)?.toInt() ?? 0));
       bestBadge = sorted.first;
+    } else if (rawBadges is List) {
+      bestBadge = null;
     }
 
     if (!hasBadgePayload) return;
@@ -538,6 +561,7 @@ class AppState extends ChangeNotifier {
     avatarBase64 = asNullableString(user['avatarBase64']) ?? avatarBase64;
     avatarPath = asNullableString(user['avatarPath']) ?? avatarPath;
     _applyBadges(user);
+    _applyPlayedGames(user);
 
     // optional fallbacks
     name = displayName ?? name;
@@ -764,6 +788,7 @@ class AppState extends ChangeNotifier {
             gp.map((k, v) => MapEntry(k.toString(), (v as num?)?.toInt() ?? 0));
       }
       _applyBadges(data);
+      _applyPlayedGames(data);
 
       final profileSnapshot = <String, dynamic>{
         if (userId != null && userId!.isNotEmpty) 'id': userId,
@@ -821,6 +846,7 @@ class AppState extends ChangeNotifier {
     badges = <Map<String, dynamic>>[];
     badgeCounts = <String, int>{};
     bestBadge = null;
+    playedGameIds = <String>{};
     _badgesSnapshotInitialized = false;
     // Keep one-time guidance flags across logouts so onboarding prompts
     // don't keep re-appearing for the same device user.
@@ -1046,10 +1072,7 @@ class AppState extends ChangeNotifier {
     if (ownedDewanyahs.isEmpty || serverDewanyahs.isEmpty) return;
 
     String normalize(String? value) {
-      return (value ?? '')
-          .trim()
-          .replaceAll(RegExp(r'\s+'), ' ')
-          .toLowerCase();
+      return (value ?? '').trim().replaceAll(RegExp(r'\s+'), ' ').toLowerCase();
     }
 
     final myUserId = (userId ?? '').trim();

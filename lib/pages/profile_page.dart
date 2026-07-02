@@ -72,13 +72,53 @@ class _ProfilePageState extends State<ProfilePage> {
     return game;
   }
 
-  (String, int) _topPearlGame(AppState app) {
-    if (app.gamePearls.isNotEmpty) {
-      final top =
-          app.gamePearls.entries.reduce((a, b) => a.value >= b.value ? a : b);
+  Set<String> _playedGameIds(String player) {
+    final played = <String>{...widget.app.playedGameIds};
+    final hasServerPlayedGames = played.isNotEmpty;
+    for (final cat in widget.app.games.values) {
+      for (final gameId in cat) {
+        if (widget.app.winsOf(player, gameId) +
+                widget.app.lossesOf(player, gameId) >
+            0) {
+          played.add(gameId);
+        }
+      }
+    }
+    if (hasServerPlayedGames) return played;
+
+    for (final entry in widget.app.timeline) {
+      final gameId = entry.game.trim();
+      if (gameId.isEmpty) continue;
+      final kind = entry.kind.trim().toUpperCase();
+      final isMatch = kind.isEmpty ||
+          kind == 'MATCH' ||
+          kind == 'MATCH_WIN' ||
+          kind == 'MATCH_LOSS' ||
+          kind == 'MATCH_FINISHED';
+      if (!isMatch) continue;
+      final involved = entry.winner == player ||
+          entry.winners.contains(player) ||
+          entry.losers.contains(player);
+      if (involved) played.add(gameId);
+    }
+    return played;
+  }
+
+  bool _hasPlayedGame(String gameId, String player) {
+    return _playedGameIds(player).contains(gameId);
+  }
+
+  (String, int) _topPearlGame(AppState app, String player) {
+    final played = _playedGameIds(player);
+    final candidates =
+        app.gamePearls.entries.where((entry) => played.contains(entry.key));
+    if (candidates.isNotEmpty) {
+      final top = candidates.reduce((a, b) => a.value >= b.value ? a : b);
       return (app.gameLabel(top.key), top.value);
     }
-    if (app.selectedGame != null && app.selectedGame!.isNotEmpty) {
+    if (app.selectedGame != null &&
+        app.selectedGame!.isNotEmpty &&
+        played.contains(app.selectedGame)) {
       return (
         app.gameLabel(app.selectedGame!),
         app.pearlsForGame(app.selectedGame!)
@@ -88,8 +128,28 @@ class _ProfilePageState extends State<ProfilePage> {
   }
 
   Map<String, dynamic>? _bestBadgeForGame(String gameId) {
+    if (!_hasPlayedGame(gameId, _meName())) return null;
     final candidates = widget.app.badges
         .where((b) => (b['gameId'] ?? '').toString() == gameId)
+        .toList();
+    if (candidates.isEmpty) return null;
+    candidates.sort((a, b) {
+      final thresholdA = (a['threshold'] as num?)?.toInt() ?? 0;
+      final thresholdB = (b['threshold'] as num?)?.toInt() ?? 0;
+      if (thresholdA != thresholdB) return thresholdB.compareTo(thresholdA);
+      final dateA = DateTime.tryParse((a['lastEarnedAt'] ?? '').toString()) ??
+          DateTime.fromMillisecondsSinceEpoch(0);
+      final dateB = DateTime.tryParse((b['lastEarnedAt'] ?? '').toString()) ??
+          DateTime.fromMillisecondsSinceEpoch(0);
+      return dateB.compareTo(dateA);
+    });
+    return candidates.first;
+  }
+
+  Map<String, dynamic>? _bestPlayedBadge() {
+    final played = _playedGameIds(_meName());
+    final candidates = widget.app.badges
+        .where((b) => played.contains((b['gameId'] ?? '').toString()))
         .toList();
     if (candidates.isEmpty) return null;
     candidates.sort((a, b) {
@@ -129,7 +189,9 @@ class _ProfilePageState extends State<ProfilePage> {
 
   bool _isAchievementMatch(TimelineEntry entry, String player) {
     final kind = entry.kind.trim().toUpperCase();
-    if (kind.startsWith('SEASON_LEADERBOARD')) return true;
+    if (kind.startsWith('SEASON_LEADERBOARD')) {
+      return entry.winner == player || entry.winners.contains(player);
+    }
     final isWinner = entry.winner == player || entry.winners.contains(player);
     final isLoser = entry.losers.contains(player);
     if (!isWinner && !isLoser) return false;
@@ -141,6 +203,7 @@ class _ProfilePageState extends State<ProfilePage> {
   }
 
   List<_AchievementEntry> _recentWins(String player) {
+    final playedGames = _playedGameIds(player);
     final matches = widget.app.timeline
         .where((t) => _isAchievementMatch(t, player))
         .toList()
@@ -151,6 +214,10 @@ class _ProfilePageState extends State<ProfilePage> {
     for (final t in matches) {
       final kind = t.kind.trim().toUpperCase();
       if (kind.startsWith('SEASON_LEADERBOARD')) {
+        final seasonGameId = t.game.trim();
+        if (seasonGameId.isNotEmpty && !playedGames.contains(seasonGameId)) {
+          continue;
+        }
         final meta = t.meta ?? const <String, dynamic>{};
         final seasonYm = (meta['seasonYm'] ?? '').toString();
         final scope = (meta['scope'] ?? '').toString();
@@ -190,6 +257,9 @@ class _ProfilePageState extends State<ProfilePage> {
       }
 
       final isWin = t.winner == player || t.winners.contains(player);
+      if (t.game.trim().isNotEmpty && !playedGames.contains(t.game)) {
+        continue;
+      }
       final outcome = isWin ? 'win' : 'loss';
       final roomKey = t.roomCode.trim().isNotEmpty
           ? t.roomCode.trim()
@@ -227,9 +297,10 @@ class _ProfilePageState extends State<ProfilePage> {
   }
 
   int _currentRankThreshold() {
-    final (_, topPearls) = _topPearlGame(widget.app);
-    final savedRank = widget.app.bestBadgeLabel();
-    final savedThreshold = widget.app.bestBadgeThreshold();
+    final (_, topPearls) = _topPearlGame(widget.app, _meName());
+    final bestBadge = _bestPlayedBadge();
+    final savedRank = bestBadge?['label']?.toString();
+    final savedThreshold = (bestBadge?['threshold'] as num?)?.toInt() ?? 0;
     final currentThreshold = AppState.badgeThresholdForPearls(topPearls);
     return savedRank != null && savedThreshold > currentThreshold
         ? savedThreshold
@@ -273,9 +344,9 @@ class _ProfilePageState extends State<ProfilePage> {
       if (gp is Map) {
         widget.app.gamePearls =
             gp.map((k, v) => MapEntry(k.toString(), (v as num?)?.toInt() ?? 0));
-        await widget.app.saveState();
-        if (mounted) setState(() {});
       }
+      await widget.app.applyAchievementSnapshot(stats, notify: false);
+      if (mounted) setState(() {});
       await _syncChallengeUnlocks();
     } catch (_) {}
   }
@@ -1297,9 +1368,10 @@ class _ProfilePageState extends State<ProfilePage> {
     final app = widget.app;
     final meName = app.displayName ?? app.name ?? 'لاعب';
     final displayUserId = app.publicId ?? app.userId ?? '';
-    final (topGameName, topPearls) = _topPearlGame(app);
-    final savedRank = app.bestBadgeLabel();
-    final savedThreshold = app.bestBadgeThreshold();
+    final (topGameName, topPearls) = _topPearlGame(app, meName);
+    final bestBadge = _bestPlayedBadge();
+    final savedRank = bestBadge?['label']?.toString();
+    final savedThreshold = (bestBadge?['threshold'] as num?)?.toInt() ?? 0;
     final currentThreshold = AppState.badgeThresholdForPearls(topPearls);
     final currentRankThreshold =
         savedRank != null && savedThreshold > currentThreshold
@@ -1725,8 +1797,10 @@ class _ProfilePageState extends State<ProfilePage> {
 
   List<_GamePearlEntry> _gamePearlEntries(AppState app, String player) {
     final entries = <_GamePearlEntry>[];
+    final playedGames = _playedGameIds(player);
     for (final cat in app.games.values) {
       for (final g in cat) {
+        if (!playedGames.contains(g)) continue;
         final pearls = app.pearlsForGame(g);
         final played = app.winsOf(player, g) + app.lossesOf(player, g);
         final threshold = _badgeThresholdForGame(g, pearls);
@@ -1736,9 +1810,21 @@ class _ProfilePageState extends State<ProfilePage> {
           label: app.gameLabel(g),
           pearls: pearls,
           threshold: threshold,
-          active: played > 0 || pearls != 5 || hasEarnedBadge,
+          active: played > 0 || hasEarnedBadge,
         ));
       }
+    }
+    for (final g in playedGames) {
+      if (entries.any((entry) => entry.gameId == g)) continue;
+      final pearls = app.pearlsForGame(g);
+      final threshold = _badgeThresholdForGame(g, pearls);
+      entries.add(_GamePearlEntry(
+        gameId: g,
+        label: app.gameLabel(g),
+        pearls: pearls,
+        threshold: threshold,
+        active: true,
+      ));
     }
     final seen = <String>{};
     final uniq = <_GamePearlEntry>[];
