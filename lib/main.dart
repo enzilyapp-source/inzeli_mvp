@@ -645,6 +645,14 @@ class _TopProfileCard extends StatelessWidget {
                   start: 10,
                   child: RankBadge(rank: rankVisual, compact: true),
                 ),
+                PositionedDirectional(
+                  top: 8,
+                  end: 10,
+                  child: _NotificationBell(
+                    count: app.unreadNotificationCount,
+                    onTap: () => _openNotifications(context, app),
+                  ),
+                ),
                 Center(
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
@@ -719,6 +727,138 @@ class _TopProfileCard extends StatelessWidget {
         ],
       ),
     );
+  }
+
+  void _openNotifications(BuildContext context, AppState app) {
+    app.markNotificationsRead();
+    showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      backgroundColor: const Color(0xFF1C273B),
+      builder: (ctx) => Directionality(
+        textDirection: TextDirection.rtl,
+        child: SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Row(
+                  children: [
+                    const Icon(Icons.notifications_rounded,
+                        color: Color(0xFFE49A2C)),
+                    const SizedBox(width: 8),
+                    const Expanded(
+                      child: Text(
+                        'الإشعارات',
+                        style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.w900,
+                          color: Colors.white,
+                        ),
+                      ),
+                    ),
+                    if (app.notifications.isNotEmpty)
+                      TextButton(
+                        onPressed: () {
+                          app.clearNotifications();
+                          Navigator.pop(ctx);
+                        },
+                        child: const Text('مسح'),
+                      ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                if (app.notifications.isEmpty)
+                  Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 30),
+                    child: Text(
+                      'ما عندك إشعارات حالياً',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        color: Colors.white.withValues(alpha: 0.72),
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  )
+                else
+                  Flexible(
+                    child: ListView.separated(
+                      shrinkWrap: true,
+                      itemCount: math.min(app.notifications.length, 30),
+                      separatorBuilder: (_, __) => Divider(
+                        color: Colors.white.withValues(alpha: 0.08),
+                        height: 1,
+                      ),
+                      itemBuilder: (_, index) {
+                        final entry = app.notifications[index];
+                        return ListTile(
+                          contentPadding: EdgeInsets.zero,
+                          leading: CircleAvatar(
+                            backgroundColor:
+                                _notificationColor(entry.type).withValues(
+                              alpha: 0.18,
+                            ),
+                            child: Icon(
+                              _notificationIcon(entry.type),
+                              color: _notificationColor(entry.type),
+                              size: 20,
+                            ),
+                          ),
+                          title: Text(
+                            entry.title,
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontWeight: FontWeight.w900,
+                            ),
+                          ),
+                          subtitle: Text(
+                            '${entry.body}\n${_notificationTime(entry.createdAt)}',
+                            style: TextStyle(
+                              color: Colors.white.withValues(alpha: 0.68),
+                              height: 1.35,
+                            ),
+                          ),
+                        );
+                      },
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  IconData _notificationIcon(String type) {
+    return switch (type) {
+      'badge' => Icons.workspace_premium_rounded,
+      'win' => Icons.emoji_events_rounded,
+      'loss' => Icons.sports_score_rounded,
+      _ => Icons.notifications_rounded,
+    };
+  }
+
+  Color _notificationColor(String type) {
+    return switch (type) {
+      'badge' => Colors.amber,
+      'win' => Colors.greenAccent,
+      'loss' => Colors.redAccent,
+      _ => const Color(0xFFE49A2C),
+    };
+  }
+
+  String _notificationTime(DateTime value) {
+    final now = DateTime.now();
+    final diff = now.difference(value);
+    if (diff.inMinutes < 1) return 'الآن';
+    if (diff.inHours < 1) return 'قبل ${diff.inMinutes} د';
+    if (diff.inDays < 1) return 'قبل ${diff.inHours} س';
+    final day = value.day.toString().padLeft(2, '0');
+    final month = value.month.toString().padLeft(2, '0');
+    return '$day/$month/${value.year}';
   }
 
   (String, int) _topPearlGame(AppState app) {
@@ -803,7 +943,65 @@ class _TopProfileCard extends StatelessWidget {
         return const Color(0xFF1E2F4D);
     }
   }
+}
 
+class _NotificationBell extends StatelessWidget {
+  final int count;
+  final VoidCallback onTap;
+
+  const _NotificationBell({required this.count, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    final visibleCount = count.clamp(0, 99);
+    return Material(
+      color: Colors.black.withValues(alpha: 0.22),
+      shape: const CircleBorder(),
+      child: InkWell(
+        customBorder: const CircleBorder(),
+        onTap: onTap,
+        child: SizedBox(
+          width: 42,
+          height: 42,
+          child: Stack(
+            clipBehavior: Clip.none,
+            alignment: Alignment.center,
+            children: [
+              const Icon(Icons.notifications_rounded,
+                  color: Colors.white, size: 24),
+              if (visibleCount > 0)
+                PositionedDirectional(
+                  top: 4,
+                  end: 3,
+                  child: Container(
+                    constraints:
+                        const BoxConstraints(minWidth: 18, minHeight: 18),
+                    padding: const EdgeInsets.symmetric(horizontal: 5),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF4EA5FF),
+                      borderRadius: BorderRadius.circular(999),
+                      border: Border.all(
+                        color: const Color(0xFF1E2F4D),
+                        width: 1.5,
+                      ),
+                    ),
+                    alignment: Alignment.center,
+                    child: Text(
+                      '$visibleCount',
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 10,
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                  ),
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
 }
 
 class _MainPearlBadge extends StatelessWidget {

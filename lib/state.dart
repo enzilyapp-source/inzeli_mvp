@@ -76,6 +76,8 @@ class AppState extends ChangeNotifier {
   Map<String, int> badgeCounts = <String, int>{};
   Map<String, dynamic>? bestBadge;
   Set<String> playedGameIds = <String>{};
+  List<AppNotificationEntry> notifications = <AppNotificationEntry>[];
+  DateTime? _timelineNotificationsSeenAt;
   bool _badgesSnapshotInitialized = false;
 
   // ---- Local demo data (used by old leaderboard/player profile/timeline) ----
@@ -327,6 +329,19 @@ class AppState extends ChangeNotifier {
             return MapEntry(e.key.toString(), stats);
           }));
       }
+      final rawNotifications = m['notifications'];
+      if (rawNotifications is List) {
+        notifications = rawNotifications
+            .whereType<Map>()
+            .map((e) => AppNotificationEntry.fromJson(
+                  Map<String, dynamic>.from(e),
+                ))
+            .toList();
+      }
+      final rawSeenAt = m['timelineNotificationsSeenAt']?.toString();
+      _timelineNotificationsSeenAt = rawSeenAt == null || rawSeenAt.isEmpty
+          ? null
+          : DateTime.tryParse(rawSeenAt);
     } catch (_) {
       // ignore bad local cache
     }
@@ -374,6 +389,9 @@ class AppState extends ChangeNotifier {
       'badgeCounts': badgeCounts,
       'bestBadge': bestBadge,
       'playedGames': playedGameIds.toList(),
+      'notifications': notifications.map((e) => e.toJson()).toList(),
+      'timelineNotificationsSeenAt':
+          _timelineNotificationsSeenAt?.toIso8601String(),
       'userStats': userStats,
       'userProfiles': userProfiles,
       'timeline': timeline
@@ -399,6 +417,56 @@ class AppState extends ChangeNotifier {
 
   // جعل الحفظ متاحاً للصفحات الأخرى بشكل آمن
   Future<void> saveState() => _save();
+
+  int get unreadNotificationCount =>
+      notifications.where((entry) => !entry.read).length;
+
+  void addNotification({
+    required String type,
+    required String title,
+    required String body,
+    String? id,
+    DateTime? createdAt,
+    Map<String, dynamic>? data,
+  }) {
+    final at = createdAt ?? DateTime.now();
+    final key = (id == null || id.trim().isEmpty)
+        ? '$type:${at.microsecondsSinceEpoch}:${title.hashCode}'
+        : id.trim();
+    if (notifications.any((entry) => entry.id == key)) return;
+    notifications.insert(
+      0,
+      AppNotificationEntry(
+        id: key,
+        type: type,
+        title: title,
+        body: body,
+        createdAt: at,
+        read: false,
+        data: data ?? const <String, dynamic>{},
+      ),
+    );
+    if (notifications.length > 80) {
+      notifications = notifications.take(80).toList();
+    }
+    unawaited(_save());
+    notifyListeners();
+  }
+
+  void markNotificationsRead() {
+    if (notifications.every((entry) => entry.read)) return;
+    notifications =
+        notifications.map((entry) => entry.copyWith(read: true)).toList();
+    unawaited(_save());
+    notifyListeners();
+  }
+
+  void clearNotifications() {
+    if (notifications.isEmpty) return;
+    notifications = <AppNotificationEntry>[];
+    unawaited(_save());
+    notifyListeners();
+  }
 
   Future<void> applyAchievementSnapshot(Map<String, dynamic> data,
       {bool notify = true}) async {
@@ -476,6 +544,13 @@ class AppState extends ChangeNotifier {
         badgeThresholdForLabel(b).compareTo(badgeThresholdForLabel(a)));
     final label = gained.first;
     final count = badgeCounts[label] ?? 0;
+    addNotification(
+      id: 'badge-progress:$label:$count',
+      type: 'badge',
+      title: 'نوطك تثبّت',
+      body: 'وصلت نوط $label مرة ثانية. إذا تعديته يزيد نوطك.',
+      data: {'label': label, 'count': count},
+    );
     unawaited(LocalGameNotifications.show(
       id: LocalGameNotifications.idFor('badge-progress:$label:$count'),
       title: 'نوطك تثبّت',
@@ -847,6 +922,8 @@ class AppState extends ChangeNotifier {
     badgeCounts = <String, int>{};
     bestBadge = null;
     playedGameIds = <String>{};
+    notifications = <AppNotificationEntry>[];
+    _timelineNotificationsSeenAt = null;
     _badgesSnapshotInitialized = false;
     // Keep one-time guidance flags across logouts so onboarding prompts
     // don't keep re-appearing for the same device user.
@@ -1528,11 +1605,87 @@ class AppState extends ChangeNotifier {
             meta: meta.isNotEmpty ? meta : null,
           );
         }));
+      _recordTimelineNotifications();
       await _save();
       notifyListeners();
     } catch (_) {
       // ignore failures
     }
+  }
+
+  void _recordTimelineNotifications() {
+    if (timeline.isEmpty) return;
+    final newest = timeline
+        .map((entry) => entry.ts)
+        .reduce((a, b) => a.isAfter(b) ? a : b);
+    final seenAt = _timelineNotificationsSeenAt;
+    if (seenAt == null) {
+      _timelineNotificationsSeenAt = newest;
+      return;
+    }
+
+    final myId = (userId ?? '').trim();
+    final myName = (displayName ?? name ?? '').trim();
+    final events = timeline.where((entry) => entry.ts.isAfter(seenAt)).toList()
+      ..sort((a, b) => a.ts.compareTo(b.ts));
+
+    for (final entry in events) {
+      final kind = entry.kind.trim().toUpperCase();
+      final isMatch = kind == 'MATCH' ||
+          kind == 'MATCH_WIN' ||
+          kind == 'MATCH_LOSS' ||
+          kind == 'MATCH_FINISHED';
+      if (!isMatch) continue;
+
+      final meta = entry.meta ?? const <String, dynamic>{};
+      final winners = _stringsFrom(meta['winners'])
+        ..addAll(entry.winners)
+        ..add(entry.winner);
+      final losers = _stringsFrom(meta['losers'])..addAll(entry.losers);
+      final won = _containsMe(winners, myId, myName);
+      final lost = _containsMe(losers, myId, myName);
+      if (!won && !lost) continue;
+
+      final gameName = gameLabel(entry.game);
+      addNotification(
+        id: 'match-result:${entry.roomCode}:${entry.game}:${entry.ts.toIso8601String()}:${won ? 'win' : 'loss'}',
+        type: won ? 'win' : 'loss',
+        title: won ? 'فوز جديد' : 'نتيجة مباراة',
+        body: won
+            ? 'فزت في $gameName وزادت لآلئك.'
+            : 'انتهت مباراة $gameName وانخصمت لؤلؤة.',
+        createdAt: entry.ts,
+        data: {
+          'gameId': entry.game,
+          'roomCode': entry.roomCode,
+          'outcome': won ? 'win' : 'loss',
+        },
+      );
+    }
+
+    _timelineNotificationsSeenAt = newest;
+  }
+
+  List<String> _stringsFrom(dynamic value) {
+    if (value is List) {
+      return value
+          .map((item) => item.toString().trim())
+          .where((item) => item.isNotEmpty)
+          .toList();
+    }
+    if (value == null) return <String>[];
+    final text = value.toString().trim();
+    return text.isEmpty ? <String>[] : <String>[text];
+  }
+
+  bool _containsMe(Iterable<String> values, String myId, String myName) {
+    for (final raw in values) {
+      final value = raw.trim();
+      if (value.isEmpty) continue;
+      if (myId.isNotEmpty && value == myId) return true;
+      if (myName.isNotEmpty && value == myName) return true;
+    }
+    return false;
   }
 
   /// Used by ProfilePage for ring label
@@ -1587,6 +1740,63 @@ class TimelineEntry {
     required this.ts,
     this.meta,
   });
+}
+
+class AppNotificationEntry {
+  final String id;
+  final String type;
+  final String title;
+  final String body;
+  final DateTime createdAt;
+  final bool read;
+  final Map<String, dynamic> data;
+
+  const AppNotificationEntry({
+    required this.id,
+    required this.type,
+    required this.title,
+    required this.body,
+    required this.createdAt,
+    this.read = false,
+    this.data = const <String, dynamic>{},
+  });
+
+  factory AppNotificationEntry.fromJson(Map<String, dynamic> json) {
+    return AppNotificationEntry(
+      id: (json['id'] ?? '').toString(),
+      type: (json['type'] ?? 'info').toString(),
+      title: (json['title'] ?? '').toString(),
+      body: (json['body'] ?? '').toString(),
+      createdAt: DateTime.tryParse((json['createdAt'] ?? '').toString()) ??
+          DateTime.now(),
+      read: json['read'] == true,
+      data: json['data'] is Map
+          ? Map<String, dynamic>.from(json['data'] as Map)
+          : const <String, dynamic>{},
+    );
+  }
+
+  AppNotificationEntry copyWith({bool? read}) {
+    return AppNotificationEntry(
+      id: id,
+      type: type,
+      title: title,
+      body: body,
+      createdAt: createdAt,
+      read: read ?? this.read,
+      data: data,
+    );
+  }
+
+  Map<String, dynamic> toJson() => {
+        'id': id,
+        'type': type,
+        'title': title,
+        'body': body,
+        'createdAt': createdAt.toIso8601String(),
+        'read': read,
+        if (data.isNotEmpty) 'data': data,
+      };
 }
 
 class PlayerProfile {
