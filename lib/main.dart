@@ -238,7 +238,7 @@ class _AuthGateState extends State<AuthGate> with WidgetsBindingObserver {
         child: AlertDialog(
           backgroundColor: const Color(0xFF1C273B),
           title: const Text(
-            'فعّلي إشعارات إنزلي',
+            'فعّل إشعارات إنزلي',
             style: TextStyle(color: Colors.white),
           ),
           content: const Text(
@@ -252,7 +252,7 @@ class _AuthGateState extends State<AuthGate> with WidgetsBindingObserver {
             ),
             FilledButton(
               onPressed: () => Navigator.of(dialogContext).pop(true),
-              child: const Text('تفعيل'),
+              child: const Text('فعّل الإشعار'),
             ),
           ],
         ),
