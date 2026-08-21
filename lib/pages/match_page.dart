@@ -32,6 +32,13 @@ class MatchPage extends StatefulWidget {
 }
 
 class _MatchPageState extends State<MatchPage> with WidgetsBindingObserver {
+  static const int _maxLocalNotificationsPerRoom = 2;
+  static const Duration _timerEndNoticeCooldown = Duration(minutes: 10);
+  static final Map<String, Set<String>> _localNotificationSlotsByRoom =
+      <String, Set<String>>{};
+  static final Map<String, DateTime> _timerEndNoticeTimes =
+      <String, DateTime>{};
+
   Map<String, dynamic>? _room; // آخر نسخة من بيانات الروم
   Timer? _autoRefresh;
 
@@ -51,6 +58,7 @@ class _MatchPageState extends State<MatchPage> with WidgetsBindingObserver {
   bool _timerEndNotified = false;
   String? _timerRoundKey;
   String? _timerNotificationKey;
+  int? _scheduledTimerEndNotificationId;
   bool _closedNotified = false;
   bool _cancellingRoom = false;
   bool _allowPop = false;
@@ -315,6 +323,33 @@ class _MatchPageState extends State<MatchPage> with WidgetsBindingObserver {
     Navigator.pop(context);
   }
 
+  String _localNotificationRoomKey([String? code]) {
+    final roomCode =
+        (code ?? _room?['code'] ?? widget.room?['code'] ?? widget.app.roomCode)
+            ?.toString()
+            .trim();
+    return roomCode == null || roomCode.isEmpty
+        ? 'match:${identityHashCode(this)}'
+        : roomCode;
+  }
+
+  bool _reserveLocalNotificationSlot(String slot, {String? code}) {
+    final key = _localNotificationRoomKey(code);
+    final slots =
+        _localNotificationSlotsByRoom.putIfAbsent(key, () => <String>{});
+    if (slots.contains(slot)) return false;
+    if (slots.length >= _maxLocalNotificationsPerRoom) return false;
+    slots.add(slot);
+    return true;
+  }
+
+  void _cancelScheduledTimerEndNotification() {
+    final id = _scheduledTimerEndNotificationId;
+    if (id == null) return;
+    _scheduledTimerEndNotificationId = null;
+    unawaited(LocalGameNotifications.cancel(id));
+  }
+
   void _exitMatchPageOnly() {
     if (!mounted) return;
     _msg('طلعت من الصفحة فقط. إذا رجعت للروم لاحقاً بتلقاه مثل ما هو.');
@@ -386,12 +421,15 @@ class _MatchPageState extends State<MatchPage> with WidgetsBindingObserver {
       _closedNotified = true;
       _ticker?.cancel();
       _autoRefresh?.cancel();
+      _cancelScheduledTimerEndNotification();
       widget.app.setRoomCode(null);
-      unawaited(LocalGameNotifications.show(
-        id: LocalGameNotifications.idFor('room-cancelled:$code'),
-        title: 'انلغى القيم',
-        body: 'صار شي بالقيم، تكنسل ورجعت اللآلئ لأصحابها.',
-      ));
+      if (_reserveLocalNotificationSlot('room-cancelled', code: code)) {
+        unawaited(LocalGameNotifications.show(
+          id: LocalGameNotifications.idFor('room-cancelled:$code'),
+          title: 'انلغى القيم',
+          body: 'صار شي بالقيم، تكنسل ورجعت اللآلئ لأصحابها.',
+        ));
+      }
       if (mounted) {
         _msg('انلغى القيم ورجعت اللآلئ لأصحابها', color: Colors.green);
         setState(() => _cancellingRoom = false);
@@ -435,17 +473,26 @@ class _MatchPageState extends State<MatchPage> with WidgetsBindingObserver {
   }
 
   void _notifyTimerEnded() {
-    if (_timerEndNotified) return;
+    final code = (_room?['code'] ?? widget.app.roomCode ?? '').toString();
+    final noticeKey = 'timer-end:$code:${_timerRoundKey ?? ''}:$_timerSec';
+    final now = DateTime.now();
+    final lastNoticeAt = _timerEndNoticeTimes[noticeKey];
+    if (_timerEndNotified ||
+        (lastNoticeAt != null &&
+            now.difference(lastNoticeAt) < _timerEndNoticeCooldown)) {
+      return;
+    }
     _timerEndNotified = true;
-    unawaited(
-      LocalGameNotifications.show(
-        id: LocalGameNotifications.idFor(
-          'timer-end:${_room?['code'] ?? widget.app.roomCode ?? ''}',
+    _timerEndNoticeTimes[noticeKey] = now;
+    if (_reserveLocalNotificationSlot('timer-end', code: code)) {
+      unawaited(
+        LocalGameNotifications.show(
+          id: LocalGameNotifications.idFor(noticeKey),
+          title: 'انتهى عدّاد المباراة',
+          body: 'الحين اختاروا الفائز واعتمدوا النتيجة.',
         ),
-        title: 'انتهى عدّاد المباراة',
-        body: 'الحين اختاروا الفائز واعتمدوا النتيجة.',
-      ),
-    );
+      );
+    }
     Sfx.timerEnd(mute: widget.app.soundMuted == true);
     HapticFeedback.heavyImpact();
     if (!mounted) return;
@@ -491,7 +538,8 @@ class _MatchPageState extends State<MatchPage> with WidgetsBindingObserver {
     final endId = LocalGameNotifications.idFor('timer-end:$key');
 
     await LocalGameNotifications.requestPermission();
-    if (announceStart) {
+    if (announceStart &&
+        _reserveLocalNotificationSlot('timer-start', code: code)) {
       await LocalGameNotifications.show(
         id: timerId,
         title: 'عداد $gameLabel شغال',
@@ -499,12 +547,15 @@ class _MatchPageState extends State<MatchPage> with WidgetsBindingObserver {
         endAt: endAt,
       );
     }
-    await LocalGameNotifications.schedule(
-      id: endId,
-      title: 'انتهى عدّاد $gameLabel',
-      body: 'الحين اختاروا الفائز واعتمدوا النتيجة.',
-      delay: Duration(seconds: remaining),
-    );
+    if (_reserveLocalNotificationSlot('timer-end', code: code)) {
+      _scheduledTimerEndNotificationId = endId;
+      await LocalGameNotifications.schedule(
+        id: endId,
+        title: 'انتهى عدّاد $gameLabel',
+        body: 'الحين اختاروا الفائز واعتمدوا النتيجة.',
+        delay: Duration(seconds: remaining),
+      );
+    }
   }
 
   Future<Position?> _getLocation() async {
@@ -606,13 +657,6 @@ class _MatchPageState extends State<MatchPage> with WidgetsBindingObserver {
           orElse: () => const <String, dynamic>{},
         ));
         _msg('انضم $name');
-        unawaited(LocalGameNotifications.show(
-          id: LocalGameNotifications.idFor(
-            'player-joined:${_room?['code'] ?? widget.app.roomCode ?? ''}:$id',
-          ),
-          title: 'تحديث المباراة',
-          body: 'انضم $name للروم.',
-        ));
       }
       Sfx.tap(mute: widget.app.soundMuted == true);
       HapticFeedback.lightImpact();
@@ -862,15 +906,18 @@ class _MatchPageState extends State<MatchPage> with WidgetsBindingObserver {
           _closedNotified = true;
           _ticker?.cancel();
           _autoRefresh?.cancel();
+          _cancelScheduledTimerEndNotification();
           widget.app.setRoomCode(null);
           if (status == 'cancelled') {
             _msg('انلغى القيم ورجعت اللآلئ لأصحابها',
                 color: Colors.greenAccent);
-            unawaited(LocalGameNotifications.show(
-              id: LocalGameNotifications.idFor('room-cancelled:$code'),
-              title: 'انلغى القيم',
-              body: 'صار شي بالقيم، تكنسل ورجعت اللآلئ لأصحابها.',
-            ));
+            if (_reserveLocalNotificationSlot('room-cancelled', code: code)) {
+              unawaited(LocalGameNotifications.show(
+                id: LocalGameNotifications.idFor('room-cancelled:$code'),
+                title: 'انلغى القيم',
+                body: 'صار شي بالقيم، تكنسل ورجعت اللآلئ لأصحابها.',
+              ));
+            }
           } else {
             _msg('الروم انتهى');
           }
@@ -986,10 +1033,10 @@ class _MatchPageState extends State<MatchPage> with WidgetsBindingObserver {
   @override
   Widget build(BuildContext context) {
     final effectiveRoom = _room ?? widget.room;
-    final code = (effectiveRoom?['code'] ?? widget.app.roomCode ?? '').toString();
-    final game =
-        (effectiveRoom?['gameId'] ?? widget.app.selectedGame ?? 'لعبة')
-            .toString();
+    final code =
+        (effectiveRoom?['code'] ?? widget.app.roomCode ?? '').toString();
+    final game = (effectiveRoom?['gameId'] ?? widget.app.selectedGame ?? 'لعبة')
+        .toString();
     final sponsorCode = widget.sponsorCode;
     final timerMinutes = kGameRules[game]?.timerMinutes ?? 10;
     final timerSec = timerMinutes * 60;
