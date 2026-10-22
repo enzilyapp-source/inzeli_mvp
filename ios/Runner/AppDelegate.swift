@@ -17,6 +17,21 @@ import UserNotifications
       channel.setMethodCallHandler { call, result in
         let args = call.arguments as? [String: Any] ?? [:]
         switch call.method {
+        case "delivered":
+          UNUserNotificationCenter.current().getDeliveredNotifications { notifications in
+            let cutoff = Date().addingTimeInterval(-86400)
+            let expired = notifications.filter { $0.date < cutoff }.map { $0.request.identifier }
+            UNUserNotificationCenter.current().removeDeliveredNotifications(withIdentifiers: expired)
+            let entries: [[String: Any]] = notifications.filter { $0.date >= cutoff }.map { notification in
+              let content = notification.request.content
+              let custom = content.userInfo["custom"] as? [String: Any] ?? [:]
+              return ["id": custom["i"] as? String ?? notification.request.identifier,
+                      "title": content.title, "body": content.body,
+                      "createdAt": ISO8601DateFormatter().string(from: notification.date),
+                      "data": custom["a"] as? [String: Any] ?? [:]]
+            }
+            DispatchQueue.main.async { result(entries) }
+          }
         case "requestPermission":
           self.requestNotificationPermission(result)
         case "show":

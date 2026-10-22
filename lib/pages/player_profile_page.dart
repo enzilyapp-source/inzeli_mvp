@@ -2,14 +2,41 @@
 import 'dart:convert';
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 import '../state.dart';
 import '../widgets/challenge_rank_visuals.dart';
+
+const Map<String, String> _playerProfileGameSvgAssetById = <String, String>{
+  'قدم': 'lib/assets/games_svg/games-01.svg',
+  'طائره': 'lib/assets/games_svg/games-02.svg',
+  'سله': 'lib/assets/games_svg/games-03.svg',
+  'دفان': 'lib/assets/games_svg/games-26.svg',
+  'تنس ارضي': 'lib/assets/games_svg/games-05.svg',
+  'بيبيفوت': 'lib/assets/games_svg/games-06.svg',
+  'بادل': 'lib/assets/games_svg/games-07.svg',
+  'بلوت': 'lib/assets/games_svg/games-24.svg',
+  'هند': 'lib/assets/games_svg/games-09.svg',
+  'كوت': 'lib/assets/games_svg/games-08.svg',
+  'سبيتة': 'lib/assets/games_svg/games-25.svg',
+  'بولنج': 'lib/assets/games_svg/games-16.svg',
+  'بلياردو': 'lib/assets/games_svg/games-15.svg',
+  'تنس طاولة': 'lib/assets/games_svg/games-17.svg',
+  'شطرنج': 'lib/assets/games_svg/games-18.svg',
+  'تريكس': 'lib/assets/games_svg/games-11.svg',
+  'دامه': 'lib/assets/games_svg/games-19.svg',
+  'كيرم': 'lib/assets/games_svg/games-20.svg',
+  'دومنه': 'lib/assets/games_svg/games-21.svg',
+  'طاوله': 'lib/assets/games_svg/games-22.svg',
+  'اونو': 'lib/assets/games_svg/games-13.svg',
+  'جاكارو': 'lib/assets/games_svg/games-23.svg',
+};
 
 class PlayerProfilePage extends StatefulWidget {
   final AppState app;
   final String playerName;
+  final String? userId;
   const PlayerProfilePage(
-      {super.key, required this.app, required this.playerName});
+      {super.key, required this.app, required this.playerName, this.userId});
 
   @override
   State<PlayerProfilePage> createState() => _PlayerProfilePageState();
@@ -25,13 +52,16 @@ class _PlayerProfilePageState extends State<PlayerProfilePage> {
     const cardBg = Color(0xFF132339);
     String norm(String? s) => (s ?? '').trim().toLowerCase();
     final app = widget.app;
-    final isMe = norm(playerName) == norm(app.displayName) ||
-        norm(playerName) == norm(app.name) ||
-        norm(playerName) == norm(app.email) ||
-        norm(playerName) == norm(app.userId) ||
-        norm(playerName) == norm(app.publicId);
+    final isMe = widget.userId != null
+        ? widget.userId == app.userId
+        : norm(playerName) == norm(app.displayName) ||
+            norm(playerName) == norm(app.name) ||
+            norm(playerName) == norm(app.email) ||
+            norm(playerName) == norm(app.userId) ||
+            norm(playerName) == norm(app.publicId);
     final isPrivate = (app.profilePrivate ?? false) && !isMe;
-    final profileKey = isMe ? (app.displayName ?? playerName) : playerName;
+    final profileKey =
+        widget.userId ?? (isMe ? (app.displayName ?? playerName) : playerName);
     Map<String, dynamic>? backendProfile;
     if (app.userProfiles.containsKey(profileKey)) {
       backendProfile = app.userProfiles[profileKey];
@@ -64,6 +94,8 @@ class _PlayerProfilePageState extends State<PlayerProfilePage> {
       ..sort((a, b) => b.ts.compareTo(a.ts));
     final notFound =
         p == null && stats == null && backendProfile == null && !isMe;
+    final publicUsername =
+        isMe ? app.username : backendProfile?['username']?.toString();
     final displayId = isMe
         ? (app.publicId ?? app.userId ?? '')
         : (stats?['publicId']?.toString() ?? stats?['id']?.toString() ?? '');
@@ -77,9 +109,29 @@ class _PlayerProfilePageState extends State<PlayerProfilePage> {
       pearls = app.gamePearls;
     }
 
-    final (topGame, topPearls) = _topPearlGame(pearls, app);
-    final recentWins = _recentWins(matches, profileKey, app);
-    final rankVisual = playerRankForPearls(topPearls);
+    Map<String, int> badgeProgress = {};
+    final rawBadgeProgress = stats?['gameBadgeProgress'];
+    if (rawBadgeProgress is Map) {
+      badgeProgress = rawBadgeProgress.map(
+        (k, v) => MapEntry(k.toString(), (v as num?)?.toInt() ?? 0),
+      );
+    } else if (isMe || app.gameBadgeProgress.isNotEmpty) {
+      badgeProgress = app.gameBadgeProgress;
+    }
+
+    final favoriteGame =
+        _favoriteGame(pearls, badgeProgress, matches, profileKey, app);
+    final topGame = favoriteGame.label;
+    final topPearls = favoriteGame.pearls;
+    final rankVisual = playerRankForThreshold(
+      AppState.badgeThresholdForPearls(favoriteGame.badgeProgress),
+    );
+    final earnedBadges = _earnedBadgeEntries(
+      badgeProgress.isNotEmpty ? badgeProgress : pearls,
+      matches,
+      profileKey,
+      app,
+    );
     final showMoreVisible = matches.length > 10;
     final visibleMatches =
         _showAllMatches ? matches : matches.take(10).toList();
@@ -88,8 +140,7 @@ class _PlayerProfilePageState extends State<PlayerProfilePage> {
     ImageProvider? avatarImage;
     final avatarB64 =
         backendProfile?['avatarBase64']?.toString() ?? p?.avatarBase64;
-    final avatarUrl =
-        backendProfile?['avatarUrl']?.toString() ?? p?.avatarUrl;
+    final avatarUrl = backendProfile?['avatarUrl']?.toString() ?? p?.avatarUrl;
     final themeId = backendProfile?['themeId']?.toString() ?? p?.themeId;
     if (avatarB64 != null && avatarB64.isNotEmpty) {
       try {
@@ -134,13 +185,17 @@ class _PlayerProfilePageState extends State<PlayerProfilePage> {
                   Positioned(
                     top: 10,
                     left: 12,
-                    child: RankBadge(rank: rankVisual),
+                    child: _PlayerGameRankBadge(
+                      rank: rankVisual,
+                      gameId: favoriteGame.gameId,
+                      gameLabel: favoriteGame.label,
+                    ),
                   ),
                   Positioned(
                     right: 12,
                     bottom: -18,
-                    child: _TrophyStrip(
-                      recentWins: recentWins,
+                    child: _PlayerEarnedBadgeStack(
+                      badges: earnedBadges,
                       size: 44,
                     ),
                   ),
@@ -180,7 +235,9 @@ class _PlayerProfilePageState extends State<PlayerProfilePage> {
                         if (displayId.isNotEmpty) ...[
                           const SizedBox(height: 4),
                           Text(
-                            _shortId(displayId),
+                            publicUsername != null
+                                ? '@$publicUsername'
+                                : _shortId(displayId),
                             style: TextStyle(
                               color: Colors.white.withValues(alpha: .72),
                               fontSize: 12,
@@ -318,27 +375,151 @@ String _initials(String name) {
       parts[1].characters.take(1).toString());
 }
 
-(String, int) _topPearlGame(Map<String, int> pearls, AppState app) {
-  if (pearls.isNotEmpty) {
-    final top = pearls.entries.reduce((a, b) => a.value >= b.value ? a : b);
-    return (app.gameLabel(top.key), top.value);
-  }
-  final fallback = app.selectedGame ?? '—';
-  return (app.gameLabel(fallback), app.pearlsForGame(fallback));
-}
-
-List<(String, DateTime)> _recentWins(
-    List<TimelineEntry> matches, String player, AppState app) {
-  final wins = matches.where((t) => t.winner == player).toList()
-    ..sort((a, b) => b.ts.compareTo(a.ts));
-  return wins.take(3).map((t) => (app.gameLabel(t.game), t.ts)).toList();
-}
-
 List<(String, int)> _pearlEntries(Map<String, int> pearls, AppState app) {
   final list =
       pearls.entries.map((e) => (app.gameLabel(e.key), e.value)).toList();
   list.sort((a, b) => a.$1.compareTo(b.$1));
   return list;
+}
+
+bool _isMatchEvent(TimelineEntry entry) {
+  final kind = entry.kind.trim().toUpperCase();
+  return kind.isEmpty ||
+      kind == 'MATCH' ||
+      kind == 'MATCH_WIN' ||
+      kind == 'MATCH_LOSS' ||
+      kind == 'MATCH_FINISHED';
+}
+
+bool _entryInvolvesPlayer(TimelineEntry entry, String player) {
+  return entry.winner == player ||
+      entry.winners.contains(player) ||
+      entry.losers.contains(player);
+}
+
+Set<String> _playedGameIds(
+  List<TimelineEntry> matches,
+  String player,
+  AppState app,
+) {
+  final played = <String>{};
+  for (final entry in app.timeline) {
+    final gameId = entry.game.trim();
+    if (gameId.isEmpty) continue;
+    if (_isMatchEvent(entry) && _entryInvolvesPlayer(entry, player)) {
+      played.add(gameId);
+    }
+  }
+  for (final entry in matches) {
+    final gameId = entry.game.trim();
+    if (gameId.isEmpty) continue;
+    if (_isMatchEvent(entry) && _entryInvolvesPlayer(entry, player)) {
+      played.add(gameId);
+    }
+  }
+  return played;
+}
+
+int _timelinePlayedCount(
+  List<TimelineEntry> matches,
+  String player,
+  String gameId,
+  AppState app,
+) {
+  final source = app.timeline.isNotEmpty ? app.timeline : matches;
+  return source
+      .where((entry) =>
+          entry.game.trim() == gameId &&
+          _isMatchEvent(entry) &&
+          _entryInvolvesPlayer(entry, player))
+      .length;
+}
+
+_PlayerGameSummary _favoriteGame(
+  Map<String, int> pearls,
+  Map<String, int> badgeProgress,
+  List<TimelineEntry> matches,
+  String player,
+  AppState app,
+) {
+  final played = _playedGameIds(matches, player, app);
+  final gameIds = <String>{
+    ...played,
+    ...pearls.keys,
+    ...badgeProgress.keys,
+    if (app.selectedGame != null && app.selectedGame!.isNotEmpty)
+      app.selectedGame!,
+  };
+
+  final summaries = <_PlayerGameSummary>[];
+  for (final raw in gameIds) {
+    final gameId = raw.trim();
+    if (gameId.isEmpty) continue;
+    final playedCount = _timelinePlayedCount(matches, player, gameId, app);
+    final active = played.contains(gameId) || playedCount > 0;
+    if (!active && !pearls.containsKey(gameId)) continue;
+    summaries.add(_PlayerGameSummary(
+      gameId: gameId,
+      label: app.gameLabel(gameId),
+      pearls: pearls[gameId] ?? app.pearlsForGame(gameId),
+      badgeProgress: badgeProgress[gameId] ??
+          pearls[gameId] ??
+          app.badgeProgressForGame(gameId),
+      playedCount: playedCount,
+    ));
+  }
+
+  if (summaries.isEmpty) {
+    return _PlayerGameSummary(
+      gameId: '',
+      label: app.tr(ar: 'بدون لعبة', en: 'No game'),
+      pearls: 0,
+      badgeProgress: 0,
+      playedCount: 0,
+    );
+  }
+
+  summaries.sort((a, b) {
+    if (a.playedCount != b.playedCount) {
+      return b.playedCount.compareTo(a.playedCount);
+    }
+    if (a.badgeProgress != b.badgeProgress) {
+      return b.badgeProgress.compareTo(a.badgeProgress);
+    }
+    if (a.pearls != b.pearls) return b.pearls.compareTo(a.pearls);
+    return a.label.compareTo(b.label);
+  });
+  return summaries.first;
+}
+
+List<_PlayerEarnedBadgeEntry> _earnedBadgeEntries(
+  Map<String, int> pearls,
+  List<TimelineEntry> matches,
+  String player,
+  AppState app,
+) {
+  final played = _playedGameIds(matches, player, app);
+  final entries = <_PlayerEarnedBadgeEntry>[];
+  for (final entry in pearls.entries) {
+    final gameId = entry.key.trim();
+    if (gameId.isEmpty) continue;
+    final threshold = AppState.badgeThresholdForPearls(entry.value);
+    if (threshold <= 5) continue;
+    if (!played.contains(gameId) &&
+        _timelinePlayedCount(matches, player, gameId, app) == 0) {
+      continue;
+    }
+    entries.add(_PlayerEarnedBadgeEntry(
+      gameId: gameId,
+      gameLabel: app.gameLabel(gameId),
+      threshold: threshold,
+    ));
+  }
+  entries.sort((a, b) {
+    if (a.threshold != b.threshold) return b.threshold.compareTo(a.threshold);
+    return a.gameLabel.compareTo(b.gameLabel);
+  });
+  return entries;
 }
 
 String _shortId(String id) {
@@ -413,96 +594,217 @@ class _PearlBadge extends StatelessWidget {
   }
 }
 
-class _TrophyStrip extends StatelessWidget {
-  final List<(String, DateTime)> recentWins;
+class _PlayerGameSummary {
+  final String gameId;
+  final String label;
+  final int pearls;
+  final int badgeProgress;
+  final int playedCount;
+
+  const _PlayerGameSummary({
+    required this.gameId,
+    required this.label,
+    required this.pearls,
+    required this.badgeProgress,
+    required this.playedCount,
+  });
+}
+
+class _PlayerEarnedBadgeEntry {
+  final String gameId;
+  final String gameLabel;
+  final int threshold;
+
+  const _PlayerEarnedBadgeEntry({
+    required this.gameId,
+    required this.gameLabel,
+    required this.threshold,
+  });
+}
+
+class _PlayerGameIconBadge extends StatelessWidget {
+  final String gameId;
   final double size;
-  const _TrophyStrip({required this.recentWins, this.size = 46});
+  final Color? iconColor;
+  final Color backgroundColor;
+
+  const _PlayerGameIconBadge({
+    required this.gameId,
+    this.size = 22,
+    this.iconColor,
+    this.backgroundColor = Colors.white,
+  });
 
   @override
   Widget build(BuildContext context) {
-    const trophyFill = Color(0xFFE3E6EF);
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: List.generate(3, (i) {
-        if (i >= recentWins.length) {
-          return Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 3),
-            child: _TrophyCircle(
-              label: '—',
-              date: null,
-              filled: false,
-              color: Colors.white.withValues(alpha: .4),
-              size: size,
+    final asset = _playerProfileGameSvgAssetById[gameId];
+    return Container(
+      width: size,
+      height: size,
+      padding: EdgeInsets.all(size * 0.16),
+      decoration: BoxDecoration(
+        color: backgroundColor,
+        shape: BoxShape.circle,
+      ),
+      child: asset == null
+          ? Icon(
+              Icons.sports_esports_rounded,
+              size: size * 0.62,
+              color: iconColor ?? const Color(0xFF1E2F4D),
+            )
+          : SvgPicture.asset(
+              asset,
+              fit: BoxFit.contain,
+              colorFilter: iconColor == null
+                  ? null
+                  : ColorFilter.mode(iconColor!, BlendMode.srcIn),
             ),
-          );
-        }
-        final t = recentWins[i];
-        return Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 3),
-          child: _TrophyCircle(
-            label: t.$1,
-            date: t.$2,
-            filled: true,
-            color: trophyFill,
-            size: size,
-          ),
-        );
-      }),
     );
   }
 }
 
-class _TrophyCircle extends StatelessWidget {
-  final String label;
-  final DateTime? date;
-  final bool filled;
-  final Color color;
-  final double size;
-  const _TrophyCircle(
-      {required this.label,
-      required this.date,
-      required this.filled,
-      required this.color,
-      this.size = 46});
+class _PlayerGameRankBadge extends StatelessWidget {
+  final PlayerRank rank;
+  final String gameId;
+  final String gameLabel;
+
+  const _PlayerGameRankBadge({
+    required this.rank,
+    required this.gameId,
+    required this.gameLabel,
+  });
 
   @override
   Widget build(BuildContext context) {
-    final textColor = filled ? Colors.black : Colors.white;
+    final data = getRankData(rank);
+    return Directionality(
+      textDirection: TextDirection.rtl,
+      child: Container(
+        constraints: const BoxConstraints(maxWidth: 170),
+        padding: const EdgeInsetsDirectional.fromSTEB(9, 6, 10, 6),
+        decoration: BoxDecoration(
+          color: Colors.white.withValues(alpha: 0.08),
+          borderRadius: BorderRadius.circular(18),
+          border: Border.all(color: Colors.white.withValues(alpha: 0.24)),
+          boxShadow: [
+            BoxShadow(
+              color: data.colors.last.withValues(alpha: 0.12),
+              blurRadius: 14,
+            ),
+          ],
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            _PlayerGameIconBadge(
+              gameId: gameId,
+              size: 24,
+              iconColor: const Color(0xFF1E2F4D),
+              backgroundColor: Colors.white.withValues(alpha: 0.92),
+            ),
+            const SizedBox(width: 7),
+            Flexible(
+              child: Text(
+                gameId.isEmpty ? data.arabic : '${data.arabic} • $gameLabel',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.w900,
+                  fontSize: 13,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _PlayerEarnedBadgeStack extends StatelessWidget {
+  final List<_PlayerEarnedBadgeEntry> badges;
+  final double size;
+  const _PlayerEarnedBadgeStack({required this.badges, this.size = 44});
+
+  @override
+  Widget build(BuildContext context) {
+    final visible = badges.take(3).toList();
+    if (visible.isEmpty) return SizedBox(width: size, height: size);
+    final overlap = size * 0.52;
+    final width = size + (visible.length - 1) * overlap;
+    return Tooltip(
+      message: visible
+          .map((badge) => '${badge.gameLabel} • ${badge.threshold}')
+          .join('\n'),
+      child: SizedBox(
+        width: width,
+        height: size + 8,
+        child: Stack(
+          clipBehavior: Clip.none,
+          children: [
+            for (var i = 0; i < visible.length; i++)
+              PositionedDirectional(
+                end: i * overlap,
+                top: 0,
+                child: _PlayerEarnedBadgeCircle(
+                  badge: visible[i],
+                  size: size,
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _PlayerEarnedBadgeCircle extends StatelessWidget {
+  final _PlayerEarnedBadgeEntry badge;
+  final double size;
+  const _PlayerEarnedBadgeCircle({required this.badge, this.size = 44});
+
+  @override
+  Widget build(BuildContext context) {
+    final rank = playerRankForThreshold(badge.threshold);
+    final rankData = getRankData(rank);
     return Container(
       width: size,
       height: size,
       decoration: BoxDecoration(
-        color: filled ? color : Colors.white,
+        gradient: LinearGradient(
+          colors: rankData.colors,
+          begin: Alignment.topRight,
+          end: Alignment.bottomLeft,
+        ),
         shape: BoxShape.circle,
+        border: Border.all(color: Colors.white, width: 2),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.12),
-            blurRadius: 6,
-            offset: const Offset(0, 4),
+            color: rankData.colors.last.withValues(alpha: 0.32),
+            blurRadius: 10,
+            offset: const Offset(0, 5),
           ),
         ],
       ),
-      child: Center(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(Icons.emoji_events_rounded,
-                size: size * 0.35, color: Colors.amber),
-            if (filled) ...[
-              SizedBox(height: size * 0.05),
-              Text(
-                label,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(
-                  color: textColor,
-                  fontWeight: FontWeight.w800,
-                  fontSize: size * 0.22,
-                ),
-              ),
-            ],
-          ],
-        ),
+      child: Stack(
+        alignment: Alignment.center,
+        children: [
+          Icon(
+            rankData.icon,
+            size: size * 0.48,
+            color: Colors.white.withValues(alpha: 0.92),
+          ),
+          PositionedDirectional(
+            end: size * 0.05,
+            bottom: size * 0.05,
+            child: _PlayerGameIconBadge(
+              gameId: badge.gameId,
+              size: size * 0.42,
+              iconColor: const Color(0xFF1E2F4D),
+            ),
+          ),
+        ],
       ),
     );
   }

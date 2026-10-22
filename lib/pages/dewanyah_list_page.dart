@@ -13,6 +13,18 @@ import '../widgets/primary_pill_button.dart';
 import 'match_page.dart';
 import 'player_profile_page.dart';
 
+Color _dewColor(dynamic value, Color fallback) {
+  final hex = (value ?? '')
+      .toString()
+      .trim()
+      .replaceFirst('#', '')
+      .replaceFirst('0x', '');
+  final number = int.tryParse(hex.length == 6 ? 'FF$hex' : hex, radix: 16);
+  return number != null && (hex.length == 6 || hex.length == 8)
+      ? Color(number).withValues(alpha: 1)
+      : fallback;
+}
+
 class DewanyahListPage extends StatefulWidget {
   final AppState app;
   final String? initialGameId;
@@ -53,9 +65,8 @@ class _DewanyahListPageState extends State<DewanyahListPage> {
     _future = _loadDewanyahs();
     unawaited(LocalGameNotifications.requestPermission());
     final games = _gameOptions();
-    _filterGameId = games.contains(widget.initialGameId)
-        ? widget.initialGameId
-        : null;
+    _filterGameId =
+        games.contains(widget.initialGameId) ? widget.initialGameId : null;
     _requestGameId = _filterGameId ?? (games.isNotEmpty ? games.first : null);
     _refreshOwnerPending(showToastOnIncrease: false);
     _startPendingPoll();
@@ -402,7 +413,8 @@ class _DewanyahListPageState extends State<DewanyahListPage> {
       Sfx.error(mute: widget.app.soundMuted == true);
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('عندك قيم شغال، بس تعذر فتحه: ${ApiRoom.friendlyError(e)}'),
+          content:
+              Text('عندك قيم شغال، بس تعذر فتحه: ${ApiRoom.friendlyError(e)}'),
         ),
       );
     }
@@ -584,7 +596,8 @@ class _DewanyahListPageState extends State<DewanyahListPage> {
     return fallback;
   }
 
-  String _resolvedGameForStart(Map<String, dynamic> dew, String requestedGameId) {
+  String _resolvedGameForStart(
+      Map<String, dynamic> dew, String requestedGameId) {
     final visibleGames = _visibleGames(dew);
     final requested = requestedGameId.trim();
     if (requested.isNotEmpty && visibleGames.contains(requested)) {
@@ -667,14 +680,14 @@ class _DewanyahListPageState extends State<DewanyahListPage> {
       final serverName = _normalizeDewanyahName(_dewName(server));
       if (serverName != localName) return false;
 
-      final serverOwnerId =
-          ((server['ownerUserId'] ?? server['ownerId']) ?? '').toString().trim();
+      final serverOwnerId = ((server['ownerUserId'] ?? server['ownerId']) ?? '')
+          .toString()
+          .trim();
       if (myUserId.isNotEmpty && serverOwnerId.isNotEmpty) {
         return serverOwnerId == myUserId;
       }
 
-      final serverOwnerName =
-          _normalizeDewanyahName(_ownerName(server));
+      final serverOwnerName = _normalizeDewanyahName(_ownerName(server));
       return myDisplay.isNotEmpty &&
           serverOwnerName.isNotEmpty &&
           serverOwnerName == myDisplay;
@@ -682,10 +695,7 @@ class _DewanyahListPageState extends State<DewanyahListPage> {
   }
 
   String _normalizeDewanyahName(String value) {
-    return value
-        .trim()
-        .replaceAll(RegExp(r'\s+'), ' ')
-        .toLowerCase();
+    return value.trim().replaceAll(RegExp(r'\s+'), ' ').toLowerCase();
   }
 
   Future<void> _showMembers(Map<String, dynamic> dew) async {
@@ -714,15 +724,14 @@ class _DewanyahListPageState extends State<DewanyahListPage> {
                       final canRemove =
                           mid.isNotEmpty && mid != widget.app.userId;
                       final user = (m['user'] as Map?)?.cast<String, dynamic>();
-                      final displayName =
-                          (user?['displayName'] ??
-                                  user?['name'] ??
-                                  user?['email'] ??
-                                  m['displayName'] ??
-                                  m['name'] ??
-                                  m['email'])
-                              ?.toString()
-                              .trim();
+                      final displayName = (user?['displayName'] ??
+                              user?['name'] ??
+                              user?['email'] ??
+                              m['displayName'] ??
+                              m['name'] ??
+                              m['email'])
+                          ?.toString()
+                          .trim();
                       final statusLabel = switch (status) {
                         'pending' => 'قيد المراجعة',
                         'approved' => 'مقبول',
@@ -1007,6 +1016,10 @@ class _DewanyahListPageState extends State<DewanyahListPage> {
 
     showModalBottomSheet(
       context: context,
+      backgroundColor: Color.alphaBlend(
+          _dewColor(dew['themePrimary'], const Color(0xFF304A5D))
+              .withValues(alpha: 0.3),
+          const Color(0xFF1C273B)),
       showDragHandle: true,
       isScrollControlled: true,
       shape: const RoundedRectangleBorder(
@@ -1158,6 +1171,8 @@ class _DewanyahListPageState extends State<DewanyahListPage> {
             final pendingCount = _pendingByDew[id] ?? 0;
             return _DewanyahTile(
               name: _dewName(dew),
+              primary: _dewColor(dew['themePrimary'], const Color(0xFF304A5D)),
+              accent: _dewColor(dew['themeAccent'], const Color(0xFFE49A2C)),
               imageUrl: _imageUrl(dew),
               isMine: _isMineOrJoined(dew),
               pendingCount: pendingCount,
@@ -1229,6 +1244,8 @@ class _DewanyahListPageState extends State<DewanyahListPage> {
             dewanyahId: id,
             title: _dewName(dew),
             gameId: game,
+            primary: _dewColor(dew['themePrimary'], const Color(0xFF304A5D)),
+            accent: _dewColor(dew['themeAccent'], const Color(0xFFE49A2C)),
             owner: _ownerName(dew),
           ),
         );
@@ -1241,6 +1258,11 @@ class _DewanyahListPageState extends State<DewanyahListPage> {
     final gameLabel =
         spec.gameId.isEmpty ? 'كل الألعاب' : widget.app.gameLabel(spec.gameId);
     return Card(
+      color: Color.alphaBlend(
+          spec.primary.withValues(alpha: 0.24), const Color(0xFF1C273B)),
+      shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16),
+          side: BorderSide(color: spec.accent, width: 1.5)),
       child: Padding(
         padding: const EdgeInsets.all(12),
         child: Column(
@@ -1327,7 +1349,7 @@ class _DewanyahListPageState extends State<DewanyahListPage> {
                             children: [
                               CircleAvatar(
                                 backgroundColor: isTop
-                                    ? const Color(0xFFFFC16B)
+                                    ? spec.accent
                                     : const Color(0xFF273347),
                                 child: Text(
                                   '${index + 1}',
@@ -1347,7 +1369,7 @@ class _DewanyahListPageState extends State<DewanyahListPage> {
                                       vertical: 2,
                                     ),
                                     decoration: BoxDecoration(
-                                      color: const Color(0xFFFFA53A),
+                                      color: spec.accent,
                                       borderRadius: BorderRadius.circular(8),
                                     ),
                                     child: const Text(
@@ -1663,57 +1685,57 @@ class _DewanyahListPageState extends State<DewanyahListPage> {
                 physics: const AlwaysScrollableScrollPhysics(),
                 padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
                 children: [
-                    if (filterLabel != null) ...[
-                      const SizedBox(height: 4),
-                      Text(
-                        'يعرض لك الدواوين المرتبطة بلعبة $filterLabel',
-                        style: TextStyle(
-                          color: onSurface.withValues(alpha: 0.7),
-                          fontWeight: FontWeight.w700,
-                        ),
+                  if (filterLabel != null) ...[
+                    const SizedBox(height: 4),
+                    Text(
+                      'يعرض لك الدواوين المرتبطة بلعبة $filterLabel',
+                      style: TextStyle(
+                        color: onSurface.withValues(alpha: 0.7),
+                        fontWeight: FontWeight.w700,
                       ),
-                      const SizedBox(height: 10),
-                    ],
-                    if (filterLabel == null) const SizedBox(height: 6),
-                    const _SectionTitle(
-                      title: 'دواويني',
-                      icon: Icons.home_work_outlined,
                     ),
                     const SizedBox(height: 10),
-                    if (myDewanyahs.isEmpty)
-                      const _PanelMessage(
-                        icon: Icons.groups_2_outlined,
-                        title: 'ما عندك ديوانية مفعلة',
-                        text: 'انضم لديوانية أو ارسل طلب ديوانية من الزر تحت.',
-                      )
-                    else
-                      _buildDewanyahGrid(myDewanyahs),
-                    if (discoverDewanyahs.isNotEmpty) ...[
-                      const SizedBox(height: 16),
-                      OutlinedButton.icon(
-                        onPressed: () => setState(
-                          () => _showMoreDewanyahs = !_showMoreDewanyahs,
-                        ),
-                        icon: Icon(
-                          _showMoreDewanyahs
-                              ? Icons.keyboard_arrow_up
-                              : Icons.keyboard_arrow_down,
-                        ),
-                        label: Text(
-                          _showMoreDewanyahs
-                              ? 'إخفاء الدواوين'
-                              : 'اكتشف دواوين أكثر',
-                        ),
-                      ),
-                      if (_showMoreDewanyahs) ...[
-                        const SizedBox(height: 10),
-                        _buildDewanyahGrid(discoverDewanyahs),
-                      ],
-                    ],
+                  ],
+                  if (filterLabel == null) const SizedBox(height: 6),
+                  const _SectionTitle(
+                    title: 'دواويني',
+                    icon: Icons.home_work_outlined,
+                  ),
+                  const SizedBox(height: 10),
+                  if (myDewanyahs.isEmpty)
+                    const _PanelMessage(
+                      icon: Icons.groups_2_outlined,
+                      title: 'ما عندك ديوانية مفعلة',
+                      text: 'انضم لديوانية أو ارسل طلب ديوانية من الزر تحت.',
+                    )
+                  else
+                    _buildDewanyahGrid(myDewanyahs),
+                  if (discoverDewanyahs.isNotEmpty) ...[
                     const SizedBox(height: 16),
-                    _buildBoardCarouselSection(list),
-                    const SizedBox(height: 14),
-                    _buildRequestSection(),
+                    OutlinedButton.icon(
+                      onPressed: () => setState(
+                        () => _showMoreDewanyahs = !_showMoreDewanyahs,
+                      ),
+                      icon: Icon(
+                        _showMoreDewanyahs
+                            ? Icons.keyboard_arrow_up
+                            : Icons.keyboard_arrow_down,
+                      ),
+                      label: Text(
+                        _showMoreDewanyahs
+                            ? 'إخفاء الدواوين'
+                            : 'اكتشف دواوين أكثر',
+                      ),
+                    ),
+                    if (_showMoreDewanyahs) ...[
+                      const SizedBox(height: 10),
+                      _buildDewanyahGrid(discoverDewanyahs),
+                    ],
+                  ],
+                  const SizedBox(height: 16),
+                  _buildBoardCarouselSection(list),
+                  const SizedBox(height: 14),
+                  _buildRequestSection(),
                 ],
               ),
             );
@@ -1729,12 +1751,16 @@ class _DewBoardSpec {
   final String title;
   final String gameId;
   final String owner;
+  final Color primary;
+  final Color accent;
 
   const _DewBoardSpec({
     required this.dewanyahId,
     required this.title,
     required this.gameId,
     required this.owner,
+    required this.primary,
+    required this.accent,
   });
 }
 
@@ -1790,6 +1816,8 @@ class _MiniPearlPill extends StatelessWidget {
 
 class _DewanyahTile extends StatelessWidget {
   final String name;
+  final Color primary;
+  final Color accent;
   final String? imageUrl;
   final bool isMine;
   final int pendingCount;
@@ -1798,6 +1826,8 @@ class _DewanyahTile extends StatelessWidget {
 
   const _DewanyahTile({
     required this.name,
+    required this.primary,
+    required this.accent,
     required this.imageUrl,
     required this.isMine,
     required this.pendingCount,
@@ -1809,6 +1839,11 @@ class _DewanyahTile extends StatelessWidget {
   Widget build(BuildContext context) {
     final pending = status == 'pending';
     return Card(
+      color: Color.alphaBlend(
+          primary.withValues(alpha: 0.3), const Color(0xFF1C273B)),
+      shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16),
+          side: BorderSide(color: accent, width: 2)),
       clipBehavior: Clip.antiAlias,
       child: InkWell(
         onTap: onTap,
@@ -1823,10 +1858,11 @@ class _DewanyahTile extends StatelessWidget {
                     Image.network(
                       imageUrl!,
                       fit: BoxFit.cover,
-                      errorBuilder: (_, __, ___) => const _DewanyahFallback(),
+                      errorBuilder: (_, __, ___) =>
+                          _DewanyahFallback(primary: primary, accent: accent),
                     )
                   else
-                    const _DewanyahFallback(),
+                    _DewanyahFallback(primary: primary, accent: accent),
                   PositionedDirectional(
                     top: 8,
                     end: 8,
@@ -1867,12 +1903,15 @@ class _DewanyahTile extends StatelessWidget {
 }
 
 class _DewanyahFallback extends StatelessWidget {
-  const _DewanyahFallback();
+  final Color primary;
+  final Color accent;
+  const _DewanyahFallback({required this.primary, required this.accent});
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      color: const Color(0xFF304A5D),
+      decoration:
+          BoxDecoration(gradient: LinearGradient(colors: [primary, accent])),
       child: Center(
         child: Image.asset(
           'lib/assets/enzeli_logo.png',

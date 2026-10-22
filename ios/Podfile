@@ -1,5 +1,5 @@
 # Define a global platform to avoid old iOS targets from pods
-platform :ios, '13.0'
+platform :ios, '15.0'
 
 # CocoaPods analytics sends network stats synchronously affecting flutter build latency.
 ENV['COCOAPODS_DISABLE_STATS'] = 'true'
@@ -42,8 +42,9 @@ post_install do |installer|
 
     # Force all pods to our minimum iOS version
     target.build_configurations.each do |config|
-      config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '14.0'
-      # Silence third-party deprecation warnings (e.g. GoogleToolbox legacy C prototypes)
+      config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '15.0'
+      # Preserve the project's existing policy for third-party Objective-C warnings.
+      # Swift warnings remain visible and are fixed in the documented local packages.
       config.build_settings['GCC_WARN_INHIBIT_ALL_WARNINGS'] = 'YES'
     end
   end

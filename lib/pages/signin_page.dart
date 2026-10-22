@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import '../widgets/app_snackbar.dart';
 import '../state.dart';
 import '../api_auth.dart';
+import '../username_rules.dart';
 import '../main.dart' show AuthGate; // to re-enter the gate after success
 import '../widgets/primary_pill_button.dart';
 
@@ -33,6 +34,7 @@ class _SignInPageState extends State<SignInPage> {
   final _email = TextEditingController();
   final _pass = TextEditingController();
   final _name = TextEditingController();
+  final _username = TextEditingController();
   final _phone = TextEditingController();
   final _otp = TextEditingController();
   DateTime? _birthDate;
@@ -46,6 +48,7 @@ class _SignInPageState extends State<SignInPage> {
     _email.dispose();
     _pass.dispose();
     _name.dispose();
+    _username.dispose();
     _phone.dispose();
     _otp.dispose();
     super.dispose();
@@ -117,6 +120,7 @@ class _SignInPageState extends State<SignInPage> {
         email: _email.text.trim(),
         password: _pass.text,
         displayName: _name.text.trim(),
+        username: normalizedUsername(_username.text),
         phone: _phoneForApi(),
         birthDate: _birthDate!.toIso8601String(),
         channel: _otpChannel,
@@ -180,6 +184,7 @@ class _SignInPageState extends State<SignInPage> {
     try {
       final r = await verifyRegisterOtp(requestId: _otpRequestId!, code: code);
       if (!r.ok) {
+        if (r.code == 'USERNAME_TAKEN') setState(_resetOtpState);
         _msg(r.message, error: true);
         return;
       }
@@ -321,6 +326,21 @@ class _SignInPageState extends State<SignInPage> {
                                 : null,
                           ),
                           if (!_isLogin) ...[
+                            const SizedBox(height: 10),
+                            TextFormField(
+                              controller: _username,
+                              readOnly: lockIdentityFields,
+                              maxLength: 20,
+                              textDirection: TextDirection.ltr,
+                              autocorrect: false,
+                              enableSuggestions: false,
+                              decoration: const InputDecoration(
+                                  labelText: 'اسم المستخدم الفريد',
+                                  prefixText: '@',
+                                  helperText:
+                                      'يبدأ بحرف إنجليزي؛ ٣–٢٠ حرفًا، أرقام أو _'),
+                              validator: usernameValidationError,
+                            ),
                             const SizedBox(height: 10),
                             TextFormField(
                               controller: _name,

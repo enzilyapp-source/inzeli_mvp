@@ -41,8 +41,8 @@ RankData getRankData(PlayerRank rank) {
       );
     case PlayerRank.advance:
       return const RankData(
-        english: 'Advance',
-        arabic: 'يمشي حاله',
+        english: 'Good',
+        arabic: 'زين',
         icon: Icons.sports_esports,
         colors: [
           Color(0xFF1B998B),
@@ -52,7 +52,7 @@ RankData getRankData(PlayerRank rank) {
     case PlayerRank.professional:
       return const RankData(
         english: 'Professional',
-        arabic: 'زين',
+        arabic: 'محترف',
         icon: Icons.workspace_premium,
         colors: [
           Color(0xFFE09F3E),
@@ -61,8 +61,8 @@ RankData getRankData(PlayerRank rank) {
       );
     case PlayerRank.legend:
       return const RankData(
-        english: 'Legend',
-        arabic: 'فنان',
+        english: 'Legendary',
+        arabic: 'أسطوري',
         icon: Icons.local_fire_department,
         colors: [
           Color(0xFF9D4EDD),
@@ -71,8 +71,8 @@ RankData getRankData(PlayerRank rank) {
       );
     case PlayerRank.goat:
       return const RankData(
-        english: 'GOAT',
-        arabic: 'فلتة',
+        english: 'Best',
+        arabic: 'أحسن واحد',
         icon: Icons.auto_awesome,
         colors: [
           Color(0xFFFFD700),
@@ -98,16 +98,23 @@ PlayerRank playerRankForThreshold(int threshold) {
 PlayerRank playerRankForLabel(String? label) {
   switch ((label ?? '').trim()) {
     case 'GOAT':
+    case 'Best':
+    case 'أحسن واحد':
+    case 'احسن واحد':
     case 'فلتة':
     case 'فلته':
       return PlayerRank.goat;
     case 'Legend':
+    case 'Legendary':
+    case 'أسطوري':
     case 'فنان':
       return PlayerRank.legend;
     case 'Professional':
+    case 'محترف':
     case 'زين':
       return PlayerRank.professional;
     case 'Advance':
+    case 'Good':
     case 'يمشي حاله':
       return PlayerRank.advance;
     case 'Beginner':
@@ -314,31 +321,31 @@ const List<ThemeVisualOption> kThemeVisualOptions = [
   ),
   ThemeVisualOption(
     id: 'rank_beginner',
-    label: 'نوط عليمي',
+    label: 'مستوى عليمي',
     rank: PlayerRank.beginner,
     unlockThreshold: 5,
   ),
   ThemeVisualOption(
     id: 'rank_advance',
-    label: 'نوط يمشي حاله',
+    label: 'مستوى زين',
     rank: PlayerRank.advance,
     unlockThreshold: 10,
   ),
   ThemeVisualOption(
     id: 'rank_professional',
-    label: 'نوط زين',
+    label: 'مستوى محترف',
     rank: PlayerRank.professional,
     unlockThreshold: 15,
   ),
   ThemeVisualOption(
     id: 'rank_legend',
-    label: 'نوط فنان',
+    label: 'مستوى أسطوري',
     rank: PlayerRank.legend,
     unlockThreshold: 20,
   ),
   ThemeVisualOption(
     id: 'rank_goat',
-    label: 'نوط فلتة',
+    label: 'مستوى أحسن واحد',
     rank: PlayerRank.goat,
     unlockThreshold: 30,
   ),

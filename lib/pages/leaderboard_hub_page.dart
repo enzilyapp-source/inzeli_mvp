@@ -831,29 +831,46 @@ class _LeaderboardHubPageState extends State<LeaderboardHubPage> {
   }
 
   Widget _buildQuickHomeBar() {
-    return Row(
-      textDirection: TextDirection.rtl,
-      children: [
-        Expanded(
-          child: PrimaryPillButton(
-            onPressed: () => _openQuickGamePicker(join: false),
-            icon: Icons.add_box_outlined,
-            label: widget.app.tr(ar: 'إنــــزّلــــي', en: 'Start'),
-            maxWidth: double.infinity,
-            minHeight: 76,
-          ),
-        ),
-        const SizedBox(width: 10),
-        Expanded(
-          child: PrimaryPillButton(
-            onPressed: _scanAndJoinFromHome,
-            icon: Icons.qr_code_scanner,
-            label: widget.app.tr(ar: 'شرّف', en: 'Join'),
-            maxWidth: double.infinity,
-            minHeight: 76,
-          ),
-        ),
-      ],
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final isAndroid = Theme.of(context).platform == TargetPlatform.android;
+        final narrow = isAndroid && constraints.maxWidth < 330;
+        final minHeight = narrow ? 64.0 : 76.0;
+        final fontSize = narrow ? 18.0 : 20.0;
+        final startButton = PrimaryPillButton(
+          onPressed: () => _openQuickGamePicker(join: false),
+          icon: Icons.add_box_outlined,
+          label: widget.app.tr(ar: 'إنــــزّلــــي', en: 'Start'),
+          maxWidth: double.infinity,
+          minHeight: minHeight,
+          fontSize: fontSize,
+        );
+        final joinButton = PrimaryPillButton(
+          onPressed: _scanAndJoinFromHome,
+          icon: Icons.qr_code_scanner,
+          label: widget.app.tr(ar: 'شرّف', en: 'Join'),
+          maxWidth: double.infinity,
+          minHeight: minHeight,
+          fontSize: fontSize,
+        );
+        if (narrow) {
+          return Column(
+            children: [
+              SizedBox(width: double.infinity, child: startButton),
+              const SizedBox(height: 10),
+              SizedBox(width: double.infinity, child: joinButton),
+            ],
+          );
+        }
+        return Row(
+          textDirection: TextDirection.rtl,
+          children: [
+            Expanded(child: startButton),
+            const SizedBox(width: 10),
+            Expanded(child: joinButton),
+          ],
+        );
+      },
     );
   }
 
@@ -1425,8 +1442,10 @@ class _LeaderboardHubPageState extends State<LeaderboardHubPage> {
   Widget _buildHubDewanyahGrid(List<Map<String, dynamic>> dews) {
     return LayoutBuilder(
       builder: (context, constraints) {
+        final isAndroid = Theme.of(context).platform == TargetPlatform.android;
         final width = constraints.maxWidth;
-        final columns = width < 360 ? 2 : (width < 620 ? 3 : 4);
+        final columns =
+            isAndroid ? (width < 360 ? 2 : (width < 620 ? 3 : 4)) : 3;
         return GridView.builder(
           shrinkWrap: true,
           physics: const NeverScrollableScrollPhysics(),
@@ -2315,7 +2334,7 @@ class _QuickGamePickerPageState extends State<_QuickGamePickerPage> {
                 child: Column(
                   children: [
                     Text(
-                      'التصنيف: ${widget.app.categoryLabel(_selectedCategoryId)}',
+                      'المستوى: ${widget.app.categoryLabel(_selectedCategoryId)}',
                       style: TextStyle(
                         color: Colors.white.withValues(alpha: 0.75),
                         fontWeight: FontWeight.w700,
@@ -2324,7 +2343,7 @@ class _QuickGamePickerPageState extends State<_QuickGamePickerPage> {
                     const SizedBox(height: 8),
                     Text(
                       _selectedGameId == null
-                          ? 'ما فيه ألعاب بهذا التصنيف'
+                          ? 'ما فيه ألعاب بهذا المستوى'
                           : widget.app.gameLabel(_selectedGameId!),
                       style: const TextStyle(
                         color: Color(0xFFE49A2C),
@@ -2340,29 +2359,43 @@ class _QuickGamePickerPageState extends State<_QuickGamePickerPage> {
                 const Center(
                   child: Padding(
                     padding: EdgeInsets.symmetric(vertical: 18),
-                    child: Text('ما فيه ألعاب بهالتصنيف حالياً'),
+                    child: Text('ما فيه ألعاب بهالمستوى حالياً'),
                   ),
                 )
               else
-                GridView.builder(
-                  shrinkWrap: true,
-                  physics: const NeverScrollableScrollPhysics(),
-                  itemCount: games.length,
-                  gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                    crossAxisCount: 3,
-                    crossAxisSpacing: 12,
-                    mainAxisSpacing: 12,
-                    childAspectRatio: 0.92,
-                  ),
-                  itemBuilder: (_, index) {
-                    final gameId = games[index];
-                    return _QuickGameTile(
-                      gameId: gameId,
-                      label: widget.app.gameLabel(gameId),
-                      pngAsset: _quickGamePngAssetById[gameId],
-                      svgAsset: _quickGameSvgAssetById[gameId],
-                      isSelected: gameId == _selectedGameId,
-                      onTap: () => setState(() => _selectedGameId = gameId),
+                LayoutBuilder(
+                  builder: (context, constraints) {
+                    final isAndroid =
+                        Theme.of(context).platform == TargetPlatform.android;
+                    final width = constraints.maxWidth.isFinite
+                        ? constraints.maxWidth
+                        : MediaQuery.sizeOf(context).width;
+                    final columns = isAndroid
+                        ? (width < 340 ? 2 : (width < 620 ? 3 : 4))
+                        : 3;
+                    final spacing = isAndroid && width < 360 ? 8.0 : 12.0;
+                    return GridView.builder(
+                      shrinkWrap: true,
+                      physics: const NeverScrollableScrollPhysics(),
+                      itemCount: games.length,
+                      gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                        crossAxisCount: columns,
+                        crossAxisSpacing: spacing,
+                        mainAxisSpacing: spacing,
+                        childAspectRatio:
+                            isAndroid && columns == 2 ? 0.98 : 0.92,
+                      ),
+                      itemBuilder: (_, index) {
+                        final gameId = games[index];
+                        return _QuickGameTile(
+                          gameId: gameId,
+                          label: widget.app.gameLabel(gameId),
+                          pngAsset: _quickGamePngAssetById[gameId],
+                          svgAsset: _quickGameSvgAssetById[gameId],
+                          isSelected: gameId == _selectedGameId,
+                          onTap: () => setState(() => _selectedGameId = gameId),
+                        );
+                      },
                     );
                   },
                 ),

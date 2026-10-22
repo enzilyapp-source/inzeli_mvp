@@ -16,12 +16,12 @@ PODS:
   - mobile_scanner (7.0.0):
     - Flutter
     - FlutterMacOS
-  - onesignal_flutter (5.5.2):
+  - onesignal_flutter (5.7.1):
     - Flutter
-    - OneSignalXCFramework (= 5.5.1)
-  - OneSignalXCFramework (5.5.1):
-    - OneSignalXCFramework/OneSignalComplete (= 5.5.1)
-  - OneSignalXCFramework/OneSignal (5.5.1):
+    - OneSignalXCFramework (= 5.8.0)
+  - OneSignalXCFramework (5.8.0):
+    - OneSignalXCFramework/OneSignalComplete (= 5.8.0)
+  - OneSignalXCFramework/OneSignal (5.8.0):
     - OneSignalXCFramework/OneSignalCore
     - OneSignalXCFramework/OneSignalExtension
     - OneSignalXCFramework/OneSignalLiveActivities
@@ -29,45 +29,45 @@ PODS:
     - OneSignalXCFramework/OneSignalOSCore
     - OneSignalXCFramework/OneSignalOutcomes
     - OneSignalXCFramework/OneSignalUser
-  - OneSignalXCFramework/OneSignalComplete (5.5.1):
+  - OneSignalXCFramework/OneSignalComplete (5.8.0):
     - OneSignalXCFramework/OneSignal
     - OneSignalXCFramework/OneSignalInAppMessages
     - OneSignalXCFramework/OneSignalLocation
-  - OneSignalXCFramework/OneSignalCore (5.5.1)
-  - OneSignalXCFramework/OneSignalExtension (5.5.1):
+  - OneSignalXCFramework/OneSignalCore (5.8.0)
+  - OneSignalXCFramework/OneSignalExtension (5.8.0):
     - OneSignalXCFramework/OneSignalCore
+    - OneSignalXCFramework/OneSignalOSCore
     - OneSignalXCFramework/OneSignalOutcomes
-  - OneSignalXCFramework/OneSignalInAppMessages (5.5.1):
+  - OneSignalXCFramework/OneSignalInAppMessages (5.8.0):
     - OneSignalXCFramework/OneSignalCore
     - OneSignalXCFramework/OneSignalNotifications
     - OneSignalXCFramework/OneSignalOSCore
     - OneSignalXCFramework/OneSignalOutcomes
     - OneSignalXCFramework/OneSignalUser
-  - OneSignalXCFramework/OneSignalLiveActivities (5.5.1):
+  - OneSignalXCFramework/OneSignalLiveActivities (5.8.0):
     - OneSignalXCFramework/OneSignalCore
     - OneSignalXCFramework/OneSignalOSCore
     - OneSignalXCFramework/OneSignalUser
-  - OneSignalXCFramework/OneSignalLocation (5.5.1):
+  - OneSignalXCFramework/OneSignalLocation (5.8.0):
     - OneSignalXCFramework/OneSignalCore
     - OneSignalXCFramework/OneSignalNotifications
     - OneSignalXCFramework/OneSignalOSCore
     - OneSignalXCFramework/OneSignalUser
-  - OneSignalXCFramework/OneSignalNotifications (5.5.1):
+  - OneSignalXCFramework/OneSignalNotifications (5.8.0):
     - OneSignalXCFramework/OneSignalCore
     - OneSignalXCFramework/OneSignalExtension
+    - OneSignalXCFramework/OneSignalOSCore
     - OneSignalXCFramework/OneSignalOutcomes
-  - OneSignalXCFramework/OneSignalOSCore (5.5.1):
+  - OneSignalXCFramework/OneSignalOSCore (5.8.0):
     - OneSignalXCFramework/OneSignalCore
-  - OneSignalXCFramework/OneSignalOutcomes (5.5.1):
+  - OneSignalXCFramework/OneSignalOutcomes (5.8.0):
     - OneSignalXCFramework/OneSignalCore
-  - OneSignalXCFramework/OneSignalUser (5.5.1):
+    - OneSignalXCFramework/OneSignalOSCore
+  - OneSignalXCFramework/OneSignalUser (5.8.0):
     - OneSignalXCFramework/OneSignalCore
     - OneSignalXCFramework/OneSignalNotifications
     - OneSignalXCFramework/OneSignalOSCore
     - OneSignalXCFramework/OneSignalOutcomes
-  - path_provider_foundation (0.0.1):
-    - Flutter
-    - FlutterMacOS
   - shared_preferences_foundation (0.0.1):
     - Flutter
     - FlutterMacOS
@@ -83,7 +83,6 @@ DEPENDENCIES:
   - local_auth_darwin (from `.symlinks/plugins/local_auth_darwin/darwin`)
   - mobile_scanner (from `.symlinks/plugins/mobile_scanner/darwin`)
   - onesignal_flutter (from `.symlinks/plugins/onesignal_flutter/ios`)
-  - path_provider_foundation (from `.symlinks/plugins/path_provider_foundation/darwin`)
   - shared_preferences_foundation (from `.symlinks/plugins/shared_preferences_foundation/darwin`)
   - url_launcher_ios (from `.symlinks/plugins/url_launcher_ios/ios`)
 
@@ -108,8 +107,6 @@ EXTERNAL SOURCES:
     :path: ".symlinks/plugins/mobile_scanner/darwin"
   onesignal_flutter:
     :path: ".symlinks/plugins/onesignal_flutter/ios"
-  path_provider_foundation:
-    :path: ".symlinks/plugins/path_provider_foundation/darwin"
   shared_preferences_foundation:
     :path: ".symlinks/plugins/shared_preferences_foundation/darwin"
   url_launcher_ios:
@@ -123,12 +120,11 @@ SPEC CHECKSUMS:
   image_picker_ios: e0ece4aa2a75771a7de3fa735d26d90817041326
   local_auth_darwin: c3ee6cce0a8d56be34c8ccb66ba31f7f180aaebb
   mobile_scanner: 9157936403f5a0644ca3779a38ff8404c5434a93
-  onesignal_flutter: 0d09d15f0a0db8cb66cfeb53eb3a8dd6f55995b2
-  OneSignalXCFramework: 2b46c36b38528b65dce33ed9d83375f8c98bf40c
-  path_provider_foundation: bb55f6dbba17d0dccd6737fe6f7f34fbd0376880
+  onesignal_flutter: a8bb53a1c4aa572b3c6106446d0e7f7febdb2835
+  OneSignalXCFramework: e916e0283c51b737524cab28f340eeb821b45826
   shared_preferences_foundation: 7036424c3d8ec98dfe75ff1667cb0cd531ec82bb
   url_launcher_ios: 7a95fa5b60cc718a708b8f2966718e93db0cef1b
 
-PODFILE CHECKSUM: 771a3854b25d1559e7ba9624749bf0042d30fcd8
+PODFILE CHECKSUM: 06ed2fc3b92dd2e0da73f7605e7c0c1a311e15ec
 
 COCOAPODS: 1.16.2

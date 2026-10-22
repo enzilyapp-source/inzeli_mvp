@@ -1,4 +1,5 @@
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 import 'package:onesignal_flutter/onesignal_flutter.dart';
 
 class OneSignalBridge {
@@ -6,6 +7,52 @@ class OneSignalBridge {
     'ONESIGNAL_APP_ID',
     defaultValue: 'ca700a2c-c00e-4f0d-9fbb-e56e7d6854ea',
   );
+  static void Function(Map<String, dynamic>)? onNotification;
+  static final List<Map<String, dynamic>> _pending = [];
+  static void deferNotification(Map<String, dynamic> item) {
+    _pending.add(item);
+    if (_pending.length > 100) _pending.removeAt(0);
+  }
+
+  static List<Map<String, dynamic>> takePendingNotifications() {
+    final items = List<Map<String, dynamic>>.from(_pending);
+    _pending.clear();
+    return items;
+  }
+
+  static void _emit(Map<String, dynamic> item) {
+    final listener = onNotification;
+    if (listener == null) {
+      deferNotification(item);
+    } else {
+      listener(item);
+    }
+  }
+
+  static const _channel = MethodChannel('com.enzily.app/game_notifications');
+
+  static Map<String, dynamic> _entry(OSNotification n) => {
+        'id': n.notificationId,
+        'title': n.title,
+        'body': n.body,
+        'data': n.additionalData ?? <String, dynamic>{},
+        'createdAt': n.additionalData?['createdAt'] ??
+            DateTime.now().toUtc().toIso8601String(),
+      };
+
+  static Future<List<Map<String, dynamic>>> deliveredNotifications() async {
+    if (kIsWeb || defaultTargetPlatform != TargetPlatform.iOS) return [];
+    try {
+      final list = await _channel.invokeListMethod<dynamic>('delivered');
+      return (list ?? [])
+          .whereType<Map>()
+          .map((e) => Map<String, dynamic>.from(e))
+          .toList();
+    } catch (_) {
+      return [];
+    }
+  }
+
   static bool _initialized = false;
   static bool _permissionRequested = false;
 
@@ -29,7 +76,11 @@ class OneSignalBridge {
           );
         }
       });
+      OneSignal.Notifications.addForegroundWillDisplayListener((event) {
+        _emit(_entry(event.notification));
+      });
       OneSignal.Notifications.addClickListener((event) {
+        _emit(_entry(event.notification));
         if (kDebugMode) {
           debugPrint(
             'OneSignal notification opened: ${event.notification.notificationId}',

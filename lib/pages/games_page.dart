@@ -101,9 +101,9 @@ class _GamesPageState extends State<GamesPage> {
     // لو في Game محفوظة، نخليه، وإلا نختار أول لعبة في الكاتيجوري
     if (app.selectedGame == null &&
         app.selectedCategory != null &&
-        app.games[app.selectedCategory] != null &&
-        app.games[app.selectedCategory]!.isNotEmpty) {
-      final g = app.games[app.selectedCategory]!.first;
+        app.mainGames[app.selectedCategory] != null &&
+        app.mainGames[app.selectedCategory]!.isNotEmpty) {
+      final g = app.mainGames[app.selectedCategory]!.first;
       app.setSelectedGame(g, category: app.selectedCategory);
     }
 
@@ -476,7 +476,7 @@ class _GamesPageState extends State<GamesPage> {
             onPageChanged: (idx) {
               final cat = categories[idx];
               app.setSelectedGame(null, category: cat);
-              final list = app.games[cat] ?? const <String>[];
+              final list = app.mainGames[cat] ?? const <String>[];
               if (list.isNotEmpty) {
                 app.setSelectedGame(list.first, category: cat);
               }
@@ -515,63 +515,107 @@ class _GamesPageState extends State<GamesPage> {
   Widget _buildGamesGrid() {
     final cat = _selectedCategory;
     final games =
-        (cat != null) ? (app.games[cat] ?? const <String>[]) : const <String>[];
+        (cat != null) ? (app.mainGames[cat] ?? const <String>[]) : const <String>[];
 
     if (games.isEmpty) {
       return const Padding(
         padding: EdgeInsets.only(top: 24.0),
-        child: Center(child: Text('لا توجد ألعاب لهذا التصنيف حاليًا')),
+        child: Center(child: Text('لا توجد ألعاب في هذا القسم حاليًا')),
       );
     }
 
-    return GridView.count(
-      crossAxisCount: 3,
-      shrinkWrap: true,
-      physics: const NeverScrollableScrollPhysics(),
-      mainAxisSpacing: 12,
-      crossAxisSpacing: 12,
-      childAspectRatio: 1.0,
-      children: games.map((g) {
-        final bool isSelected = g == _selectedGame;
-        return GestureDetector(
-          onTap: () {
-            app.setSelectedGame(g, category: cat);
-            setState(() {});
-          },
-          child: _GameCardImage(
-            gameId: g,
-            pngAsset: _pngForGame(g),
-            svgAsset: _svgForGame(g),
-            isSelected: isSelected,
+    Widget buildGameCard(String g) {
+      final bool isSelected = g == _selectedGame;
+      return GestureDetector(
+        onTap: () {
+          app.setSelectedGame(g, category: cat);
+          setState(() {});
+        },
+        child: _GameCardImage(
+          gameId: g,
+          pngAsset: _pngForGame(g),
+          svgAsset: _svgForGame(g),
+          isSelected: isSelected,
+        ),
+      );
+    }
+
+    final isAndroid = Theme.of(context).platform == TargetPlatform.android;
+    if (!isAndroid) {
+      return GridView.count(
+        shrinkWrap: true,
+        physics: const NeverScrollableScrollPhysics(),
+        crossAxisCount: 3,
+        mainAxisSpacing: 12,
+        crossAxisSpacing: 12,
+        childAspectRatio: 1.0,
+        children: games.map(buildGameCard).toList(),
+      );
+    }
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final width = constraints.maxWidth.isFinite
+            ? constraints.maxWidth
+            : MediaQuery.sizeOf(context).width;
+        final columns = width < 340 ? 2 : (width < 620 ? 3 : 4);
+        final spacing = width < 360 ? 8.0 : 12.0;
+        return GridView.builder(
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          itemCount: games.length,
+          gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+            crossAxisCount: columns,
+            mainAxisSpacing: spacing,
+            crossAxisSpacing: spacing,
+            childAspectRatio: columns == 2 ? 1.08 : 1.0,
           ),
+          itemBuilder: (_, index) => buildGameCard(games[index]),
         );
-      }).toList(),
+      },
     );
   }
 
   Widget _buildCreateJoinRow() {
-    return Row(
-      children: [
-        Expanded(
-          child: PrimaryPillButton(
-            onPressed: _createRoomForSelectedGame,
-            icon: Icons.add_box_outlined,
-            label: app.tr(ar: 'إنــــزّلــــي', en: 'Start'),
-            maxWidth: double.infinity,
-            minHeight: 76,
-          ),
-        ),
-        const SizedBox(width: 10),
-        Expanded(
-          child: PrimaryPillButton(
-            onPressed: _scanAndJoin,
-            icon: Icons.qr_code_scanner,
-            label: app.tr(ar: 'شرّف', en: 'Join'),
-            maxWidth: double.infinity,
-            minHeight: 76,
-          ),
-        ),
-      ],
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final isAndroid = Theme.of(context).platform == TargetPlatform.android;
+        final narrow = isAndroid && constraints.maxWidth < 330;
+        final minHeight = narrow ? 64.0 : 76.0;
+        final fontSize = narrow ? 18.0 : 20.0;
+        final startButton = PrimaryPillButton(
+          onPressed: _createRoomForSelectedGame,
+          icon: Icons.add_box_outlined,
+          label: app.tr(ar: 'إنــــزّلــــي', en: 'Start'),
+          maxWidth: double.infinity,
+          minHeight: minHeight,
+          fontSize: fontSize,
+        );
+        final joinButton = PrimaryPillButton(
+          onPressed: _scanAndJoin,
+          icon: Icons.qr_code_scanner,
+          label: app.tr(ar: 'شرّف', en: 'Join'),
+          maxWidth: double.infinity,
+          minHeight: minHeight,
+          fontSize: fontSize,
+        );
+        if (narrow) {
+          return Column(
+            children: [
+              SizedBox(width: double.infinity, child: startButton),
+              const SizedBox(height: 10),
+              SizedBox(width: double.infinity, child: joinButton),
+            ],
+          );
+        }
+        return Row(
+          children: [
+            Expanded(child: startButton),
+            const SizedBox(width: 10),
+            Expanded(child: joinButton),
+          ],
+        );
+      },
     );
   }
 
@@ -627,7 +671,7 @@ class _GamesPageState extends State<GamesPage> {
           Align(
             alignment: AlignmentDirectional.centerStart,
             child: Text(
-              'اختر اللعبة والتصنيف:',
+              'اختر اللعبة والمستوى:',
               style: const TextStyle(
                 color: Colors.white,
                 fontWeight: FontWeight.w800,
@@ -648,7 +692,7 @@ class _GamesPageState extends State<GamesPage> {
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 Text(
-                  'التصنيف: ${_categoryDisplayLabel(cat)}',
+                  'المستوى: ${_categoryDisplayLabel(cat)}',
                   textAlign: TextAlign.center,
                   style: const TextStyle(color: Colors.white70, fontSize: 12),
                 ),

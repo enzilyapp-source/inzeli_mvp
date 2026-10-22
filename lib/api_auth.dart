@@ -38,6 +38,14 @@ class ApiResponse<T> {
 String _friendlyAuthMessage(String message, String? code) {
   final key = (code?.isNotEmpty ?? false) ? code! : message;
   switch (key) {
+    case 'USERNAME_REQUIRED':
+      return 'اسم المستخدم مطلوب';
+    case 'USERNAME_INVALID':
+      return 'اسم المستخدم يبدأ بحرف إنجليزي ويحتوي ٣–٢٠ حرفًا أو رقمًا أو _';
+    case 'USERNAME_RESERVED':
+      return 'هذا الاسم مخصص للتطبيق، اختَر اسمًا آخر';
+    case 'USERNAME_TAKEN':
+      return 'اسم المستخدم محجوز، اختَر اسمًا آخر';
     case 'EMAIL_EXISTS':
       return 'هذا الإيميل مستخدم من قبل';
     case 'PHONE_EXISTS':
@@ -98,8 +106,14 @@ Future<ApiResponse<Map<String, dynamic>>> _post(
         )
         .timeout(const Duration(seconds: 18));
 
-    // ignore: avoid_print
-    print('AUTH $path → ${res.statusCode} ${res.body}');
+    // Never log session tokens returned by authentication endpoints.
+    if (res.statusCode == 404 && path.contains('/v2/')) {
+      return ApiResponse(
+          ok: false,
+          code: 'SERVER_UPDATE_REQUIRED',
+          message:
+              'إنشاء الحساب باسم مستخدم يحتاج تحديث الخادم. حاول بعد اكتمال التحديث.');
+    }
     return ApiResponse.fromHttp(res);
   } catch (e) {
     final raw = e.toString();
@@ -118,20 +132,26 @@ Future<ApiResponse<Map<String, dynamic>>> _post(
 
 Future<ApiResponse<Map<String, dynamic>>> requestRegisterOtp({
   required String email,
+  String? username,
   required String password,
   required String displayName,
   required String phone,
   String? birthDate,
   String? channel,
 }) =>
-    _post('/auth/register/request-otp', {
-      'email': email,
-      'password': password,
-      'displayName': displayName,
-      'phone': phone,
-      if (birthDate != null) 'birthDate': birthDate,
-      if (channel != null) 'channel': channel,
-    });
+    _post(
+        username == null
+            ? '/auth/register/request-otp'
+            : '/auth/register/v2/request-otp',
+        {
+          if (username != null) 'username': username,
+          'email': email,
+          'password': password,
+          'displayName': displayName,
+          'phone': phone,
+          if (birthDate != null) 'birthDate': birthDate,
+          if (channel != null) 'channel': channel,
+        });
 
 Future<ApiResponse<Map<String, dynamic>>> requestPasswordResetOtp({
   required String email,
@@ -199,8 +219,6 @@ Future<ApiResponse<Map<String, dynamic>>> refreshAuthSession({
       },
     ).timeout(const Duration(seconds: 18));
 
-    // ignore: avoid_print
-    print('AUTH /auth/refresh → ${res.statusCode} ${res.body}');
     return ApiResponse.fromHttp(res);
   } catch (e) {
     final raw = e.toString();

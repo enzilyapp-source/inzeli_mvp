@@ -31,12 +31,13 @@ class PrimaryPillButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final bool disabled = loading || onPressed == null;
+    final bool isAndroid = Theme.of(context).platform == TargetPlatform.android;
 
     final btn = TextButton(
       onPressed: disabled ? null : onPressed,
       style: _style,
       child: Row(
-        mainAxisSize: MainAxisSize.min,
+        mainAxisSize: isAndroid ? MainAxisSize.max : MainAxisSize.min,
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
           if (loading)
@@ -52,14 +53,30 @@ class PrimaryPillButton extends StatelessWidget {
             Icon(icon, color: _accent),
             const SizedBox(width: 8),
           ],
-          Text(
-            label,
-            style: TextStyle(
-              fontWeight: FontWeight.w900,
-              fontSize: fontSize,
-              color: _accent,
+          if (isAndroid)
+            Flexible(
+              child: FittedBox(
+                fit: BoxFit.scaleDown,
+                child: Text(
+                  label,
+                  maxLines: 1,
+                  style: TextStyle(
+                    fontWeight: FontWeight.w900,
+                    fontSize: fontSize,
+                    color: _accent,
+                  ),
+                ),
+              ),
+            )
+          else
+            Text(
+              label,
+              style: TextStyle(
+                fontWeight: FontWeight.w900,
+                fontSize: fontSize,
+                color: _accent,
+              ),
             ),
-          ),
         ],
       ),
     );
@@ -100,7 +117,7 @@ class PrimaryPillButton extends StatelessWidget {
         foregroundColor: _accent,
         padding:
             padding ?? const EdgeInsets.symmetric(vertical: 18, horizontal: 16),
-        shape:
-            RoundedRectangleBorder(borderRadius: BorderRadius.circular(borderRadius)),
+        shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(borderRadius)),
       );
 }

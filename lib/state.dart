@@ -5,8 +5,10 @@ import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'api_auth.dart';
 import 'api_dewanyah.dart';
+import 'api_notifications.dart';
 import 'api_timeline.dart';
 import 'api_user.dart';
+import 'api_username.dart';
 import 'api_users.dart';
 import 'local_game_notifications.dart';
 import 'push/one_signal_bridge.dart';
@@ -21,6 +23,7 @@ class AppState extends ChangeNotifier {
   String? token;
   String? userId;
   String? publicId;
+  String? username;
 
   String? displayName;
   String? email;
@@ -68,6 +71,8 @@ class AppState extends ChangeNotifier {
   bool? tutorialSeen;
   // لآلئ شهرية لكل لعبة (تُعاد شهرياً إلى 5 لكل لعبة)
   Map<String, int> gamePearls = <String, int>{};
+  // تقدم المستوى الحالي لكل لعبة. الفوز يزيده فوراً، والخسارة تنقصه بعد 3 خسارات.
+  Map<String, int> gameBadgeProgress = <String, int>{};
   String? pearlsResetMonth; // YYYY-MM
   List<Map<String, dynamic>> ownedDewanyahs = <Map<String, dynamic>>[];
   Set<String> joinedDewanyahIds = <String>{};
@@ -78,6 +83,8 @@ class AppState extends ChangeNotifier {
   Set<String> playedGameIds = <String>{};
   List<AppNotificationEntry> notifications = <AppNotificationEntry>[];
   DateTime? _timelineNotificationsSeenAt;
+  DateTime? _serverNotificationsSyncedAt;
+  DateTime? _notificationsClearedAt;
   bool _badgesSnapshotInitialized = false;
 
   // ---- Local demo data (used by old leaderboard/player profile/timeline) ----
@@ -91,6 +98,20 @@ class AppState extends ChangeNotifier {
   ];
 
   /// Games per category used by LeaderboardPage
+  Set<String> hiddenGameIds = <String>{};
+  Map<String, List<String>> get mainGames => {
+        for (final e in games.entries)
+          e.key: e.value.where((g) => !hiddenGameIds.contains(g)).toList()
+      };
+
+  void applyHiddenGames(List<dynamic> ids) {
+    final next = ids.map((e) => e.toString()).toSet();
+    if (setEquals(next, hiddenGameIds) && !next.contains(selectedGame)) return;
+    hiddenGameIds = next;
+    if (hiddenGameIds.contains(selectedGame)) selectedGame = null;
+    notifyListeners();
+  }
+
   final Map<String, List<String>> games = const <String, List<String>>{
     'جنجفة': ['كوت', 'بلوت', 'تريكس', 'هند', 'سبيتة', 'اونو', 'دفان'],
     'ألعاب شعبية': ['شطرنج', 'دامه', 'كيرم', 'دومنه', 'طاوله', 'جاكارو'],
@@ -150,7 +171,13 @@ class AppState extends ChangeNotifier {
       token!.isNotEmpty &&
       userId != null &&
       userId!.isNotEmpty);
-  bool get isEnglish => (language ?? 'ar') == 'en';
+  bool get isEnglish {
+    if (!kIsWeb && defaultTargetPlatform == TargetPlatform.android) {
+      return false;
+    }
+    return (language ?? 'ar') == 'en';
+  }
+
   bool _refreshingSession = false;
   DateTime? _lastSessionRefreshAt;
 
@@ -220,6 +247,7 @@ class AppState extends ChangeNotifier {
       token = (m['token'] as String?)?.trim();
       userId = (m['userId'] as String?)?.trim();
       publicId = (m['publicId'] as String?)?.trim();
+      username = (m['username'] as String?)?.trim();
 
       displayName = m['displayName'] as String?;
       email = m['email'] as String?;
@@ -260,6 +288,11 @@ class AppState extends ChangeNotifier {
       final rawGamePearls = m['gamePearls'];
       if (rawGamePearls is Map) {
         gamePearls = rawGamePearls
+            .map((k, v) => MapEntry(k.toString(), (v as num?)?.toInt() ?? 0));
+      }
+      final rawGameBadgeProgress = m['gameBadgeProgress'];
+      if (rawGameBadgeProgress is Map) {
+        gameBadgeProgress = rawGameBadgeProgress
             .map((k, v) => MapEntry(k.toString(), (v as num?)?.toInt() ?? 0));
       }
       _applyPlayedGames(m);
@@ -338,10 +371,18 @@ class AppState extends ChangeNotifier {
                 ))
             .toList();
       }
+      pruneNotifications();
+      _notificationsClearedAt =
+          DateTime.tryParse((m['notificationsClearedAt'] ?? '').toString());
       final rawSeenAt = m['timelineNotificationsSeenAt']?.toString();
       _timelineNotificationsSeenAt = rawSeenAt == null || rawSeenAt.isEmpty
           ? null
           : DateTime.tryParse(rawSeenAt);
+      final rawServerSeenAt = m['serverNotificationsSyncedAt']?.toString();
+      _serverNotificationsSyncedAt =
+          rawServerSeenAt == null || rawServerSeenAt.isEmpty
+              ? null
+              : DateTime.tryParse(rawServerSeenAt);
     } catch (_) {
       // ignore bad local cache
     }
@@ -354,6 +395,8 @@ class AppState extends ChangeNotifier {
     final data = <String, dynamic>{
       'token': token,
       'userId': userId,
+      'publicId': publicId,
+      'username': username,
       'displayName': displayName,
       'email': email,
       'creditPoints': creditPoints,
@@ -380,6 +423,7 @@ class AppState extends ChangeNotifier {
       'tutorialSeen': tutorialSeen ?? false,
       'freeThemesOwned': freeThemesOwned.toList(),
       'gamePearls': gamePearls,
+      'gameBadgeProgress': gameBadgeProgress,
       'rulesPromptSeen': rulesPromptSeen ?? false,
       'pearlsResetMonth': pearlsResetMonth,
       'ownedDewanyahs': ownedDewanyahs,
@@ -390,8 +434,11 @@ class AppState extends ChangeNotifier {
       'bestBadge': bestBadge,
       'playedGames': playedGameIds.toList(),
       'notifications': notifications.map((e) => e.toJson()).toList(),
+      'notificationsClearedAt': _notificationsClearedAt?.toIso8601String(),
       'timelineNotificationsSeenAt':
           _timelineNotificationsSeenAt?.toIso8601String(),
+      'serverNotificationsSyncedAt':
+          _serverNotificationsSyncedAt?.toIso8601String(),
       'userStats': userStats,
       'userProfiles': userProfiles,
       'timeline': timeline
@@ -418,6 +465,35 @@ class AppState extends ChangeNotifier {
   // جعل الحفظ متاحاً للصفحات الأخرى بشكل آمن
   Future<void> saveState() => _save();
 
+  void pruneNotifications() {
+    final cutoff = DateTime.now().subtract(const Duration(hours: 24));
+    notifications.removeWhere((e) => e.createdAt.isBefore(cutoff));
+  }
+
+  void receivePush(Map<String, dynamic> item) {
+    if (!isSignedIn) return;
+    final data = item['data'] is Map
+        ? Map<String, dynamic>.from(item['data'])
+        : <String, dynamic>{};
+    final recipients = data['recipientUserIds'];
+    if (recipients is List && !recipients.contains(userId)) return;
+    final recipient = data['recipientUserId']?.toString();
+    if (recipient != null && recipient != userId) return;
+    final serverId = data['inAppNotificationId']?.toString();
+    addNotification(
+      id: data['notificationKey'] != null
+          ? 'notice:${data['notificationKey']}'
+          : serverId != null
+              ? 'server:$serverId'
+              : 'push:${item['id']}',
+      type: (data['type'] ?? 'push').toString(),
+      title: (item['title'] ?? 'انزلي').toString(),
+      body: (item['body'] ?? '').toString(),
+      createdAt: DateTime.tryParse((item['createdAt'] ?? '').toString()),
+      data: data,
+    );
+  }
+
   int get unreadNotificationCount =>
       notifications.where((entry) => !entry.read).length;
 
@@ -429,7 +505,13 @@ class AppState extends ChangeNotifier {
     DateTime? createdAt,
     Map<String, dynamic>? data,
   }) {
+    pruneNotifications();
     final at = createdAt ?? DateTime.now();
+    if (_notificationsClearedAt != null &&
+        !at.isAfter(_notificationsClearedAt!)) {
+      return;
+    }
+    if (at.isBefore(DateTime.now().subtract(const Duration(hours: 24)))) return;
     final key = (id == null || id.trim().isEmpty)
         ? '$type:${at.microsecondsSinceEpoch}:${title.hashCode}'
         : id.trim();
@@ -464,12 +546,76 @@ class AppState extends ChangeNotifier {
   void clearNotifications() {
     if (notifications.isEmpty) return;
     notifications = <AppNotificationEntry>[];
+    _serverNotificationsSyncedAt = DateTime.now();
+    _notificationsClearedAt = _serverNotificationsSyncedAt;
     unawaited(_save());
     notifyListeners();
   }
 
+  Future<void> refreshServerNotifications() async {
+    final auth = token;
+    if (auth == null || auth.isEmpty) return;
+    pruneNotifications();
+    notifyListeners();
+    try {
+      for (final push in await OneSignalBridge.deliveredNotifications()) {
+        receivePush(push);
+      }
+      final list = await ApiNotifications.list(
+        token: auth,
+        limit: 100,
+        since: _serverNotificationsSyncedAt,
+      );
+      if (list.isEmpty) return;
+
+      DateTime? newest;
+      for (final item in list.reversed) {
+        final createdAt =
+            DateTime.tryParse((item['createdAt'] ?? '').toString()) ??
+                DateTime.now();
+        if (newest == null || createdAt.isAfter(newest)) {
+          newest = createdAt;
+        }
+        final id = (item['id'] ?? '').toString().trim();
+        final notificationKey =
+            item['data'] is Map ? item['data']['notificationKey'] : null;
+        addNotification(
+          id: notificationKey != null
+              ? 'notice:$notificationKey'
+              : id.isEmpty
+                  ? null
+                  : 'server:$id',
+          type: (item['type'] ?? 'info').toString(),
+          title: (item['title'] ?? '').toString(),
+          body: (item['body'] ?? '').toString(),
+          createdAt: createdAt,
+          data: item['data'] is Map
+              ? Map<String, dynamic>.from(item['data'] as Map)
+              : const <String, dynamic>{},
+        );
+      }
+
+      if (newest != null) {
+        _serverNotificationsSyncedAt = newest;
+        await _save();
+      }
+    } catch (_) {
+      // إشعارات السيرفر best-effort ولا توقف استخدام التطبيق.
+    }
+  }
+
   Future<void> applyAchievementSnapshot(Map<String, dynamic> data,
       {bool notify = true}) async {
+    final rawGamePearls = data['gamePearls'];
+    if (rawGamePearls is Map) {
+      gamePearls = rawGamePearls
+          .map((k, v) => MapEntry(k.toString(), (v as num?)?.toInt() ?? 0));
+    }
+    final rawGameBadgeProgress = data['gameBadgeProgress'];
+    if (rawGameBadgeProgress is Map) {
+      gameBadgeProgress = rawGameBadgeProgress
+          .map((k, v) => MapEntry(k.toString(), (v as num?)?.toInt() ?? 0));
+    }
     _applyBadges(data, notify: notify);
     _applyPlayedGames(data);
     await _save();
@@ -543,18 +689,20 @@ class AppState extends ChangeNotifier {
     gained.sort((a, b) =>
         badgeThresholdForLabel(b).compareTo(badgeThresholdForLabel(a)));
     final label = gained.first;
+    final displayLabel = badgeDisplayLabel(label);
     final count = badgeCounts[label] ?? 0;
     addNotification(
       id: 'badge-progress:$label:$count',
       type: 'badge',
-      title: 'نوطك تثبّت',
-      body: 'وصلت نوط $label مرة ثانية. إذا تعديته يزيد نوطك.',
+      title: 'مستواك تثبّت',
+      body: 'وصلت مستوى $displayLabel مرة ثانية. إذا تعديته يزيد مستواك.',
       data: {'label': label, 'count': count},
     );
     unawaited(LocalGameNotifications.show(
       id: LocalGameNotifications.idFor('badge-progress:$label:$count'),
-      title: 'نوطك تثبّت',
-      body: 'وصلت نوط $label مرة ثانية. حافظت عليه، وإذا تعديته يزيد نوطك.',
+      title: 'مستواك تثبّت',
+      body:
+          'وصلت مستوى $displayLabel مرة ثانية. حافظت عليه، وإذا تعديته يزيد مستواك.',
     ));
   }
 
@@ -574,11 +722,28 @@ class AppState extends ChangeNotifier {
   static int badgeThresholdForLabel(String? label) {
     return switch ((label ?? '').trim()) {
       'عليمي' || 'Beginner' => 5,
-      'يمشي حاله' || 'Advance' => 10,
-      'زين' || 'Professional' => 15,
-      'فنان' || 'Legend' => 20,
-      'فلتة' || 'فلته' || 'GOAT' => 30,
+      'يمشي حاله' || 'Advance' || 'Good' => 10,
+      'زين' || 'محترف' || 'Professional' => 15,
+      'فنان' || 'أسطوري' || 'Legend' || 'Legendary' => 20,
+      'فلتة' || 'فلته' || 'أحسن واحد' || 'احسن واحد' || 'GOAT' || 'Best' => 30,
       _ => 0,
+    };
+  }
+
+  static String badgeDisplayLabel(String? label) {
+    return switch ((label ?? '').trim()) {
+      'Advance' || 'يمشي حاله' || 'Good' => 'زين',
+      'Professional' || 'زين' || 'محترف' => 'محترف',
+      'Legend' || 'Legendary' || 'فنان' || 'أسطوري' => 'أسطوري',
+      'GOAT' ||
+      'Best' ||
+      'فلتة' ||
+      'فلته' ||
+      'أحسن واحد' ||
+      'احسن واحد' =>
+        'أحسن واحد',
+      'Beginner' || 'عليمي' => 'عليمي',
+      _ => (label ?? '').trim(),
     };
   }
 
@@ -622,6 +787,7 @@ class AppState extends ChangeNotifier {
     // support both `id` and `userId` keys
     userId = (user['id'] ?? user['userId'] ?? '').toString();
     publicId = (user['publicId'] ?? '').toString();
+    username = (user['username'] as String?)?.trim();
 
     displayName = (user['displayName'] ?? user['name'])?.toString();
     email = (user['email'])?.toString();
@@ -635,6 +801,16 @@ class AppState extends ChangeNotifier {
     cardId = asNullableString(user['cardId']) ?? cardId;
     avatarBase64 = asNullableString(user['avatarBase64']) ?? avatarBase64;
     avatarPath = asNullableString(user['avatarPath']) ?? avatarPath;
+    final rawGamePearls = user['gamePearls'];
+    if (rawGamePearls is Map) {
+      gamePearls = rawGamePearls
+          .map((k, v) => MapEntry(k.toString(), (v as num?)?.toInt() ?? 0));
+    }
+    final rawGameBadgeProgress = user['gameBadgeProgress'];
+    if (rawGameBadgeProgress is Map) {
+      gameBadgeProgress = rawGameBadgeProgress
+          .map((k, v) => MapEntry(k.toString(), (v as num?)?.toInt() ?? 0));
+    }
     _applyBadges(user);
     _applyPlayedGames(user);
 
@@ -646,17 +822,20 @@ class AppState extends ChangeNotifier {
     // لو المستخدم تبدل، نرجّع لآلئ كل الألعاب إلى الرصيد الافتراضي لهذا الشهر
     if (previousUserId != null && previousUserId != userId) {
       gamePearls = {};
+      gameBadgeProgress = {};
       pearlsResetMonth = null;
       await _resetPearlsIfNeeded();
     }
 
     // fetch timeline from server (best-effort)
     syncTimelineFromServer();
+    unawaited(refreshServerNotifications());
     unawaited(OneSignalBridge.syncSignedInUser(userId));
 
     final profileSnapshot = <String, dynamic>{
       if (userId != null && userId!.isNotEmpty) 'id': userId,
       if (publicId != null && publicId!.isNotEmpty) 'publicId': publicId,
+      if (username != null) 'username': username,
       if (displayName != null && displayName!.isNotEmpty)
         'displayName': displayName,
       if (avatarBase64 != null && avatarBase64!.isNotEmpty)
@@ -720,6 +899,22 @@ class AppState extends ChangeNotifier {
     );
   }
 
+  Future<void> claimUsername(String value) async {
+    final auth = token;
+    if (auth == null || auth.isEmpty) {
+      throw const UsernameException('USERNAME_SAVE_FAILED');
+    }
+    final result = await ApiUsernames.claim(value, token: auth);
+    username = result['username'] as String;
+    for (final key in [userId, publicId, displayName, name]) {
+      if (key != null && userProfiles[key] != null) {
+        userProfiles[key]!['username'] = username;
+      }
+    }
+    await _save();
+    notifyListeners();
+  }
+
   Future<bool> syncProfileToServer({
     bool includeAvatarData = true,
     bool includeThemeData = true,
@@ -755,6 +950,7 @@ class AppState extends ChangeNotifier {
 
       userId = asNullableString(updated['id']) ?? userId;
       publicId = asNullableString(updated['publicId']) ?? publicId;
+      username = asNullableString(updated['username']) ?? username;
       displayName = asNullableString(updated['displayName']) ?? displayName;
       name = displayName ?? name;
       themeId = asNullableString(updated['themeId']) ?? themeId;
@@ -766,6 +962,7 @@ class AppState extends ChangeNotifier {
       final profileSnapshot = <String, dynamic>{
         if (userId != null && userId!.isNotEmpty) 'id': userId,
         if (publicId != null && publicId!.isNotEmpty) 'publicId': publicId,
+        if (username != null) 'username': username,
         if (displayName != null && displayName!.isNotEmpty)
           'displayName': displayName,
         if (avatarBase64 != null && avatarBase64!.isNotEmpty)
@@ -841,6 +1038,7 @@ class AppState extends ChangeNotifier {
       final data = me.data!;
       userId = asNullableString(data['id']) ?? userId;
       publicId = asNullableString(data['publicId']) ?? publicId;
+      username = asNullableString(data['username']) ?? username;
       displayName = asNullableString(data['displayName']) ?? displayName;
       email = asNullableString(data['email']) ?? email;
       avatarBase64 = asNullableString(data['avatarBase64']) ?? avatarBase64;
@@ -868,6 +1066,7 @@ class AppState extends ChangeNotifier {
       final profileSnapshot = <String, dynamic>{
         if (userId != null && userId!.isNotEmpty) 'id': userId,
         if (publicId != null && publicId!.isNotEmpty) 'publicId': publicId,
+        if (username != null) 'username': username,
         if (displayName != null && displayName!.isNotEmpty)
           'displayName': displayName,
         if (avatarBase64 != null && avatarBase64!.isNotEmpty)
@@ -889,6 +1088,7 @@ class AppState extends ChangeNotifier {
 
       await _save();
       unawaited(OneSignalBridge.syncSignedInUser(userId));
+      unawaited(refreshServerNotifications());
       notifyListeners();
     } catch (_) {
       // ignore temporary network failures; keep local session alive.
@@ -903,6 +1103,7 @@ class AppState extends ChangeNotifier {
     token = null;
     userId = null;
     publicId = null;
+    username = null;
     displayName = null;
     email = null;
     creditPoints = null;
@@ -924,6 +1125,8 @@ class AppState extends ChangeNotifier {
     playedGameIds = <String>{};
     notifications = <AppNotificationEntry>[];
     _timelineNotificationsSeenAt = null;
+    _serverNotificationsSyncedAt = null;
+    _notificationsClearedAt = null;
     _badgesSnapshotInitialized = false;
     // Keep one-time guidance flags across logouts so onboarding prompts
     // don't keep re-appearing for the same device user.
@@ -1041,6 +1244,9 @@ class AppState extends ChangeNotifier {
     gamePearls = {
       for (final g in _allKnownGames()) g: 5,
     };
+    gameBadgeProgress = {
+      for (final g in _allKnownGames()) g: 5,
+    };
   }
 
   bool _seedMissingGamePearls() {
@@ -1048,6 +1254,10 @@ class AppState extends ChangeNotifier {
     for (final g in _allKnownGames()) {
       if (!gamePearls.containsKey(g)) {
         gamePearls[g] = 5;
+        changed = true;
+      }
+      if (!gameBadgeProgress.containsKey(g)) {
+        gameBadgeProgress[g] = gamePearls[g] ?? 5;
         changed = true;
       }
     }
@@ -1066,8 +1276,15 @@ class AppState extends ChangeNotifier {
   }
 
   int pearlsForGame(String gameId) {
+    if (gameId.trim().isEmpty) return 0;
     _ensurePearlsCurrent();
     return gamePearls[gameId] ?? 5;
+  }
+
+  int badgeProgressForGame(String gameId) {
+    if (gameId.trim().isEmpty) return 0;
+    _ensurePearlsCurrent();
+    return gameBadgeProgress[gameId] ?? gamePearls[gameId] ?? 5;
   }
 
   bool spendPearlForGame(String gameId) {
@@ -1301,9 +1518,29 @@ class AppState extends ChangeNotifier {
     return streak;
   }
 
-  List<TimelineEntry> userMatches(String playerName) => timeline
-      .where((t) => t.winner == playerName || t.losers.contains(playerName))
-      .toList();
+  List<TimelineEntry> userMatches(String playerName) => timeline.where((t) {
+        if (t.winner == playerName ||
+            t.winners.contains(playerName) ||
+            t.losers.contains(playerName)) {
+          return true;
+        }
+        final meta = t.meta ?? const <String, dynamic>{};
+        if (meta['userId'] == playerName) return true;
+        for (final key in [
+          'winners',
+          'losers',
+          'winnerIds',
+          'loserIds',
+          'winnerUserIds',
+          'loserUserIds'
+        ]) {
+          final ids = meta[key];
+          if (ids is List && ids.any((id) => id.toString() == playerName)) {
+            return true;
+          }
+        }
+        return false;
+      }).toList();
 
   /// This is used by your old LeaderboardPage:
   /// `FutureBuilder(future: app.getLeaderboard(selectedGame))`
@@ -1692,10 +1929,10 @@ class AppState extends ChangeNotifier {
   GameLevel levelForGame(String playerName, String game) {
     final w = winsOf(playerName, game);
     // simple tier names to match your vibe
-    if (w >= 30) return const GameLevel(name: 'فلتة', fill01: 1.0);
-    if (w >= 20) return const GameLevel(name: 'فنان', fill01: 0.82);
-    if (w >= 15) return const GameLevel(name: 'زين', fill01: 0.65);
-    if (w >= 10) return const GameLevel(name: 'يمشي حاله', fill01: 0.45);
+    if (w >= 30) return const GameLevel(name: 'أحسن واحد', fill01: 1.0);
+    if (w >= 20) return const GameLevel(name: 'أسطوري', fill01: 0.82);
+    if (w >= 15) return const GameLevel(name: 'محترف', fill01: 0.65);
+    if (w >= 10) return const GameLevel(name: 'زين', fill01: 0.45);
     if (w >= 5) return const GameLevel(name: 'عليمي', fill01: 0.28);
     return const GameLevel(name: 'بدايات', fill01: 0.12);
   }

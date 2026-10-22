@@ -1,12 +1,15 @@
 // lib/main.dart
 import 'dart:async';
 import 'dart:math' as math;
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:convert';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'biometric_auth.dart';
 import 'state.dart';
+import 'operations_gate.dart';
 import 'widgets/challenge_rank_visuals.dart';
 import 'widgets/primary_pill_button.dart';
 
@@ -21,6 +24,31 @@ import 'push/one_signal_bridge.dart';
 
 const String _oneSignalPromptSeenKey = 'onesignal_permission_prompt_seen';
 
+const Map<String, String> _mainGameSvgAssetById = <String, String>{
+  'قدم': 'lib/assets/games_svg/games-01.svg',
+  'طائره': 'lib/assets/games_svg/games-02.svg',
+  'سله': 'lib/assets/games_svg/games-03.svg',
+  'دفان': 'lib/assets/games_svg/games-26.svg',
+  'تنس ارضي': 'lib/assets/games_svg/games-05.svg',
+  'بيبيفوت': 'lib/assets/games_svg/games-06.svg',
+  'بادل': 'lib/assets/games_svg/games-07.svg',
+  'بلوت': 'lib/assets/games_svg/games-24.svg',
+  'هند': 'lib/assets/games_svg/games-09.svg',
+  'كوت': 'lib/assets/games_svg/games-08.svg',
+  'سبيتة': 'lib/assets/games_svg/games-25.svg',
+  'بولنج': 'lib/assets/games_svg/games-16.svg',
+  'بلياردو': 'lib/assets/games_svg/games-15.svg',
+  'تنس طاولة': 'lib/assets/games_svg/games-17.svg',
+  'شطرنج': 'lib/assets/games_svg/games-18.svg',
+  'تريكس': 'lib/assets/games_svg/games-11.svg',
+  'دامه': 'lib/assets/games_svg/games-19.svg',
+  'كيرم': 'lib/assets/games_svg/games-20.svg',
+  'دومنه': 'lib/assets/games_svg/games-21.svg',
+  'طاوله': 'lib/assets/games_svg/games-22.svg',
+  'اونو': 'lib/assets/games_svg/games-13.svg',
+  'جاكارو': 'lib/assets/games_svg/games-23.svg',
+};
+
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await OneSignalBridge.initialize();
@@ -32,15 +60,32 @@ class InzeliApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final androidArabicOnly =
+        !kIsWeb && defaultTargetPlatform == TargetPlatform.android;
     return MaterialApp(
       title: 'Inzeli',
       debugShowCheckedModeBanner: false,
+      locale: androidArabicOnly ? const Locale('ar') : null,
       localizationsDelegates: const [
         GlobalMaterialLocalizations.delegate,
         GlobalWidgetsLocalizations.delegate,
         GlobalCupertinoLocalizations.delegate,
       ],
-      supportedLocales: const [Locale('ar'), Locale('en')],
+      supportedLocales: androidArabicOnly
+          ? const [Locale('ar')]
+          : const [Locale('ar'), Locale('en')],
+      builder: (context, child) {
+        if (defaultTargetPlatform != TargetPlatform.android) {
+          return OperationsGate(child: child ?? const SizedBox.shrink());
+        }
+        final media = MediaQuery.of(context);
+        final scale = media.textScaler.scale(1);
+        final clampedScale = scale.clamp(1.0, 1.12).toDouble();
+        return MediaQuery(
+          data: media.copyWith(textScaler: TextScaler.linear(clampedScale)),
+          child: OperationsGate(child: child ?? const SizedBox.shrink()),
+        );
+      },
       themeMode: ThemeMode.dark,
       theme: ThemeData(
         brightness: Brightness.dark,
@@ -134,17 +179,33 @@ class _AuthGateState extends State<AuthGate> with WidgetsBindingObserver {
   bool _biometricUnlocked = false;
   bool _biometricPrompting = false;
   bool _notificationPromptQueued = false;
+  Timer? _inboxTimer;
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     app.addListener(_onAppChanged);
+    OneSignalBridge.onNotification = (item) {
+      if (app.isSignedIn) {
+        app.receivePush(item);
+      } else {
+        OneSignalBridge.deferNotification(item);
+      }
+    };
+    OperationsGate.onHiddenGames = app.applyHiddenGames;
+    app.applyHiddenGames(OperationsGate.hiddenGameIds);
+    _inboxTimer = Timer.periodic(const Duration(seconds: 30), (_) {
+      if (app.isSignedIn) unawaited(app.refreshServerNotifications());
+    });
     _boot();
   }
 
   @override
   void dispose() {
+    _inboxTimer?.cancel();
+    OneSignalBridge.onNotification = null;
+    OperationsGate.onHiddenGames = null;
     app.removeListener(_onAppChanged);
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
@@ -154,10 +215,16 @@ class _AuthGateState extends State<AuthGate> with WidgetsBindingObserver {
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed && app.isSignedIn) {
       unawaited(app.refreshSessionFromServer());
+      unawaited(app.refreshServerNotifications());
     }
   }
 
   void _onAppChanged() {
+    if (app.isSignedIn) {
+      for (final item in OneSignalBridge.takePendingNotifications()) {
+        app.receivePush(item);
+      }
+    }
     if (!app.isSignedIn || !app.biometricEnabled) {
       _biometricUnlocked = true;
     }
@@ -170,6 +237,11 @@ class _AuthGateState extends State<AuthGate> with WidgetsBindingObserver {
 
   Future<void> _boot() async {
     await app.load(); // SharedPreferences (auth)
+    if (app.isSignedIn) {
+      for (final item in OneSignalBridge.takePendingNotifications()) {
+        app.receivePush(item);
+      }
+    }
     if (app.isSignedIn) {
       unawaited(app.refreshSessionFromServer(force: true));
     }
@@ -503,6 +575,10 @@ class _HomePageState extends State<HomePage> {
   @override
   Widget build(BuildContext context) {
     final app = widget.app;
+    final isAndroid = Theme.of(context).platform == TargetPlatform.android;
+    final width = MediaQuery.sizeOf(context).width;
+    final headerPadding = isAndroid && width < 360 ? 10.0 : 16.0;
+    final pagePadding = isAndroid && width < 360 ? 4.0 : 8.0;
 
     // ترتيب التبّات من اليمين لليسار: الرئيسية، الألعاب، دواوين، سبونسرات، ملفي.
     final pages = [
@@ -526,12 +602,13 @@ class _HomePageState extends State<HomePage> {
           ),
         ),
         child: SafeArea(
+          bottom: !isAndroid,
           child: Column(
             children: [
               const SizedBox(height: 6),
               if (_index != 4) ...[
                 Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  padding: EdgeInsets.symmetric(horizontal: headerPadding),
                   child: _TopProfileCard(
                     app: app,
                     onTap: () => setState(() => _index = 4),
@@ -541,7 +618,7 @@ class _HomePageState extends State<HomePage> {
               ],
               Expanded(
                 child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 8),
+                  padding: EdgeInsets.symmetric(horizontal: pagePadding),
                   child: pages[_index],
                 ),
               ),
@@ -552,6 +629,9 @@ class _HomePageState extends State<HomePage> {
       bottomNavigationBar: Directionality(
         textDirection: TextDirection.rtl,
         child: NavigationBar(
+          height: isAndroid ? (width < 360 ? 70 : 74) : null,
+          labelBehavior:
+              isAndroid ? NavigationDestinationLabelBehavior.alwaysShow : null,
           selectedIndex: _index,
           onDestinationSelected: (i) => setState(() => _index = i),
           destinations: [
@@ -597,20 +677,43 @@ class _TopProfileCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final name = app.displayName ?? app.name ?? '—';
     final id = app.publicId ?? app.userId ?? '';
-    final (topGame, topPearls) = _topPearlGame(app);
-    final rank = _bestRankLabel(topPearls);
-    final recentWins = _recentWins(name);
-    final screenWidth = MediaQuery.of(context).size.width;
+    final favoriteGame = _favoriteGame(app, name);
+    final topGame = favoriteGame.label;
+    final topPearls = favoriteGame.pearls;
+    final rankThreshold = AppState.badgeThresholdForPearls(
+      app.badgeProgressForGame(favoriteGame.gameId),
+    );
+    final earnedBadges = _earnedBadgeEntries(name);
+    final isAndroid = Theme.of(context).platform == TargetPlatform.android;
+    final screenWidth = MediaQuery.sizeOf(context).width;
+    final veryCompact = isAndroid && screenWidth < 360;
     final compact = screenWidth < 430;
-    final cardHeight = compact ? 156.0 : 164.0;
-    final avatarRadius = compact ? 37.0 : 39.0;
-    final badgeLift = compact ? -22.0 : -20.0;
-    final pearlSize = compact ? 58.0 : 62.0;
-    final trophySize = compact ? 38.0 : 40.0;
-    final badgeRowSlotHeight = compact ? 32.0 : 34.0;
-    final badgeRowMaxHeight = compact ? 90.0 : 96.0;
+    final cardHeight = isAndroid
+        ? (veryCompact ? 144.0 : (compact ? 152.0 : 164.0))
+        : (compact ? 156.0 : 164.0);
+    final avatarRadius = isAndroid
+        ? (veryCompact ? 33.0 : (compact ? 36.0 : 39.0))
+        : (compact ? 37.0 : 39.0);
+    final avatarFrameSize = isAndroid
+        ? (veryCompact ? 86.0 : (compact ? 94.0 : 102.0))
+        : (compact ? 98.0 : 102.0);
+    final badgeLift = isAndroid
+        ? (veryCompact ? -18.0 : (compact ? -20.0 : -20.0))
+        : (compact ? -22.0 : -20.0);
+    final pearlSize = isAndroid
+        ? (veryCompact ? 50.0 : (compact ? 56.0 : 62.0))
+        : (compact ? 58.0 : 62.0);
+    final trophySize = isAndroid
+        ? (veryCompact ? 32.0 : (compact ? 36.0 : 40.0))
+        : (compact ? 38.0 : 40.0);
+    final badgeRowSlotHeight = isAndroid
+        ? (veryCompact ? 28.0 : (compact ? 31.0 : 34.0))
+        : (compact ? 32.0 : 34.0);
+    final badgeRowMaxHeight = isAndroid
+        ? (veryCompact ? 72.0 : (compact ? 86.0 : 96.0))
+        : (compact ? 90.0 : 96.0);
     final cardColor = _cardColor(app.cardId);
-    final rankVisual = playerRankForLabel(rank);
+    final rankVisual = playerRankForThreshold(rankThreshold);
     ImageProvider? avatarImage;
     if (app.avatarBase64 != null && app.avatarBase64!.isNotEmpty) {
       try {
@@ -643,7 +746,11 @@ class _TopProfileCard extends StatelessWidget {
                 PositionedDirectional(
                   top: 8,
                   start: 10,
-                  child: RankBadge(rank: rankVisual, compact: true),
+                  child: _MainGameRankBadge(
+                    rank: rankVisual,
+                    gameId: favoriteGame.gameId,
+                    gameLabel: favoriteGame.label,
+                  ),
                 ),
                 PositionedDirectional(
                   top: 8,
@@ -659,7 +766,7 @@ class _TopProfileCard extends StatelessWidget {
                     children: [
                       buildAvatarThemeWidget(
                         themeId: app.themeId,
-                        size: compact ? 98.0 : 102.0,
+                        size: avatarFrameSize,
                         animate: true,
                         child: CircleAvatar(
                           radius: avatarRadius,
@@ -680,6 +787,8 @@ class _TopProfileCard extends StatelessWidget {
                       const SizedBox(height: 6),
                       Text(
                         name,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                         style: const TextStyle(
                           color: Colors.white,
                           fontSize: 18,
@@ -689,6 +798,8 @@ class _TopProfileCard extends StatelessWidget {
                       if (id.isNotEmpty)
                         Text(
                           _shortId(id),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
                           style: TextStyle(
                             color: Colors.white.withValues(alpha: 0.7),
                             fontSize: 12,
@@ -717,7 +828,10 @@ class _TopProfileCard extends StatelessWidget {
                       pearls: topPearls,
                       size: pearlSize,
                     ),
-                    _MainTrophyStrip(recentWins: recentWins, size: trophySize),
+                    _MainEarnedBadgeStack(
+                      badges: earnedBadges,
+                      size: trophySize,
+                    ),
                   ],
                 ),
               ),
@@ -730,6 +844,9 @@ class _TopProfileCard extends StatelessWidget {
   }
 
   void _openNotifications(BuildContext context, AppState app) {
+    unawaited(app.refreshServerNotifications().whenComplete(() {
+      app.markNotificationsRead();
+    }));
     app.markNotificationsRead();
     showModalBottomSheet<void>(
       context: context,
@@ -835,6 +952,7 @@ class _TopProfileCard extends StatelessWidget {
   IconData _notificationIcon(String type) {
     return switch (type) {
       'badge' => Icons.workspace_premium_rounded,
+      'monthly_leaderboard_award' => Icons.emoji_events_rounded,
       'win' => Icons.emoji_events_rounded,
       'loss' => Icons.sports_score_rounded,
       _ => Icons.notifications_rounded,
@@ -844,6 +962,7 @@ class _TopProfileCard extends StatelessWidget {
   Color _notificationColor(String type) {
     return switch (type) {
       'badge' => Colors.amber,
+      'monthly_leaderboard_award' => Colors.amber,
       'win' => Colors.greenAccent,
       'loss' => Colors.redAccent,
       _ => const Color(0xFFE49A2C),
@@ -861,66 +980,183 @@ class _TopProfileCard extends StatelessWidget {
     return '$day/$month/${value.year}';
   }
 
-  (String, int) _topPearlGame(AppState app) {
-    if (app.gamePearls.isNotEmpty) {
-      final top =
-          app.gamePearls.entries.reduce((a, b) => a.value >= b.value ? a : b);
-      return (app.gameLabel(top.key), top.value);
+  Set<String> _playedGameIds(String player) {
+    final played = <String>{...app.playedGameIds};
+    for (final cat in app.mainGames.values) {
+      for (final gameId in cat) {
+        if (app.winsOf(player, gameId) + app.lossesOf(player, gameId) > 0) {
+          played.add(gameId);
+        }
+      }
     }
-    if (app.selectedGame != null && app.selectedGame!.isNotEmpty) {
-      return (
-        app.gameLabel(app.selectedGame!),
-        app.pearlsForGame(app.selectedGame!)
+    for (final entry in app.timeline) {
+      final gameId = entry.game.trim();
+      if (gameId.isEmpty) continue;
+      if (_isMatchEvent(entry) && _entryInvolvesPlayer(entry, player)) {
+        played.add(gameId);
+      }
+    }
+    return played;
+  }
+
+  bool _isMatchEvent(TimelineEntry entry) {
+    final kind = entry.kind.trim().toUpperCase();
+    return kind.isEmpty ||
+        kind == 'MATCH' ||
+        kind == 'MATCH_WIN' ||
+        kind == 'MATCH_LOSS' ||
+        kind == 'MATCH_FINISHED';
+  }
+
+  bool _entryInvolvesPlayer(TimelineEntry entry, String player) {
+    return entry.winner == player ||
+        entry.winners.contains(player) ||
+        entry.losers.contains(player);
+  }
+
+  int _timelinePlayedCount(String player, String gameId) {
+    return app.timeline
+        .where((entry) =>
+            entry.game.trim() == gameId &&
+            _isMatchEvent(entry) &&
+            _entryInvolvesPlayer(entry, player))
+        .length;
+  }
+
+  _MainGameSummary _favoriteGame(AppState app, String player) {
+    final played = _playedGameIds(player);
+    final gameIds = <String>{
+      ...played,
+      ...app.gamePearls.keys,
+      ...app.gameBadgeProgress.keys,
+      if (app.selectedGame != null && app.selectedGame!.isNotEmpty)
+        app.selectedGame!,
+    };
+    for (final cat in app.mainGames.values) {
+      gameIds.addAll(cat);
+    }
+
+    final summaries = <_MainGameSummary>[];
+    for (final raw in gameIds) {
+      final gameId = raw.trim();
+      if (gameId.isEmpty) continue;
+      final statsPlayed =
+          app.winsOf(player, gameId) + app.lossesOf(player, gameId);
+      final timelinePlayed = _timelinePlayedCount(player, gameId);
+      final active =
+          played.contains(gameId) || statsPlayed > 0 || timelinePlayed > 0;
+      if (!active) continue;
+      summaries.add(_MainGameSummary(
+        gameId: gameId,
+        label: app.gameLabel(gameId),
+        pearls: app.pearlsForGame(gameId),
+        badgeProgress: app.badgeProgressForGame(gameId),
+        playedCount: math.max(statsPlayed, timelinePlayed),
+      ));
+    }
+
+    if (summaries.isEmpty) {
+      return _MainGameSummary(
+        gameId: '',
+        label: app.tr(ar: 'بدون لعبة', en: 'No game'),
+        pearls: 0,
+        badgeProgress: 0,
+        playedCount: 0,
       );
     }
-    return (app.tr(ar: 'بدون لعبة', en: 'No game'), 0);
+
+    summaries.sort((a, b) {
+      if (a.playedCount != b.playedCount) {
+        return b.playedCount.compareTo(a.playedCount);
+      }
+      if (a.badgeProgress != b.badgeProgress) {
+        return b.badgeProgress.compareTo(a.badgeProgress);
+      }
+      if (a.pearls != b.pearls) return b.pearls.compareTo(a.pearls);
+      return a.label.compareTo(b.label);
+    });
+    return summaries.first;
   }
 
-  List<(String, DateTime)> _recentWins(String player) {
-    final wins = app.timeline.where((t) => t.winner == player).toList()
-      ..sort((a, b) => b.ts.compareTo(a.ts));
-    return wins.take(3).map((t) => (app.gameLabel(t.game), t.ts)).toList();
+  Map<String, dynamic>? _bestBadgeForGame(String gameId, String player) {
+    if (!_playedGameIds(player).contains(gameId)) return null;
+    final candidates = app.badges
+        .where((b) => (b['gameId'] ?? '').toString().trim() == gameId)
+        .toList();
+    if (candidates.isEmpty) return null;
+    candidates.sort((a, b) {
+      final thresholdA = (a['threshold'] as num?)?.toInt() ?? 0;
+      final thresholdB = (b['threshold'] as num?)?.toInt() ?? 0;
+      if (thresholdA != thresholdB) return thresholdB.compareTo(thresholdA);
+      final dateA = DateTime.tryParse((a['lastEarnedAt'] ?? '').toString()) ??
+          DateTime.fromMillisecondsSinceEpoch(0);
+      final dateB = DateTime.tryParse((b['lastEarnedAt'] ?? '').toString()) ??
+          DateTime.fromMillisecondsSinceEpoch(0);
+      return dateB.compareTo(dateA);
+    });
+    return candidates.first;
   }
 
-  String _rankLabelForPearls(int pearls) {
-    if (pearls >= 30) return app.tr(ar: 'فلتة', en: 'GOAT');
-    if (pearls >= 20) return app.tr(ar: 'فنان', en: 'Legend');
-    if (pearls >= 15) return app.tr(ar: 'زين', en: 'Professional');
-    if (pearls >= 10) return app.tr(ar: 'يمشي حاله', en: 'Advance');
-    if (pearls >= 5) return app.tr(ar: 'عليمي', en: 'Beginner');
-    return app.tr(ar: 'بدايات', en: 'New');
+  int _badgeThresholdForGame(String gameId, int pearls, String player) {
+    final saved =
+        (_bestBadgeForGame(gameId, player)?['threshold'] as num?)?.toInt() ?? 0;
+    final current = AppState.badgeThresholdForPearls(pearls);
+    return math.max(saved, current);
   }
 
-  String _bestRankLabel(int pearls) {
-    final savedRank = app.bestBadgeLabel();
-    final savedThreshold = app.bestBadgeThreshold();
-    final currentThreshold = AppState.badgeThresholdForPearls(pearls);
-    if (savedRank != null && savedThreshold > currentThreshold) {
-      return _rankLabelForBadge(savedRank);
+  List<_MainEarnedBadgeEntry> _earnedBadgeEntries(String player) {
+    final played = _playedGameIds(player);
+    final byGame = <String, _MainEarnedBadgeEntry>{};
+    for (final badge in app.badges) {
+      final gameId = (badge['gameId'] ?? '').toString().trim();
+      if (gameId.isEmpty || !played.contains(gameId)) continue;
+      final label = (badge['label'] ?? '').toString().trim();
+      final threshold = (badge['threshold'] as num?)?.toInt() ??
+          AppState.badgeThresholdForLabel(label);
+      if (threshold <= 5) continue;
+      final earnedAt =
+          DateTime.tryParse((badge['lastEarnedAt'] ?? '').toString()) ??
+              DateTime.fromMillisecondsSinceEpoch(0);
+      final entry = _MainEarnedBadgeEntry(
+        gameId: gameId,
+        gameLabel: app.gameLabel(gameId),
+        threshold: threshold,
+        earnedAt: earnedAt,
+      );
+      final existing = byGame[gameId];
+      if (existing == null ||
+          entry.threshold > existing.threshold ||
+          (entry.threshold == existing.threshold &&
+              entry.earnedAt.isAfter(existing.earnedAt))) {
+        byGame[gameId] = entry;
+      }
     }
-    return _rankLabelForPearls(pearls);
-  }
 
-  String _rankLabelForBadge(String label) {
-    final arLabel = switch (label) {
-      'Beginner' => 'عليمي',
-      'Advance' => 'يمشي حاله',
-      'Professional' => 'زين',
-      'Legend' => 'فنان',
-      'GOAT' || 'فلته' => 'فلتة',
-      _ => label,
-    };
-    return app.tr(
-      ar: arLabel,
-      en: switch (arLabel) {
-        'عليمي' => 'Beginner',
-        'يمشي حاله' => 'Advance',
-        'زين' => 'Professional',
-        'فنان' => 'Legend',
-        'فلتة' => 'GOAT',
-        _ => label,
-      },
-    );
+    for (final gameId in played) {
+      final threshold = _badgeThresholdForGame(
+        gameId,
+        app.badgeProgressForGame(gameId),
+        player,
+      );
+      if (threshold <= 5) continue;
+      byGame.putIfAbsent(
+        gameId,
+        () => _MainEarnedBadgeEntry(
+          gameId: gameId,
+          gameLabel: app.gameLabel(gameId),
+          threshold: threshold,
+          earnedAt: DateTime.fromMillisecondsSinceEpoch(0),
+        ),
+      );
+    }
+
+    return byGame.values.toList()
+      ..sort((a, b) {
+        if (a.threshold != b.threshold) {
+          return b.threshold.compareTo(a.threshold);
+        }
+        return b.earnedAt.compareTo(a.earnedAt);
+      });
   }
 
   String _shortId(String raw) {
@@ -1073,60 +1309,219 @@ class _MainPearlBadge extends StatelessWidget {
   }
 }
 
-class _MainTrophyStrip extends StatelessWidget {
-  final List<(String, DateTime)> recentWins;
+class _MainGameSummary {
+  final String gameId;
+  final String label;
+  final int pearls;
+  final int badgeProgress;
+  final int playedCount;
+
+  const _MainGameSummary({
+    required this.gameId,
+    required this.label,
+    required this.pearls,
+    required this.badgeProgress,
+    required this.playedCount,
+  });
+}
+
+class _MainEarnedBadgeEntry {
+  final String gameId;
+  final String gameLabel;
+  final int threshold;
+  final DateTime earnedAt;
+
+  const _MainEarnedBadgeEntry({
+    required this.gameId,
+    required this.gameLabel,
+    required this.threshold,
+    required this.earnedAt,
+  });
+}
+
+class _MainGameIconBadge extends StatelessWidget {
+  final String gameId;
   final double size;
-  const _MainTrophyStrip({
-    required this.recentWins,
-    this.size = 36,
+  final Color? iconColor;
+  final Color backgroundColor;
+
+  const _MainGameIconBadge({
+    required this.gameId,
+    this.size = 22,
+    this.iconColor,
+    this.backgroundColor = Colors.white,
   });
 
   @override
   Widget build(BuildContext context) {
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: List.generate(3, (i) {
-        final filled = i < recentWins.length;
-        return Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 3),
-          child: _MainTrophyCircle(
-            filled: filled,
-            size: size,
-          ),
-        );
-      }),
+    final asset = _mainGameSvgAssetById[gameId];
+    return Container(
+      width: size,
+      height: size,
+      padding: EdgeInsets.all(size * 0.16),
+      decoration: BoxDecoration(
+        color: backgroundColor,
+        shape: BoxShape.circle,
+      ),
+      child: asset == null
+          ? Icon(
+              Icons.sports_esports_rounded,
+              size: size * 0.62,
+              color: iconColor ?? const Color(0xFF1E2F4D),
+            )
+          : SvgPicture.asset(
+              asset,
+              fit: BoxFit.contain,
+              colorFilter: iconColor == null
+                  ? null
+                  : ColorFilter.mode(iconColor!, BlendMode.srcIn),
+            ),
     );
   }
 }
 
-class _MainTrophyCircle extends StatelessWidget {
-  final bool filled;
-  final double size;
-  const _MainTrophyCircle({
-    required this.filled,
-    this.size = 36,
+class _MainGameRankBadge extends StatelessWidget {
+  final PlayerRank rank;
+  final String gameId;
+  final String gameLabel;
+
+  const _MainGameRankBadge({
+    required this.rank,
+    required this.gameId,
+    required this.gameLabel,
   });
 
   @override
   Widget build(BuildContext context) {
+    final data = getRankData(rank);
+    return Directionality(
+      textDirection: TextDirection.rtl,
+      child: Container(
+        constraints: const BoxConstraints(maxWidth: 150),
+        padding: const EdgeInsetsDirectional.fromSTEB(8, 5, 9, 5),
+        decoration: BoxDecoration(
+          color: Colors.white.withValues(alpha: 0.08),
+          borderRadius: BorderRadius.circular(18),
+          border: Border.all(color: Colors.white.withValues(alpha: 0.24)),
+          boxShadow: [
+            BoxShadow(
+              color: data.colors.last.withValues(alpha: 0.12),
+              blurRadius: 14,
+            ),
+          ],
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            _MainGameIconBadge(
+              gameId: gameId,
+              size: 24,
+              iconColor: const Color(0xFF1E2F4D),
+              backgroundColor: Colors.white.withValues(alpha: 0.92),
+            ),
+            const SizedBox(width: 7),
+            Flexible(
+              child: Text(
+                gameId.isEmpty ? data.arabic : '${data.arabic} • $gameLabel',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.w900,
+                  fontSize: 13,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _MainEarnedBadgeStack extends StatelessWidget {
+  final List<_MainEarnedBadgeEntry> badges;
+  final double size;
+  const _MainEarnedBadgeStack({required this.badges, this.size = 36});
+
+  @override
+  Widget build(BuildContext context) {
+    final visible = badges.take(3).toList();
+    if (visible.isEmpty) return SizedBox(width: size, height: size);
+    final overlap = size * 0.52;
+    final width = size + (visible.length - 1) * overlap;
+    return Tooltip(
+      message: visible
+          .map((badge) => '${badge.gameLabel} • ${badge.threshold}')
+          .join('\n'),
+      child: SizedBox(
+        width: width,
+        height: size + 8,
+        child: Stack(
+          clipBehavior: Clip.none,
+          children: [
+            for (var i = 0; i < visible.length; i++)
+              PositionedDirectional(
+                end: i * overlap,
+                top: 0,
+                child: _MainEarnedBadgeCircle(
+                  badge: visible[i],
+                  size: size,
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _MainEarnedBadgeCircle extends StatelessWidget {
+  final _MainEarnedBadgeEntry badge;
+  final double size;
+  const _MainEarnedBadgeCircle({required this.badge, this.size = 36});
+
+  @override
+  Widget build(BuildContext context) {
+    final rank = playerRankForThreshold(badge.threshold);
+    final rankData = getRankData(rank);
     return Container(
       width: size,
       height: size,
       decoration: BoxDecoration(
-        color: Colors.white,
+        gradient: LinearGradient(
+          colors: rankData.colors,
+          begin: Alignment.topRight,
+          end: Alignment.bottomLeft,
+        ),
         shape: BoxShape.circle,
+        border: Border.all(color: Colors.white, width: 2),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.12),
-            blurRadius: 6,
-            offset: const Offset(0, 4),
+            color: rankData.colors.last.withValues(alpha: 0.32),
+            blurRadius: 10,
+            offset: const Offset(0, 5),
           ),
         ],
       ),
-      child: Icon(
-        Icons.emoji_events_rounded,
-        size: size * 0.5,
-        color: filled ? Colors.amber : Colors.grey.shade400,
+      child: Stack(
+        alignment: Alignment.center,
+        children: [
+          Icon(
+            rankData.icon,
+            size: size * 0.48,
+            color: Colors.white.withValues(alpha: 0.92),
+          ),
+          PositionedDirectional(
+            end: size * 0.05,
+            bottom: size * 0.05,
+            child: _MainGameIconBadge(
+              gameId: badge.gameId,
+              size: size * 0.42,
+              iconColor: const Color(0xFF1E2F4D),
+            ),
+          ),
+        ],
       ),
     );
   }

@@ -238,6 +238,21 @@ class _TimelinePageState extends State<TimelinePage> {
     // الكروت التفصيلية لكل حدث
     for (var i = 0; i < list.length; i++) {
       final t = list[i];
+      if (t.kind.toUpperCase() == 'SEASON_LEADERBOARD_TOP') {
+        children.add(_TimelineCard(
+          color: Colors.amber.withValues(alpha: 0.12),
+          icon: Icons.emoji_events_rounded,
+          title: '${t.winner} — ${t.meta?['achievementAr'] ?? 'فائز شهري'}',
+          subtitle: (t.meta?['messageAr'] ??
+                  'فوز: ${t.meta?['wins'] ?? 0} | خسارة: ${t.meta?['losses'] ?? 0}')
+              .toString(),
+          ts: _formatTs(t.ts),
+          direction: TextDirection.rtl,
+          streak: 0,
+        ));
+        children.add(const SizedBox(height: 10));
+        continue;
+      }
       if (t.kind != 'level_up' && !isMatchEvent(t)) {
         continue; // نخفي أحداث الروم/النظام في صفحة النتائج
       }
@@ -660,6 +675,17 @@ class _LevelUpCard extends StatelessWidget {
     required this.app,
   });
 
+  String _displayRank(String label) {
+    return switch (label.trim()) {
+      'Advance' || 'يمشي حاله' || 'Good' => 'زين',
+      'Professional' || 'زين' || 'محترف' => 'محترف',
+      'Legend' || 'Legendary' || 'فنان' => 'أسطوري',
+      'GOAT' || 'Best' || 'فلتة' || 'فلته' || 'احسن واحد' => 'أحسن واحد',
+      'Beginner' => 'عليمي',
+      _ => label,
+    };
+  }
+
   _NotchStyle _styleOf(String label) {
     switch (label.trim().toLowerCase()) {
       case 'عليمي':
@@ -671,6 +697,7 @@ class _LevelUpCard extends StatelessWidget {
         );
       case 'يمشي حاله':
       case 'advance':
+      case 'good':
         return const _NotchStyle(
           gradient:
               LinearGradient(colors: [Color(0xFFD7A15F), Color(0xFF8A4B2E)]),
@@ -678,6 +705,7 @@ class _LevelUpCard extends StatelessWidget {
         );
       case 'زين':
       case 'زين بعد':
+      case 'محترف':
       case 'professional':
       case 'pro':
         return const _NotchStyle(
@@ -687,7 +715,9 @@ class _LevelUpCard extends StatelessWidget {
           text: Color(0xFF1B1F24),
         );
       case 'فنان':
+      case 'أسطوري':
       case 'legend':
+      case 'legendary':
         return const _NotchStyle(
           gradient:
               LinearGradient(colors: [Color(0xFFA0F3FF), Color(0xFF5CD7F7)]),
@@ -695,7 +725,11 @@ class _LevelUpCard extends StatelessWidget {
           text: Color(0xFF072630),
         );
       case 'فلتة':
+      case 'فلته':
+      case 'أحسن واحد':
+      case 'احسن واحد':
       case 'goat':
+      case 'best':
         return const _NotchStyle(
           gradient:
               LinearGradient(colors: [Color(0xFFB388FF), Color(0xFF512DA8)]),
@@ -712,10 +746,11 @@ class _LevelUpCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final toLabel =
-        to.isNotEmpty ? to : app.tr(ar: 'مستوى جديد', en: 'New rank');
+    final toLabel = to.isNotEmpty
+        ? _displayRank(to)
+        : app.tr(ar: 'مستوى جديد', en: 'New rank');
     final fromLabel = from.isNotEmpty
-        ? from
+        ? _displayRank(from)
         : app.tr(ar: 'المستوى السابق', en: 'Previous rank');
     final style = _styleOf(toLabel);
     return Card(

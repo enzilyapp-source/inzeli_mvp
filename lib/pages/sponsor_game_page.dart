@@ -185,6 +185,15 @@ class _SponsorGameScreenState extends State<SponsorGameScreen> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final sponsorName = _sponsor?['name']?.toString() ?? widget.sponsorCode;
+    final sponsorImage = (_sponsor?['imageUrl'] ?? '').toString().trim();
+    final sponsorColor = _parseHexColor(
+      _sponsor?['themePrimary']?.toString(),
+      fallback: theme.colorScheme.primary,
+    );
+    final sponsorAccent = _parseHexColor(
+      _sponsor?['themeAccent']?.toString(),
+      fallback: sponsorColor,
+    );
 
     void onSelectGame(String gameId) {
       setState(() => _selectedGameId = gameId);
@@ -229,9 +238,19 @@ class _SponsorGameScreenState extends State<SponsorGameScreen> {
                 child: ListView(
                   padding: const EdgeInsets.all(16),
                   children: [
+                    _SponsorHeader(
+                      name: sponsorName,
+                      imageUrl: sponsorImage.isEmpty ? null : sponsorImage,
+                      primary: sponsorColor,
+                      accent: sponsorAccent,
+                    ),
+                    const SizedBox(height: 18),
                     Row(
                       children: [
-                        const Icon(Icons.workspace_premium_outlined),
+                        Icon(
+                          Icons.workspace_premium_outlined,
+                          color: sponsorColor,
+                        ),
                         const SizedBox(width: 8),
                         Expanded(
                           child: Text(
@@ -271,6 +290,7 @@ class _SponsorGameScreenState extends State<SponsorGameScreen> {
                             prize: prize,
                             pearls: pearls,
                             selected: selected,
+                            accent: sponsorColor,
                             onTap: () => onSelectGame(gameId),
                           );
                         }).toList(),
@@ -311,6 +331,7 @@ class _GameCard extends StatelessWidget {
   final int prize;
   final int pearls;
   final bool selected;
+  final Color accent;
   final VoidCallback onTap;
 
   const _GameCard({
@@ -319,6 +340,7 @@ class _GameCard extends StatelessWidget {
     required this.prize,
     required this.pearls,
     required this.selected,
+    required this.accent,
     required this.onTap,
   });
 
@@ -333,7 +355,7 @@ class _GameCard extends StatelessWidget {
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(12),
           border: Border.all(
-            color: selected ? colorScheme.primary : colorScheme.outlineVariant,
+            color: selected ? accent : colorScheme.outlineVariant,
             width: selected ? 2 : 1,
           ),
         ),
@@ -343,7 +365,7 @@ class _GameCard extends StatelessWidget {
             children: [
               Icon(
                 Icons.sports_esports_outlined,
-                color: selected ? colorScheme.primary : colorScheme.onSurface,
+                color: selected ? accent : colorScheme.onSurface,
               ),
               const SizedBox(width: 8),
               Expanded(
@@ -379,7 +401,7 @@ class _GameCard extends StatelessWidget {
               ),
               if (selected) ...[
                 const SizedBox(width: 8),
-                Icon(Icons.check_circle, color: colorScheme.primary),
+                Icon(Icons.check_circle, color: accent),
               ],
             ],
           ),
@@ -387,4 +409,132 @@ class _GameCard extends StatelessWidget {
       ),
     );
   }
+}
+
+class _SponsorHeader extends StatelessWidget {
+  final String name;
+  final String? imageUrl;
+  final Color primary;
+  final Color accent;
+
+  const _SponsorHeader({
+    required this.name,
+    required this.imageUrl,
+    required this.primary,
+    required this.accent,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      clipBehavior: Clip.antiAlias,
+      child: SizedBox(
+        height: 170,
+        child: Stack(
+          fit: StackFit.expand,
+          children: [
+            if (imageUrl != null)
+              Image.network(
+                imageUrl!,
+                fit: BoxFit.cover,
+                errorBuilder: (_, __, ___) => _SponsorHeaderFallback(
+                  primary: primary,
+                  accent: accent,
+                ),
+              )
+            else
+              _SponsorHeaderFallback(primary: primary, accent: accent),
+            DecoratedBox(
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  colors: [
+                    Colors.black.withValues(alpha: 0.08),
+                    Colors.black.withValues(alpha: 0.68),
+                  ],
+                ),
+              ),
+            ),
+            PositionedDirectional(
+              start: 16,
+              end: 16,
+              bottom: 16,
+              child: Row(
+                children: [
+                  Container(
+                    width: 42,
+                    height: 42,
+                    decoration: BoxDecoration(
+                      color: primary,
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(
+                        color: Colors.white.withValues(alpha: 0.7),
+                      ),
+                    ),
+                    child: const Icon(
+                      Icons.workspace_premium_outlined,
+                      color: Colors.white,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
+                      name,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 22,
+                        fontWeight: FontWeight.w900,
+                        fontFamily: 'Tajawal',
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _SponsorHeaderFallback extends StatelessWidget {
+  final Color primary;
+  final Color accent;
+
+  const _SponsorHeaderFallback({
+    required this.primary,
+    required this.accent,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topRight,
+          end: Alignment.bottomLeft,
+          colors: [
+            primary.withValues(alpha: 0.92),
+            accent.withValues(alpha: 0.74),
+            const Color(0xFF1F2B40),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+Color _parseHexColor(String? input, {required Color fallback}) {
+  final text = (input ?? '').trim().replaceAll('#', '');
+  if (text.length == 6 || text.length == 8) {
+    try {
+      final withAlpha = text.length == 8 ? text : 'FF$text';
+      return Color(int.parse(withAlpha, radix: 16));
+    } catch (_) {}
+  }
+  return fallback;
 }
