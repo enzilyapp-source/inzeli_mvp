@@ -116,3 +116,9 @@ SHA-256 لحزمة أندرويد: `1d292bdc2c7a65b2c9116ceefa2d756f1fc42ced063f
 التحقق الفعلي: قبول ملف الجهاز ورفض ملف محاكي حقيقي كجهاز، ورفض غياب المكتبة، وإعادة أرشفة ناجحة ثم فحص frameworks الأرشيف لمنصة IOS. الإصدار ما زال `10.0.31 (39)` لأن الرفع السابق رُفض. استخدم الأرشيف المصحح في `build/ios/archive/Runner.xcarchive` بدل الأرشيف السابق في Organizer. أندرويد لم يتغير.
 
 اكتمل تصدير IPA المصحح بنجاح بعد معالجة حساب Apple: `build/ios/ipa/Enzily.ipa`. تم فك IPA مؤقتًا والتحقق من التوقيع (`codesign --verify --deep --strict`) ومن وجود objective_c بمعمارية arm64 ومنصة IOS لجميع frameworks المضمنة. فُتح الأرشيف المصحح في Xcode؛ لم يُرفع للمتجر تلقائيًا. هذا يحدّث حالة تعذر التصدير المذكورة في نتيجة التجهيز السابقة.
+
+## Production deployment — 11 November 2026
+
+Backend commit ed6e1be6 is deployed on Render and migration 20261108000000_room_score_sheet is applied/recorded in Neon. The database schema matches Prisma, and GitHub Actions run 43010415698 passed. A full backup was restored locally and the additive migration preserved all 31 previous tables (33,396 rows) in the restored copy.
+
+Live checks against an existing test-account room: score-sheet GET 200, roster GET 200, nonmember PUT rejected with 403, unauthenticated request rejected with 401. No game results or ledger data were written during production verification. Maintenance remains disabled. Store version 10.0.31 (39) uses these endpoints; no additional app build is needed for this server deployment.
