@@ -1,3 +1,4 @@
+import 'widgets/adaptive_game_frame.dart';
 // lib/main.dart
 import 'dart:async';
 import 'dart:math' as math;
@@ -76,14 +77,16 @@ class InzeliApp extends StatelessWidget {
           : const [Locale('ar'), Locale('en')],
       builder: (context, child) {
         if (defaultTargetPlatform != TargetPlatform.android) {
-          return OperationsGate(child: child ?? const SizedBox.shrink());
+          return FoldAwareApp(
+              child: OperationsGate(child: child ?? const SizedBox.shrink()));
         }
         final media = MediaQuery.of(context);
         final scale = media.textScaler.scale(1);
         final clampedScale = scale.clamp(1.0, 1.12).toDouble();
         return MediaQuery(
           data: media.copyWith(textScaler: TextScaler.linear(clampedScale)),
-          child: OperationsGate(child: child ?? const SizedBox.shrink()),
+          child: FoldAwareApp(
+              child: OperationsGate(child: child ?? const SizedBox.shrink())),
         );
       },
       themeMode: ThemeMode.dark,

@@ -1,0 +1,91 @@
+/* In-app palette only. Mirrors ScoreAppearance/main.dart. The standalone Qaed
+   website and all scoring engines keep their reviewed source files unchanged. */
+:root{
+  color-scheme:dark;
+  --bg:#223448;--panel:#1c273b;--field:#27364d;--line:#496078;
+  --text:#e5ecf7;--muted:#b6c4d5;--gold:#e49a2c;
+  --green:#8dcbb6;--red:#e2a5ab;--ink:#142137;
+}
+html,body{background:var(--bg);color:var(--text)}
+.game-heading p,.settings-hint,.note,.muted,.remaining,.badge,.footerHint,
+.field label,.note-field>span,.participant-names label,.settings-options label{color:var(--muted)}
+.eyebrow{color:var(--gold)}
+.icon-button,.iconbtn,.closeX{background:var(--panel);color:var(--text);border-color:var(--line)}
+.icon-button:active{background:var(--field)}
+.mode-switch{background:var(--ink)}
+.mode-switch button{color:var(--muted)}
+.mode-switch button[aria-pressed=true]{background:var(--field);color:var(--gold);box-shadow:none}
+.live-scores,.kout-scoreboard,.room-team-totals{background:#122137;border:1px solid #3a516a;color:var(--text)}
+.scoreboard-heading{border-color:#3a516a}
+.scoreboard-heading>span{color:var(--gold)}
+.scoreboard-heading small,.scoreboard-person>span{color:#bdccdc}
+.scoreboard-person bdi{color:var(--text)}
+.entry-section,.kout-entry,.game-rule-settings,.trix-editor{background:var(--panel);border-color:var(--line)}
+.section-label>span{background:var(--field);color:var(--muted)}
+.score-row,.note-field,.trix-count-row{border-color:#3a4d64}
+.sign-button,.stepBtn{background:var(--field);color:var(--text);border-color:var(--line)}
+.score-value,.note-field input,.general-shell input,.modal input,.modal select,
+select,.participant-names input,.game-rule-settings input{background:#203048;color:var(--text);border-color:var(--line)}
+.score-value::placeholder,.note-field input::placeholder{color:#b0bfd1;opacity:1}
+.score-value.positive{color:var(--text)}
+.score-value.negative{color:var(--green)}
+.score-value:focus,.note-field input:focus,.general-shell input:focus{border-color:var(--secondary,#5e9eb4);outline:2px solid #5e9eb4;outline-offset:2px}
+.button,.btn{box-shadow:none}
+.button.primary,.btn.primary{background:var(--gold);border-color:var(--gold);color:var(--ink);box-shadow:none}
+.button.secondary,.btn{background:var(--field);border-color:var(--line);color:var(--text)}
+.button.quiet,.btn.ghost{background:transparent;border-color:var(--line);color:var(--muted)}
+.button.primary:disabled,.btn.primary:disabled{background:#344359;color:#c0ccdc;border-color:#496078;opacity:1}
+button:disabled,input:disabled,select:disabled{opacity:.55}
+.empty-history,.empty{background:#203048;border-color:var(--line);color:var(--muted)}
+.empty-history>span{color:#8da6bd}
+.table-wrap{background:var(--panel);border-color:var(--line)}
+th,td{border-color:#3a4d64}
+thead th{background:#263a52;color:#c2d0df}
+tfoot td,tfoot th{background:#2a3e56;color:var(--text)}
+.leader{color:var(--green)}.trailing{color:var(--red)}
+.rules-note{background:var(--panel);color:var(--muted);border-color:var(--line)}
+.rules-note summary{color:var(--text)}
+.rule-chips span{background:var(--field);color:var(--text);border-color:var(--line)}
+.feedback:not(:empty),.storage-warning{background:#343444;border-color:#8c724b;color:#f0cf98}
+.winner-panel,.winnerBox{background:#203d3d;border-color:#527c70}
+.winner-panel h2,.winnerBox .who{color:var(--green)}
+.winner-panel p{color:#c5ddd4}
+dialog,.modal{background:var(--panel);color:var(--text);border-color:var(--line)}
+dialog::backdrop,.overlay{background:#071322b3}
+.kout-scoreboard span:not(.kout-divider){color:#c2d0df}
+.kout-scoreboard strong{color:var(--text)}
+.kout-scoreboard .kout-divider{color:#8ca1b7}
+.kout-scoreboard .winning-score{color:var(--green)}
+.kout-options button,.trix-person-options button,.trix-ranks button,
+.trix-complex-options label{background:var(--field);border-color:var(--line);color:var(--text)}
+.kout-options button small{color:var(--muted)}
+.kout-options button[aria-pressed=true],.trix-person-options button[aria-pressed=true],
+.trix-ranks button[aria-pressed=true]{background:#3a3d44;color:#f5c57d;border-color:var(--gold);box-shadow:none}
+.kout-preview{background:#203048;border-color:var(--line);color:var(--muted)}
+.kout-preview.ready,.trix-preview{background:#203d3d;border-color:#527c70;color:var(--green)}
+.trix-preview span{color:#c5ddd4}.trix-preview bdi{color:var(--green)}
+.trix-kingdoms button{background:var(--panel);border-color:var(--line);color:var(--muted)}
+.trix-kingdoms button strong{color:var(--text)}
+.trix-kingdoms button[aria-pressed=true]{background:var(--field);border-color:var(--gold);color:#d0dbea}
+.trix-kingdoms button[aria-pressed=true] strong{color:#f5c57d}
+.trix-game{background:var(--panel);border-color:var(--line);color:var(--text)}
+.trix-game small{color:var(--muted)}
+.trix-game[aria-pressed=true]{background:var(--field);color:var(--gold);border-color:var(--gold)}
+.trix-game.closed{background:#253448;color:#b0bfd1}
+.trix-game.complex{background:#343b49;color:#edcc97;border-color:#8c724b}
+.trix-component,.trix-review{background:#203048;border-color:var(--line)}
+.trix-counter button,.trix-counter input{background:var(--field);border-color:var(--line);color:var(--text)}
+.trix-table tbody th{color:var(--text)}
+.trix-table tbody th small{color:var(--gold)}
+.trix-table tfoot .kingdom-total td,.trix-table tfoot .kingdom-total th{background:#263a52;color:var(--muted)}
+.general-shell .card{background:var(--panel);border-color:var(--line)}
+.general-shell .bigScore,.general-shell .remaining b{color:var(--text)}
+.general-shell .stepBtn{background:var(--field);color:var(--text);border-color:var(--line)}
+.general-shell input{background:#203048;color:var(--text);border-color:var(--line)}
+.general-shell .general-history{background:transparent;border:0}
+.general-shell #logTable{background:var(--panel)}
+.general-shell #logTable th,.general-shell #logTable td{border-color:var(--line)}
+.general-shell #logTable th{color:var(--muted)}
+.general-shell .btn.danger{background:var(--panel);color:var(--red)}
+.room-avatar{background:#40566c;color:var(--text)}
+.room-team-members{color:var(--muted)}

@@ -48,6 +48,13 @@ class ApiRoom {
 
   static String friendlyError(Object error) {
     final text = error.toString();
+    if (text.contains('TOO_FAR')) {
+      return 'أنت خارج نطاق مكان القيم. قرّب من المكان المحدد وفعّل الموقع الدقيق، ثم حاول مرة ثانية.';
+    }
+    if (text.contains('NEED_LOCATION')) {
+      return 'فعّل الموقع الدقيق للتطبيق وحاول مرة ثانية.';
+    }
+
     final active =
         RegExp(r'PLAYER_ALREADY_IN_ACTIVE_ROOM:([A-Z0-9]+)').firstMatch(text);
     if (active != null) {

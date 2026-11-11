@@ -14,6 +14,8 @@ import '../widgets/app_snackbar.dart';
 import '../widgets/primary_pill_button.dart';
 import '../rules.dart';
 import '../local_game_notifications.dart';
+import '../scorekeeper/score_models.dart';
+import 'scorekeeper/room_score_page.dart';
 
 class MatchPage extends StatefulWidget {
   final AppState app;
@@ -74,16 +76,9 @@ class _MatchPageState extends State<MatchPage> with WidgetsBindingObserver {
   int? _lastRemainingSoundTick;
   DateTime? _lastRefreshErrorAt;
 
-  // -------- قيد (تسجيل نقاط الجنجفه) --------
-  final int _qaidDefaultTarget = 100;
-  int _qaidTarget = 100;
-  int _qaidScoreA = 0;
-  int _qaidScoreB = 0;
-  final _qaidInputA = TextEditingController();
-  final _qaidInputB = TextEditingController();
-  List<Map<String, dynamic>> _qaidRounds = [];
-  final Map<String, TextEditingController> _qaidPlayerInputs = {};
-  final Map<String, int> _qaidPlayerScores = {};
+  // RoomScorePage is an optional companion route; it never submits match results.
+  late final ValueNotifier<ScoreRoomInfo> _scoreRoom;
+  bool _openingScore = false;
 
   // قواعد أحجام الفرق لكل لعبة (عدد اللاعبين في كل فريق)
   static const Map<String, List<int>> _teamSizeRules = {
@@ -110,102 +105,87 @@ class _MatchPageState extends State<MatchPage> with WidgetsBindingObserver {
     5
   }; // هند فردي = 2 أو 3 أو 4 أو 5 لاعبين
   static const int _spitaSoloSize = 5; // سبيتة فردي = 5 لاعبين
-  static const bool _scoreEntryEnabled = false;
   bool get _iAmInRoom {
     final uid = widget.app.userId;
     if (uid == null || uid.isEmpty) return false;
     return _uniquePlayersList.any((p) => (p['userId'] ?? '') == uid);
   }
 
-  bool _isCardGame(String game) {
-    if (!_scoreEntryEnabled) return false;
-    final g = game.trim();
-    if (g == 'دفان') return false; // دفان بدون قيد
-    const cardGames = [
-      'كوت',
-      'بلوت',
-      'تريكس',
-      'تريكس كمبليت',
-      'هند',
-      'hand',
-      'trex',
-      'baloot',
-      'coup',
-      'sbeeta',
-      'سبيتة',
-    ];
-    return cardGames
-            .any((c) => g.toLowerCase().contains(c.trim().toLowerCase())) &&
-        !g.toLowerCase().contains('uno');
+  bool _isCardGame(String game) => ScoreKind.supports(game);
+
+  ScoreRoomInfo _scoreInfo() {
+    final room = _room ?? widget.room;
+    return ScoreRoomInfo(
+      code: (room?['code'] ?? widget.app.roomCode ?? '').toString(),
+      game: (room?['gameId'] ?? widget.app.selectedGame ?? '').toString(),
+      hostId: (room?['hostUserId'] ?? '').toString(),
+      players: _uniquePlayersList.map((p) {
+        final person = ScorePerson.fromRoom(p);
+        return ScorePerson(
+            id: person.id,
+            name: person.name,
+            avatar: person.avatar,
+            team: _teamOf[person.id] ?? person.team);
+      }).toList(),
+      teamMode: _teamMode,
+      startedAt: _startedAt,
+      timerSeconds: _timerSec,
+      closed: _closedNotified,
+    );
   }
 
-  void _resetQaid() {
-    _qaidTarget = _qaidDefaultTarget;
-    _qaidScoreA = 0;
-    _qaidScoreB = 0;
-    _qaidRounds = [];
-    _qaidInputA.clear();
-    _qaidInputB.clear();
-    _qaidPlayerScores.clear();
-    for (final c in _qaidPlayerInputs.values) {
-      c.dispose();
-    }
-    _qaidPlayerInputs.clear();
-    final players = _uniquePlayersList;
-    for (final p in players) {
-      final uid = (p['userId'] ?? '').toString();
-      if (uid.isEmpty) continue;
-      _qaidPlayerScores[uid] = 0;
-      _qaidPlayerInputs[uid] = TextEditingController();
-    }
+  void _publishScoreRoom() {
+    if (mounted) _scoreRoom.value = _scoreInfo();
   }
 
-  void _ensureQaidPlayer(String uid) {
-    if (!_qaidPlayerScores.containsKey(uid)) {
-      _qaidPlayerScores[uid] = 0;
+  Future<void> _openScore() async {
+    if (_openingScore || _closedNotified || !_iAmInRoom) return;
+    if (_startedAt == null) {
+      _msg('القيد اختياري ومتاح بعد بدء القيم.');
+      return;
     }
-    if (!_qaidPlayerInputs.containsKey(uid)) {
-      _qaidPlayerInputs[uid] = TextEditingController();
+    _openingScore = true;
+    _publishScoreRoom();
+    try {
+      await Navigator.push<void>(
+          context,
+          MaterialPageRoute(
+              builder: (_) => RoomScorePage(
+                  room: _scoreRoom,
+                  userId: widget.app.userId ?? '',
+                  token: widget.app.token)));
+    } finally {
+      _openingScore = false;
     }
   }
 
-  void _saveQaidRound(bool teamMode) {
-    if (teamMode) {
-      final a = int.tryParse(_qaidInputA.text.trim()) ?? 0;
-      final b = int.tryParse(_qaidInputB.text.trim()) ?? 0;
-      _qaidScoreA += a;
-      _qaidScoreB += b;
-      _qaidRounds.add({'a': a, 'b': b, 'ts': DateTime.now().toIso8601String()});
-      _qaidInputA.clear();
-      _qaidInputB.clear();
-    } else {
-      final map = <String, int>{};
-      _qaidPlayerInputs.forEach((uid, ctrl) {
-        final v = int.tryParse(ctrl.text.trim()) ?? 0;
-        map[uid] = v;
-        _qaidPlayerScores[uid] = (_qaidPlayerScores[uid] ?? 0) + v;
-        ctrl.clear();
-      });
-      _qaidRounds.add({'scores': map, 'ts': DateTime.now().toIso8601String()});
-    }
-    setState(() {});
-  }
-
-  void _undoQaidRound(bool teamMode) {
-    if (_qaidRounds.isEmpty) return;
-    final last = _qaidRounds.removeLast();
-    if (teamMode) {
-      _qaidScoreA -= (last['a'] as int? ?? 0);
-      _qaidScoreB -= (last['b'] as int? ?? 0);
-    } else {
-      final map = last['scores'] as Map<String, dynamic>? ?? {};
-      map.forEach((uid, v) {
-        _qaidPlayerScores[uid] =
-            (_qaidPlayerScores[uid] ?? 0) - (v as int? ?? 0);
-      });
-    }
-    setState(() {});
-  }
+  Future<void> _showRoomQr(String code) => showModalBottomSheet<void>(
+        context: context,
+        useSafeArea: true,
+        isScrollControlled: true,
+        builder: (ctx) => SingleChildScrollView(
+            child: Padding(
+                padding: const EdgeInsets.all(24),
+                child: Column(mainAxisSize: MainAxisSize.min, children: [
+                  const Text('QR القيم',
+                      style:
+                          TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
+                  const SizedBox(height: 16),
+                  SizedBox(
+                      width: 220,
+                      height: 220,
+                      child: QrImageView(
+                          data: 'https://inzeli.app/join/$code',
+                          backgroundColor: Colors.white)),
+                  const SizedBox(height: 12),
+                  SelectableText(code),
+                  const SizedBox(height: 8),
+                  const Text('الانضمام يبقى مقفلًا أثناء العداد.'),
+                  TextButton(
+                      onPressed: () => Navigator.pop(ctx),
+                      child: const Text('رجوع')),
+                ]))),
+      );
 
   String _playerKey(Map<String, dynamic> p) {
     final uid = (p['userId'] ?? '').toString();
@@ -243,7 +223,7 @@ class _MatchPageState extends State<MatchPage> with WidgetsBindingObserver {
       final uid = (p['userId'] ?? '').toString();
       if (uid.isNotEmpty && !seenIds.add(uid)) continue;
       final nameKey = _nameForMap(p).trim().toLowerCase();
-      if (!seenNames.add(nameKey)) continue;
+      if (uid.isEmpty && !seenNames.add(nameKey)) continue;
       out.add(p);
     }
     return out;
@@ -262,10 +242,6 @@ class _MatchPageState extends State<MatchPage> with WidgetsBindingObserver {
     final initialGame =
         (widget.room?['gameId'] ?? widget.app.selectedGame ?? '').toString();
     _currentGameMode = widget.app.gameMode(initialGame);
-    // حضّر القيد إذا اللعبة من ألعاب الجنجفه
-    if (_isCardGame(initialGame)) {
-      _resetQaid();
-    }
 
     if (teamModeFlag is bool) {
       _teamMode = teamModeFlag;
@@ -275,6 +251,7 @@ class _MatchPageState extends State<MatchPage> with WidgetsBindingObserver {
       _teamMode = false;
     }
     _enforceGameMode();
+    _scoreRoom = ValueNotifier(_scoreInfo());
     if (code.isNotEmpty) _refresh(code);
     // تحديث تلقائي كل 10 ثوانٍ
     if (code.isNotEmpty) {
@@ -289,11 +266,7 @@ class _MatchPageState extends State<MatchPage> with WidgetsBindingObserver {
     WidgetsBinding.instance.removeObserver(this);
     _ticker?.cancel();
     _autoRefresh?.cancel();
-    _qaidInputA.dispose();
-    _qaidInputB.dispose();
-    for (final c in _qaidPlayerInputs.values) {
-      c.dispose();
-    }
+    _scoreRoom.dispose();
     super.dispose();
   }
 
@@ -320,7 +293,10 @@ class _MatchPageState extends State<MatchPage> with WidgetsBindingObserver {
     if (!mounted) return;
     if (_allowPop) return;
     _allowPop = true;
-    Navigator.pop(context);
+    final route = ModalRoute.of(context);
+    final navigator = Navigator.of(context);
+    if (route != null) navigator.popUntil((candidate) => candidate == route);
+    navigator.pop();
   }
 
   String _localNotificationRoomKey([String? code]) {
@@ -635,6 +611,7 @@ class _MatchPageState extends State<MatchPage> with WidgetsBindingObserver {
         }
       }
       setState(() => _remaining = clamped);
+      _publishScoreRoom();
       if (_remaining <= 0) _ticker?.cancel();
     }
 
@@ -972,7 +949,6 @@ class _MatchPageState extends State<MatchPage> with WidgetsBindingObserver {
       final roomTeamMode = room['teamMode'];
       final roomMode = room['mode']?.toString();
 
-      final prevTeamMode = _teamMode;
       // Decide mode: prefer explicit backend flag. Otherwise, infer from teams or game mode.
       if (roomTeamMode is bool) {
         _teamMode = roomTeamMode;
@@ -1001,13 +977,6 @@ class _MatchPageState extends State<MatchPage> with WidgetsBindingObserver {
         _winnerTeam = null;
       }
 
-      // لو تغير نوع اللعب بين فردي/فرق أثناء الجولة للكوت/الجنجفة، صفّر القيد عشان يتوافق مع النمط
-      if (_startedAt != null &&
-          _isCardGame(gameId) &&
-          prevTeamMode != _teamMode) {
-        _resetQaid();
-      }
-
       _timerSec = (room['timerSec'] as num?)?.toInt();
       final s = room['startedAt'] as String?;
       _syncTimerRound(s);
@@ -1016,7 +985,8 @@ class _MatchPageState extends State<MatchPage> with WidgetsBindingObserver {
       unawaited(_syncTimerNotification(code: code));
 
       await _refreshResultState(code);
-
+      if (!mounted) return;
+      _publishScoreRoom();
       setState(() {});
     } catch (e) {
       // لا نسبب سبام SnackBar كل 3 ثواني لأن هذا يعلق واجهة المباراة.
@@ -1047,12 +1017,6 @@ class _MatchPageState extends State<MatchPage> with WidgetsBindingObserver {
     final isHost = widget.app.userId != null && hostId == widget.app.userId;
     final bool qaidGame = _isCardGame(game);
     final bool started = _startedAt != null;
-    if (started && qaidGame && !_teamMode) {
-      for (final p in _uniquePlayersList) {
-        final uid = (p['userId'] ?? '').toString();
-        if (uid.isNotEmpty) _ensureQaidPlayer(uid);
-      }
-    }
 
     return PopScope(
       canPop: _allowPop,
@@ -1185,23 +1149,17 @@ class _MatchPageState extends State<MatchPage> with WidgetsBindingObserver {
                                       value: false, label: Text('فردي')),
                                 ],
                                 selected: {_teamMode},
-                                onSelectionChanged: (s) => setState(() {
-                                  _teamMode = s.first;
-                                  _winnerTeam = null;
-                                  _winnerUserId = null;
-                                  if (!_teamMode) {
-                                    _teamOf.clear();
-                                  }
-                                  final gameName = (_room?['gameId'] ??
-                                          widget.room?['gameId'] ??
-                                          widget.app.selectedGame ??
-                                          '')
-                                      .toString();
-                                  if (_isCardGame(gameName) &&
-                                      _startedAt != null) {
-                                    _resetQaid();
-                                  }
-                                }),
+                                onSelectionChanged: _startedAt != null
+                                    ? null
+                                    : (s) => setState(() {
+                                          _teamMode = s.first;
+                                          _winnerTeam = null;
+                                          _winnerUserId = null;
+                                          if (!_teamMode) {
+                                            _teamOf.clear();
+                                          }
+                                          _publishScoreRoom();
+                                        }),
                               )
                             else
                               Container(
@@ -1274,9 +1232,6 @@ class _MatchPageState extends State<MatchPage> with WidgetsBindingObserver {
                           final s = data['startedAt'] as String?;
                           _syncTimerRound(s);
                           _startedAt = s != null ? DateTime.tryParse(s) : null;
-                          if (_isCardGame(gameName)) {
-                            _resetQaid();
-                          }
                           _startTickerIfNeeded();
                           unawaited(_syncTimerNotification(
                             code: code,
@@ -1300,6 +1255,7 @@ class _MatchPageState extends State<MatchPage> with WidgetsBindingObserver {
                     _AssignTeamsCard(
                       app: widget.app,
                       code: code,
+                      canAssign: _startedAt == null,
                       players: players,
                       teamOf: _teamOf,
                       pearlsByUser: _pearlsByUser,
@@ -1425,21 +1381,20 @@ class _MatchPageState extends State<MatchPage> with WidgetsBindingObserver {
 
                   const SizedBox(height: 12),
 
-                  if (isHost && started && qaidGame && !countdownActive) ...[
-                    _QaidCard(
-                      teamMode: _teamMode,
-                      target: _qaidTarget,
-                      scoreA: _qaidScoreA,
-                      scoreB: _qaidScoreB,
-                      players: _uniquePlayersList,
-                      playerScores: _qaidPlayerScores,
-                      inputA: _qaidInputA,
-                      inputB: _qaidInputB,
-                      playerInputs: _qaidPlayerInputs,
-                      onSave: () => setState(() => _saveQaidRound(_teamMode)),
-                      onUndo: () => setState(() => _undoQaidRound(_teamMode)),
-                      onReset: () => setState(() => _resetQaid()),
-                    ),
+                  if (started &&
+                      qaidGame &&
+                      _iAmInRoom &&
+                      !countdownActive) ...[
+                    Card(
+                        child: ListTile(
+                      leading: const Icon(Icons.edit_note),
+                      title: const Text('قيد المباراة — اختياري'),
+                      subtitle: Text(isHost
+                          ? 'اختَر قيد اللعبة أو القيد العام، وسجّل النقاط للجميع.'
+                          : 'عرض القيد الذي فتحه الهوست.'),
+                      trailing: const Icon(Icons.chevron_left),
+                      onTap: _openScore,
+                    )),
                     const SizedBox(height: 12),
                   ],
 
@@ -1660,29 +1615,27 @@ class _MatchPageState extends State<MatchPage> with WidgetsBindingObserver {
                   ),
                 ),
               ),
-            // أثناء القفل: نسمح باستخدام القيد فقط
-            if (isHost && countdownActive && started && qaidGame)
+            // Opening a companion score route/QR never unlocks room actions.
+            if (countdownActive && started && qaidGame && _iAmInRoom)
               Positioned(
-                left: 12,
-                right: 12,
-                bottom: 12,
-                child: IgnorePointer(
-                  ignoring: false,
-                  child: _QaidCard(
-                    teamMode: _teamMode,
-                    target: _qaidTarget,
-                    scoreA: _qaidScoreA,
-                    scoreB: _qaidScoreB,
-                    players: _uniquePlayersList,
-                    playerScores: _qaidPlayerScores,
-                    inputA: _qaidInputA,
-                    inputB: _qaidInputB,
-                    playerInputs: _qaidPlayerInputs,
-                    onSave: () => setState(() => _saveQaidRound(_teamMode)),
-                    onUndo: () => setState(() => _undoQaidRound(_teamMode)),
-                    onReset: () => setState(() => _resetQaid()),
-                  ),
-                ),
+                left: 16,
+                right: 16,
+                bottom: 16,
+                child: SafeArea(
+                    child: Wrap(
+                        alignment: WrapAlignment.center,
+                        spacing: 12,
+                        runSpacing: 10,
+                        children: [
+                      FilledButton.icon(
+                          onPressed: _openScore,
+                          icon: const Icon(Icons.edit_note),
+                          label: const Text('قيد المباراة — اختياري')),
+                      OutlinedButton.icon(
+                          onPressed: () => _showRoomQr(code),
+                          icon: const Icon(Icons.qr_code),
+                          label: const Text('عرض QR')),
+                    ])),
               ),
           ],
         ),
@@ -1715,6 +1668,7 @@ class _AssignTeamsCard extends StatelessWidget {
   final Map<String, String?> teamOf;
   final Map<String, int> pearlsByUser;
   final VoidCallback onChanged;
+  final bool canAssign;
 
   const _AssignTeamsCard({
     required this.app,
@@ -1723,6 +1677,7 @@ class _AssignTeamsCard extends StatelessWidget {
     required this.teamOf,
     required this.pearlsByUser,
     required this.onChanged,
+    required this.canAssign,
   });
 
   @override
@@ -1742,7 +1697,9 @@ class _AssignTeamsCard extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             Text(
-              'توزيع الفرق (للمضيف فقط)',
+              canAssign
+                  ? 'توزيع الفرق (للمضيف فقط)'
+                  : 'توزيع الفرق ثابت بعد بدء القيم',
               style: TextStyle(
                 fontWeight: FontWeight.w900,
                 color: onSurface,
@@ -1782,39 +1739,45 @@ class _AssignTeamsCard extends StatelessWidget {
               final sel = teamOf[uid];
               return Padding(
                 padding: const EdgeInsets.symmetric(vertical: 6),
-                child: Row(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    Expanded(
-                        child: Text(name,
-                            maxLines: 1, overflow: TextOverflow.ellipsis)),
-                    const SizedBox(width: 8),
-                    _pearlPill(pearls),
-                    const SizedBox(width: 8),
-                    SizedBox(
-                      width: 160,
+                    Row(children: [
+                      Expanded(
+                          child: Text(name,
+                              maxLines: 1, overflow: TextOverflow.ellipsis)),
+                      const SizedBox(width: 8),
+                      _pearlPill(pearls),
+                      const SizedBox(width: 8),
+                    ]),
+                    const SizedBox(height: 8),
+                    Align(
+                      alignment: AlignmentDirectional.centerEnd,
                       child: ToggleButtons(
                         isSelected: [
                           sel == 'A',
                           sel == 'B',
                         ],
                         borderRadius: BorderRadius.circular(12),
-                        onPressed: (index) async {
-                          final value = index == 0 ? 'A' : 'B';
-                          try {
-                            await ApiRoom.setPlayerTeam(
-                              code: code,
-                              playerUserId: uid,
-                              team: value,
-                              token: app.token,
-                            );
-                            onChanged();
-                          } catch (e) {
-                            if (!context.mounted) return;
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(content: Text('Team error: $e')),
-                            );
-                          }
-                        },
+                        onPressed: !canAssign
+                            ? null
+                            : (index) async {
+                                final value = index == 0 ? 'A' : 'B';
+                                try {
+                                  await ApiRoom.setPlayerTeam(
+                                    code: code,
+                                    playerUserId: uid,
+                                    team: value,
+                                    token: app.token,
+                                  );
+                                  onChanged();
+                                } catch (e) {
+                                  if (!context.mounted) return;
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    SnackBar(content: Text('Team error: $e')),
+                                  );
+                                }
+                              },
                         color: onSurface.withValues(alpha: 0.7),
                         selectedColor: Colors.white,
                         fillColor: sel == 'A'
@@ -1908,231 +1871,6 @@ class _TeamColumn extends StatelessWidget {
                 ),
               );
             }),
-        ],
-      ),
-    );
-  }
-}
-
-// --- Qaid widgets (جنجفه) ---
-class _QaidCard extends StatelessWidget {
-  final bool teamMode;
-  final int target;
-  final int scoreA;
-  final int scoreB;
-  final List<Map<String, dynamic>> players;
-  final Map<String, int> playerScores;
-  final TextEditingController inputA;
-  final TextEditingController inputB;
-  final Map<String, TextEditingController> playerInputs;
-  final VoidCallback onSave;
-  final VoidCallback onUndo;
-  final VoidCallback onReset;
-
-  const _QaidCard({
-    required this.teamMode,
-    required this.target,
-    required this.scoreA,
-    required this.scoreB,
-    required this.players,
-    required this.playerScores,
-    required this.inputA,
-    required this.inputB,
-    required this.playerInputs,
-    required this.onSave,
-    required this.onUndo,
-    required this.onReset,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final remainA = (target - scoreA);
-    final remainB = (target - scoreB);
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(12),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: const [
-                Icon(Icons.calculate),
-                SizedBox(width: 8),
-                Text('قيد الجولة (الجنجفه)',
-                    style: TextStyle(fontWeight: FontWeight.w900)),
-              ],
-            ),
-            const SizedBox(height: 10),
-            if (teamMode) ...[
-              Row(
-                children: [
-                  Expanded(
-                    child: _QaidTeamBox(
-                      title: 'الفريق A',
-                      score: scoreA,
-                      remain: remainA,
-                      input: inputA,
-                    ),
-                  ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: _QaidTeamBox(
-                      title: 'الفريق B',
-                      score: scoreB,
-                      remain: remainB,
-                      input: inputB,
-                    ),
-                  ),
-                ],
-              ),
-            ] else ...[
-              const Text('قيد اللاعبين (فردي)',
-                  style: TextStyle(fontWeight: FontWeight.w800)),
-              const SizedBox(height: 8),
-              Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                children: players.map((p) {
-                  final uid = (p['userId'] ?? '').toString();
-                  if (uid.isEmpty) return const SizedBox.shrink();
-                  final user = p['user'] as Map<String, dynamic>?;
-                  final name = user?['displayName']?.toString() ??
-                      user?['email']?.toString() ??
-                      uid;
-                  final score = playerScores[uid] ?? 0;
-                  final remain = (target - score).clamp(-999999, 999999);
-                  final ctrl = playerInputs.putIfAbsent(
-                      uid, () => TextEditingController());
-                  return SizedBox(
-                    width: 170,
-                    child: _QaidSoloBox(
-                        name: name, score: score, remain: remain, input: ctrl),
-                  );
-                }).toList(),
-              ),
-            ],
-            const SizedBox(height: 12),
-            Row(
-              children: [
-                FilledButton.icon(
-                  onPressed: onSave,
-                  icon: const Icon(Icons.save),
-                  label: const Text('تسجيل الجولة'),
-                ),
-                const SizedBox(width: 8),
-                OutlinedButton.icon(
-                  onPressed: onUndo,
-                  icon: const Icon(Icons.undo),
-                  label: const Text('تراجع'),
-                ),
-                const SizedBox(width: 8),
-                TextButton(
-                  onPressed: onReset,
-                  child: const Text('تصفير القيد'),
-                ),
-              ],
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _QaidTeamBox extends StatelessWidget {
-  final String title;
-  final int score;
-  final int remain;
-  final TextEditingController input;
-  const _QaidTeamBox({
-    required this.title,
-    required this.score,
-    required this.remain,
-    required this.input,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(10),
-      decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.05),
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(title, style: const TextStyle(fontWeight: FontWeight.w900)),
-          const SizedBox(height: 4),
-          Text('المجموع: $score',
-              style: const TextStyle(fontWeight: FontWeight.w700)),
-          const SizedBox(height: 8),
-          Row(
-            children: [
-              IconButton(
-                onPressed: () {
-                  final v = int.tryParse(input.text.trim()) ?? 0;
-                  input.text = (v - 1).toString();
-                },
-                icon: const Icon(Icons.remove),
-              ),
-              Expanded(
-                child: TextField(
-                  controller: input,
-                  keyboardType: TextInputType.number,
-                  decoration: const InputDecoration(hintText: 'نقاط الجولة'),
-                ),
-              ),
-              IconButton(
-                onPressed: () {
-                  final v = int.tryParse(input.text.trim()) ?? 0;
-                  input.text = (v + 1).toString();
-                },
-                icon: const Icon(Icons.add),
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _QaidSoloBox extends StatelessWidget {
-  final String name;
-  final int score;
-  final int remain;
-  final TextEditingController input;
-  const _QaidSoloBox({
-    required this.name,
-    required this.score,
-    required this.remain,
-    required this.input,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(10),
-      decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.05),
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(name, style: const TextStyle(fontWeight: FontWeight.w800)),
-          const SizedBox(height: 4),
-          Text('المجموع: $score',
-              style: const TextStyle(fontWeight: FontWeight.w700)),
-          const SizedBox(height: 8),
-          TextField(
-            controller: input,
-            keyboardType: TextInputType.number,
-            decoration: const InputDecoration(hintText: 'نقاط الجولة'),
-          ),
         ],
       ),
     );
