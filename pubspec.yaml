@@ -2,7 +2,7 @@ name: inzeli
 description: Inzeli MVP
 publish_to: "none"
 
-version: 10.0.31+39
+version: 10.0.32+40
 
 environment:
   sdk: ">=3.0.0 <4.0.0"

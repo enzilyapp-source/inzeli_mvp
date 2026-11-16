@@ -122,3 +122,29 @@ SHA-256 لحزمة أندرويد: `1d292bdc2c7a65b2c9116ceefa2d756f1fc42ced063f
 Backend commit ed6e1be6 is deployed on Render and migration 20261108000000_room_score_sheet is applied/recorded in Neon. The database schema matches Prisma, and GitHub Actions run 43010415698 passed. A full backup was restored locally and the additive migration preserved all 31 previous tables (33,396 rows) in the restored copy.
 
 Live checks against an existing test-account room: score-sheet GET 200, roster GET 200, nonmember PUT rejected with 403, unauthenticated request rejected with 401. No game results or ledger data were written during production verification. Maintenance remains disabled. Store version 10.0.31 (39) uses these endpoints; no additional app build is needed for this server deployment.
+
+## تعديل التركس — 13 نوفمبر 2026
+
+نُقلت الحسبة الجديدة من Qaid إلى الأصول المضمنة: عكس جميع إشارات التركس، والأقل يفوز فرديًا وبالفرق. Scoring convention مثبت لكل قيم؛ الجولات والمسودات المحفوظة بالحسبة السابقة تكمل بنفس النقاط، والجديدة تبدأ عند لعبة جديدة. تغيير الحسبة يشمل معاينة الجولة والسجل والمجموع وحساب الفائز والنصوص التوضيحية.
+
+زر إخفاء/إظهار السجل قرب اختيار النوع متاح للهوست وللمشاهدين. تغيير العرض محلي ولا يرسل snapshot ولا يمنح المشاهد صلاحية تسجيل. خط سجل التركس أصغر. خاصية طي السجل تبقى أثناء التسجيل والتراجع في الصفحة؛ داخل WebView قد تعود عند إعادة تحميل الصفحة من السيرفر، لأنها ليست جزءًا من القيد المشترك.
+
+هذا تعديل للأصول المضمنة ويحتاج ريليس تطبيق جديد كي يظهر في نسخة المتجر؛ السيرفر وNeon لا يحتاجان تغييرًا. يُفضّل أن يستخدم المشاركون الإصدار الجديد نفسه عند بدء قيم بالحسبة الجديدة. اختبارات legacy في كل مستودع مستقلة، دون اعتماد اختبار التطبيق على وجود مستودع الموقع بجانبه. source.json يسجل ملفات الموقع غير الملتزمة بعد بالإضافة إلى commit الأساس، إلى أن يتم commit للتغييرات.
+
+## Release 10.0.32 (40) — 13 November 2026
+
+Prepared signed production Android AAB and iOS IPA with the updated Trix rules and compact/collapsible history. Native Xcode version fields and pubspec are aligned to 10.0.32 / 40. All five changed embedded Trix/adapter files were compared byte-for-byte inside both release bundles against their source files. Android signature and iOS signature/platform checks passed. flutter analyze is clean; the preceding 176 JavaScript and 24 Flutter tests passed.
+
+Versioned delivery folder: build/releases/10.0.32+40. Files: Enzily-10.0.32-40.aab, Enzily-10.0.32-40.ipa, Enzily-10.0.32-40.xcarchive, release-manifest.json (SHA-256 for AAB/IPA). The manifest records the existing Git HEAD and the fact that source changes are pending. Builds use lib/main.dart with no local-lab API overrides. Files are prepared for upload; this task does not upload or submit a store release.
+
+## objective_c debug symbols — 13 November 2026
+
+Apple accepted build 40 with an Upload Symbols Failed warning for objective_c.framework UUID FF13E7AC-2C07-3666-8CD9-5AB00ED0D45C. The framework contains a valid debug map and its original native-hook object files were available. dsymutil generated genuine line-table symbols; dwarfdump UUID and debug-info verification passed. Matching dSYM bundles were added to the default archive, versioned delivery archive, and matching existing Organizer archive. Delivered AAB and IPA bytes/hashes were left unchanged.
+
+The existing ios/scripts/check_native_platform.py now emits objective_c.framework.dSYM into DWARF_DSYM_FOLDER_PATH when ACTION=install on iphoneos. It verifies matching UUIDs, real compile-unit debug information, and DWARF validity; missing original objects or empty placeholder symbols fail the archive. A real new local archive verified that Xcode collects this generated dSYM automatically. No uploaded build needs to be submitted again merely for this warning. Supplementary symbols improve native crash report diagnostics.
+
+## Source publication for handoff — 16 November 2026
+
+The reviewed Trix site changes are published in Qaed commit 123b321. Embedded engine files were resynchronised byte-for-byte with that clean source; source.json now records the committed site revision. Mobile release 10.0.32 (40), saved-game compatibility, compact/collapsible history, and automatic native debug-symbol generation are included in this source publication. No new app build or database migration is introduced by pushing this existing release source. Tests rerun before publication: 176 JavaScript, 24 Flutter and 8 backend unit tests passed; analyser clean.
+
+Synthetic campaign tools and historical reports are also preserved in the API repository. Their documented concurrency/shared-IP findings remain open engineering work; this publication does not claim those findings are fixed. The current meeting package is under docs/handover.

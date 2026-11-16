@@ -58,3 +58,26 @@ test('older supported iOS WebViews can still choose Kout contracts',()=>{
  choose('team','A');choose('contract','5');choose('outcome','win');ui.$('kout-register').click();
  assert.equal(ui.$('kout-score-A').textContent,'5');ui.w.InzeliDispose();ui.dom.window.close();
 });
+
+test('Trix viewers can hide history without publishing or enabling scoring controls',async()=>{
+ const ui=open('trix',{editable:false});
+ await new Promise(resolve=>ui.w.requestAnimationFrame(resolve));
+ const toggle=ui.$('trix-history-toggle');assert(!toggle.disabled);
+ const before=JSON.stringify(ui.export());toggle.click();
+ await new Promise(resolve=>ui.w.requestAnimationFrame(resolve));
+ assert.equal(ui.$('trix-history').hidden,true);assert.equal(JSON.stringify(ui.export()),before);
+ assert(ui.messages.every(m=>m.type!=='snapshot'));assert(ui.$('trix-register').disabled);
+ toggle.click();assert.equal(ui.$('trix-history').hidden,false);
+ ui.w.InzeliDispose();ui.dom.window.close();
+});
+test('Trix teams use the game convention to choose the winning team',()=>{
+ const fixture=require('./fixtures/trix-legacy.json');
+ for(const convention of ['low-wins','legacy-high']){
+  const saved={...fixture,scoring:convention};
+  const ui=open('trix',{teamMode:true,storage:{'qaed.trix.v1':JSON.stringify(saved)}});
+  assert.equal(ui.$('trix-winner-name').textContent,'الفائز: الفريق A');
+  assert(ui.$('trix-winner-detail').textContent.includes(convention==='low-wins'?'أقل مجموع للفريق: -300':'أعلى مجموع للفريق: +300'));
+  const before=JSON.stringify(ui.export());ui.$('trix-history-toggle').click();assert.equal(JSON.stringify(ui.export()),before);
+  ui.w.InzeliDispose();ui.dom.window.close();
+ }
+});

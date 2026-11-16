@@ -1,6 +1,6 @@
 {
   "repository": "enzilyapp-source/Qaed",
-  "commit": "67905f3b96f447f4a53a3a0b1e1f4c966a6b9a09",
+  "commit": "123b321259414ffd1cac17a79ab0aad2896d0f02",
   "files": [
     "baloot-app.js",
     "baloot-core.js",
@@ -22,5 +22,6 @@
     "trix-core.js",
     "trix.css",
     "trix.html"
-  ]
+  ],
+  "uncommittedSourceFiles": []
 }

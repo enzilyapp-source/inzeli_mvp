@@ -14,6 +14,8 @@ files = sorted(p for p in source.iterdir() if p.suffix in {'.html', '.css', '.js
 for file in files:
     shutil.copy2(file, dest / file.name)
 commit = subprocess.check_output(['git', '-C', str(source), 'rev-parse', 'HEAD'], text=True).strip()
+dirty = subprocess.check_output(['git', '-C', str(source), 'status', '--porcelain', '--', *[p.name for p in files]], text=True)
+source_changes = [line[3:] for line in dirty.splitlines()]
 (dest / 'source.json').write_text(json.dumps({'repository': 'enzilyapp-source/Qaed', 'commit': commit,
-    'files': [p.name for p in files]}, indent=2) + '\n')
+    'files': [p.name for p in files], 'uncommittedSourceFiles': source_changes}, indent=2) + '\n')
 print(f'Synced {len(files)} website assets at {commit[:7]}; native adapters preserved.')

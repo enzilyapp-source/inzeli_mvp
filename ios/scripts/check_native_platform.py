@@ -11,6 +11,7 @@ import re
 import shutil
 import subprocess
 import sys
+import tempfile
 
 
 def validate(binary, expected):
@@ -37,6 +38,44 @@ def frameworks(root):
         binary = framework / name
         if binary.is_file():
             yield framework, binary
+
+
+
+def binary_uuids(path):
+    output = subprocess.check_output(['xcrun', 'dwarfdump', '--uuid', str(path)], text=True)
+    result = set(re.findall(r'UUID: ([A-Fa-f0-9-]+) \(([^)]+)\)', output))
+    if not result:
+        raise RuntimeError(f'No build UUID in {path.name}')
+    return result
+
+
+def emit_objective_c_symbols(binary, output_folder):
+    """Generate real symbols from this binary's debug map and original .o files.
+
+    Native assets are not Xcode framework targets, so Xcode does not run dsymutil
+    for them. Write into DWARF_DSYM_FOLDER_PATH before Xcode gathers archive
+    symbols. Never make a placeholder or change a UUID to match another build.
+    """
+    output_folder.mkdir(parents=True, exist_ok=True)
+    dest = output_folder / 'objective_c.framework.dSYM'
+    with tempfile.TemporaryDirectory(prefix='native-dsym-', dir=output_folder) as temporary:
+        generated = Path(temporary) / dest.name
+        result = subprocess.run(['xcrun', 'dsymutil', str(binary), '-o', str(generated)],
+                                capture_output=True, text=True, check=True)
+        if 'warning:' in result.stderr.lower() or 'error:' in result.stderr.lower():
+            raise RuntimeError('Native symbols could not use the original object files: ' + result.stderr)
+        if binary_uuids(generated) != binary_uuids(binary):
+            raise RuntimeError('Native dSYM UUID differs from embedded framework')
+        dwarf = generated / 'Contents/Resources/DWARF/objective_c'
+        info = subprocess.check_output(['xcrun', 'dwarfdump', '--debug-info', str(dwarf)], text=True)
+        if 'DW_TAG_compile_unit' not in info:
+            raise RuntimeError('Native dSYM has no compilation debug information')
+        subprocess.run(['xcrun', 'dwarfdump', '--verify', str(generated)],
+                       capture_output=True, text=True, check=True)
+        if dest.exists():
+            shutil.rmtree(dest)
+        shutil.move(str(generated), str(dest))
+    print('Generated matching objective_c.framework.dSYM with verified debug information', flush=True)
 
 
 def main():
@@ -72,6 +111,11 @@ def main():
         for _, binary in frameworks(root):
             validate(binary, expected)
         print(f'Embedded frameworks verified for {expected}', flush=True)
+        if sdk == 'iphoneos' and os.environ.get('ACTION') == 'install':
+            symbols_folder = os.environ.get('DWARF_DSYM_FOLDER_PATH')
+            if not symbols_folder:
+                raise RuntimeError('Archive dSYM output directory is not configured')
+            emit_objective_c_symbols(root / 'objective_c.framework/objective_c', Path(symbols_folder))
     else:
         raise RuntimeError('Expected prepare or verify')
 
