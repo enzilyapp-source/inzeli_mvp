@@ -1,0 +1,2 @@
+# Generated handoff documents are PDF binaries, not line-oriented source.
+*.pdf binary
