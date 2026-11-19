@@ -7,9 +7,9 @@ class ApiStore {
   static const Duration _timeout = Duration(seconds: 15);
 
   static Map<String, String> _headers({String? token}) => {
-    'Content-Type': 'application/json',
-    if (token != null && token.isNotEmpty) 'Authorization': 'Bearer $token',
-  };
+        'Content-Type': 'application/json',
+        if (token != null && token.isNotEmpty) 'Authorization': 'Bearer $token',
+      };
 
   static Map<String, dynamic> _decode(http.Response res) {
     final m = jsonDecode(res.body);
@@ -17,7 +17,8 @@ class ApiStore {
     throw Exception('Bad response');
   }
 
-  static Map<String, dynamic> _dataOrThrow(http.Response res, {String fallback = 'Failed'}) {
+  static Map<String, dynamic> _dataOrThrow(http.Response res,
+      {String fallback = 'Failed'}) {
     final m = _decode(res);
     if (res.statusCode >= 400 || m['ok'] != true) {
       final msg = (m['message'] ?? fallback).toString();
@@ -25,6 +26,15 @@ class ApiStore {
     }
     final data = m['data'];
     return data is Map<String, dynamic> ? data : {'data': data};
+  }
+
+  static Future<Map<String, dynamic>> challenges(
+      {required String token}) async {
+    final res = await http
+        .get(Uri.parse('$apiBase/store/challenges'),
+            headers: _headers(token: token))
+        .timeout(_timeout);
+    return _dataOrThrow(res, fallback: 'Could not load challenges');
   }
 
   static Future<List<Map<String, dynamic>>> listItems() async {
@@ -38,7 +48,8 @@ class ApiStore {
     return const [];
   }
 
-  static Future<List<Map<String, dynamic>>> myItems({required String token}) async {
+  static Future<List<Map<String, dynamic>>> myItems(
+      {required String token}) async {
     final res = await http
         .get(Uri.parse('$apiBase/store/me'), headers: _headers(token: token))
         .timeout(_timeout);
@@ -50,7 +61,8 @@ class ApiStore {
     if (data is List) {
       return data.map<Map<String, dynamic>>((e) {
         if (e is Map<String, dynamic>) {
-          final item = (e['item'] as Map?)?.cast<String, dynamic>() ?? <String, dynamic>{};
+          final item = (e['item'] as Map?)?.cast<String, dynamic>() ??
+              <String, dynamic>{};
           return {
             ...e,
             'item': item,
@@ -67,7 +79,8 @@ class ApiStore {
     required String itemId,
   }) async {
     final res = await http
-        .post(Uri.parse('$apiBase/store/$itemId/buy'), headers: _headers(token: token))
+        .post(Uri.parse('$apiBase/store/$itemId/buy'),
+            headers: _headers(token: token))
         .timeout(_timeout);
     return _dataOrThrow(res, fallback: 'Purchase failed');
   }

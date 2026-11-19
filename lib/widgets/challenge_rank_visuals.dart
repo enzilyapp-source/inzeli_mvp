@@ -4,6 +4,8 @@ import 'package:flutter/material.dart';
 
 import 'avatar_effects.dart';
 import 'profile_theme_frame.dart';
+import 'reward_avatar_frame.dart';
+import 'rank_identity.dart';
 
 enum PlayerRank {
   beginner,
@@ -132,6 +134,7 @@ class ThemeVisualOption {
   final ProfileThemeFrame? frame;
   final String? description;
   final int? unlockThreshold;
+  final int? rewardSlot;
   final bool vipOnly;
 
   const ThemeVisualOption({
@@ -142,6 +145,7 @@ class ThemeVisualOption {
     this.frame,
     this.description,
     this.unlockThreshold,
+    this.rewardSlot,
     this.vipOnly = false,
   });
 }
@@ -157,6 +161,65 @@ const Set<String> kVipThemeIds = {
 };
 
 const List<ThemeVisualOption> kThemeVisualOptions = [
+  ThemeVisualOption(
+      id: 'reward_rank_beginner', label: 'إطار عليمي الفضي', rewardSlot: 0),
+  ThemeVisualOption(
+      id: 'reward_rank_good', label: 'إطار زين البرونزي', rewardSlot: 1),
+  ThemeVisualOption(
+      id: 'reward_rank_professional', label: 'إطار محترف الفضي', rewardSlot: 2),
+  ThemeVisualOption(
+      id: 'reward_rank_legend', label: 'إطار أسطوري الذهبي', rewardSlot: 3),
+  ThemeVisualOption(
+      id: 'reward_rank_best', label: 'إطار أحسن واحد الماسي', rewardSlot: 4),
+  ThemeVisualOption(
+      id: 'reward_rank_crown', label: 'تاج أحسن واحد', rewardSlot: 5),
+  ThemeVisualOption(id: 'reward_cards', label: 'بطل الجنجفة', rewardSlot: 6),
+  ThemeVisualOption(id: 'reward_dice', label: 'بطل الطاولة', rewardSlot: 7),
+  ThemeVisualOption(id: 'reward_chess', label: 'بطل الشطرنج', rewardSlot: 8),
+  ThemeVisualOption(id: 'reward_football', label: 'بطل القدم', rewardSlot: 9),
+  ThemeVisualOption(id: 'reward_tennis', label: 'بطل المضرب', rewardSlot: 10),
+  ThemeVisualOption(
+      id: 'reward_basketball', label: 'بطل السلة', rewardSlot: 11),
+  ThemeVisualOption(
+      id: 'reward_billiards', label: 'بطل البلياردو', rewardSlot: 12),
+  ThemeVisualOption(id: 'reward_bowling', label: 'بطل البولنج', rewardSlot: 13),
+  ThemeVisualOption(id: 'reward_moon', label: 'نجم إنزلي', rewardSlot: 14),
+  ThemeVisualOption(
+      id: 'reward_heritage_gold', label: 'زخرفة الديرة', rewardSlot: 15),
+  ThemeVisualOption(
+      id: 'reward_heritage_dhow', label: 'نوخذة الخليج', rewardSlot: 16),
+  ThemeVisualOption(
+      id: 'reward_heritage_towers', label: 'أبراج الكويت', rewardSlot: 17),
+  ThemeVisualOption(
+      id: 'reward_heritage_ghutra', label: 'راعي الديوانية', rewardSlot: 18),
+  ThemeVisualOption(
+      id: 'reward_heritage_fort', label: 'راية الديرة', rewardSlot: 19),
+  ThemeVisualOption(
+      id: 'reward_heritage_coffee', label: 'دلة الديوانية', rewardSlot: 20),
+  ThemeVisualOption(
+      id: 'reward_heritage_camp', label: 'ليالي البر', rewardSlot: 21),
+  ThemeVisualOption(
+      id: 'reward_heritage_swords', label: 'سيف الفوز', rewardSlot: 22),
+  ThemeVisualOption(
+      id: 'reward_heritage_falcon', label: 'صقر إنزلي', rewardSlot: 23),
+  ThemeVisualOption(
+      id: 'reward_heritage_cards', label: 'ملك الجنجفة', rewardSlot: 24),
+  ThemeVisualOption(
+      id: 'reward_heritage_dice', label: 'شيخ الطاولة', rewardSlot: 25),
+  ThemeVisualOption(
+      id: 'reward_heritage_chess', label: 'فارس الشطرنج', rewardSlot: 26),
+  ThemeVisualOption(
+      id: 'reward_tier_beginner', label: 'إطار عليمي البرونزي', rewardSlot: 1),
+  ThemeVisualOption(
+      id: 'reward_tier_good', label: 'إطار زين الفضي', rewardSlot: 2),
+  ThemeVisualOption(
+      id: 'reward_tier_professional',
+      label: 'إطار محترف الذهبي',
+      rewardSlot: 3),
+  ThemeVisualOption(
+      id: 'reward_tier_legend', label: 'إطار أسطوري الماسي', rewardSlot: 4),
+  ThemeVisualOption(
+      id: 'reward_tier_best', label: 'إطار أحسن واحد التاج', rewardSlot: 5),
   ThemeVisualOption(
     id: 'frame_sadu',
     label: 'سدو',
@@ -367,6 +430,10 @@ Widget buildAvatarThemeWidget({
 }) {
   final option = themeVisualById(themeId);
   if (option == null) return child;
+  if (option.rewardSlot != null) {
+    return RewardAvatarFrame(
+        slot: option.rewardSlot!, size: size, child: child);
+  }
   if (option.rank != null) {
     return ChallengeAvatarFrame(
       rank: option.rank!,
@@ -408,6 +475,7 @@ class RankBadge extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final data = getRankData(rank);
+    final identity = rankIdentities[rank.index];
     return Container(
       padding: EdgeInsets.symmetric(
         horizontal: compact ? 10 : 12,
@@ -416,30 +484,26 @@ class RankBadge extends StatelessWidget {
       decoration: BoxDecoration(
         gradient: LinearGradient(
           colors: [
-            data.colors.first.withValues(alpha: 0.25),
-            data.colors.last.withValues(alpha: 0.16),
+            identity.colors.first.withValues(alpha: 0.25),
+            identity.colors.last.withValues(alpha: 0.16),
           ],
         ),
         borderRadius: BorderRadius.circular(14),
         border: Border.all(
-          color: data.colors.last.withValues(alpha: 0.6),
+          color: identity.colors.last.withValues(alpha: 0.6),
         ),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(
-            data.icon,
-            size: compact ? 14 : 16,
-            color: data.colors.last,
-          ),
+          RankMedal(threshold: identity.threshold, size: compact ? 22 : 28),
           const SizedBox(width: 6),
           Text(
             data.arabic,
             style: TextStyle(
               fontWeight: FontWeight.w800,
               fontSize: compact ? 13 : 14,
-              color: data.colors.last,
+              color: identity.colors.last,
             ),
           ),
         ],

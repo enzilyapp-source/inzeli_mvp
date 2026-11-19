@@ -12,6 +12,7 @@ import 'biometric_auth.dart';
 import 'state.dart';
 import 'operations_gate.dart';
 import 'widgets/challenge_rank_visuals.dart';
+import 'widgets/rank_identity.dart';
 import 'widgets/primary_pill_button.dart';
 
 // pages
@@ -746,6 +747,12 @@ class _TopProfileCard extends StatelessWidget {
             ),
             child: Stack(
               children: [
+                if (rankIdentityForBanner(app.cardId) case final banner?)
+                  Positioned.fill(
+                      child: ClipRRect(
+                          borderRadius: BorderRadius.circular(24),
+                          child:
+                              CustomPaint(painter: RankBannerPainter(banner)))),
                 PositionedDirectional(
                   top: 8,
                   start: 10,
@@ -1346,13 +1353,12 @@ class _MainGameIconBadge extends StatelessWidget {
   final String gameId;
   final double size;
   final Color? iconColor;
-  final Color backgroundColor;
+  final Color backgroundColor = Colors.white;
 
   const _MainGameIconBadge({
     required this.gameId,
     this.size = 22,
     this.iconColor,
-    this.backgroundColor = Colors.white,
   });
 
   @override
@@ -1416,12 +1422,8 @@ class _MainGameRankBadge extends StatelessWidget {
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            _MainGameIconBadge(
-              gameId: gameId,
-              size: 24,
-              iconColor: const Color(0xFF1E2F4D),
-              backgroundColor: Colors.white.withValues(alpha: 0.92),
-            ),
+            RankMedal(
+                threshold: rankIdentities[rank.index].threshold, size: 26),
             const SizedBox(width: 7),
             Flexible(
               child: Text(

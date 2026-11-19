@@ -4,7 +4,6 @@ import 'package:flutter/material.dart';
 import 'dart:convert';
 import 'package:image_picker/image_picker.dart';
 import 'package:flutter/foundation.dart';
-import 'package:flutter_svg/flutter_svg.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../widgets/app_snackbar.dart';
 
@@ -19,30 +18,36 @@ import '../sfx.dart';
 import 'signin_page.dart';
 import '../api_user.dart';
 import 'player_profile_page.dart';
+import 'challenge_rewards_page.dart';
+import 'profile_appearance_editor.dart';
+import '../widgets/rank_identity.dart';
+import '../widgets/rank_levels_sheet.dart';
 
-const Map<String, String> _profileGameSvgAssetById = <String, String>{
-  'قدم': 'lib/assets/games_svg/games-01.svg',
-  'طائره': 'lib/assets/games_svg/games-02.svg',
-  'سله': 'lib/assets/games_svg/games-03.svg',
-  'دفان': 'lib/assets/games_svg/games-26.svg',
-  'تنس ارضي': 'lib/assets/games_svg/games-05.svg',
-  'بيبيفوت': 'lib/assets/games_svg/games-06.svg',
-  'بادل': 'lib/assets/games_svg/games-07.svg',
-  'بلوت': 'lib/assets/games_svg/games-24.svg',
-  'هند': 'lib/assets/games_svg/games-09.svg',
-  'كوت': 'lib/assets/games_svg/games-08.svg',
-  'سبيتة': 'lib/assets/games_svg/games-25.svg',
-  'بولنج': 'lib/assets/games_svg/games-16.svg',
-  'بلياردو': 'lib/assets/games_svg/games-15.svg',
-  'تنس طاولة': 'lib/assets/games_svg/games-17.svg',
-  'شطرنج': 'lib/assets/games_svg/games-18.svg',
-  'تريكس': 'lib/assets/games_svg/games-11.svg',
-  'دامه': 'lib/assets/games_svg/games-19.svg',
-  'كيرم': 'lib/assets/games_svg/games-20.svg',
-  'دومنه': 'lib/assets/games_svg/games-21.svg',
-  'طاوله': 'lib/assets/games_svg/games-22.svg',
-  'اونو': 'lib/assets/games_svg/games-13.svg',
-  'جاكارو': 'lib/assets/games_svg/games-23.svg',
+part 'profile_dashboard.dart';
+
+const Map<String, String> _profileGameAssetById = <String, String>{
+  'قدم': 'lib/assets/games_png/games-01.png',
+  'طائره': 'lib/assets/games_png/games-02.png',
+  'سله': 'lib/assets/games_png/games-03.png',
+  'دفان': 'lib/assets/games_png/games-26.png',
+  'تنس ارضي': 'lib/assets/games_png/games-05.png',
+  'بيبيفوت': 'lib/assets/games_png/games-06.png',
+  'بادل': 'lib/assets/games_png/games-07.png',
+  'بلوت': 'lib/assets/games_png/games-24.png',
+  'هند': 'lib/assets/games_png/games-09.png',
+  'كوت': 'lib/assets/games_png/games-08.png',
+  'سبيتة': 'lib/assets/games_png/games-25.png',
+  'بولنج': 'lib/assets/games_png/games-16.png',
+  'بلياردو': 'lib/assets/games_png/games-15.png',
+  'تنس طاولة': 'lib/assets/games_png/games-17.png',
+  'شطرنج': 'lib/assets/games_png/games-18.png',
+  'تريكس': 'lib/assets/games_png/games-11.png',
+  'دامه': 'lib/assets/games_png/games-19.png',
+  'كيرم': 'lib/assets/games_png/games-20.png',
+  'دومنه': 'lib/assets/games_png/games-21.png',
+  'طاوله': 'lib/assets/games_png/games-22.png',
+  'اونو': 'lib/assets/games_png/games-13.png',
+  'جاكارو': 'lib/assets/games_png/games-23.png',
 };
 
 class ProfilePage extends StatefulWidget {
@@ -58,7 +63,6 @@ class _ProfilePageState extends State<ProfilePage> {
   // thresholds and labels for the player classification
   static const List<int> _milestones = [5, 10, 15, 20, 30];
   String? _selectedThemeId;
-  int _cardThemeIndex = 0; // 0: blue, 1: navy, 2: violet
   List<String> _labels(AppState app) => [
         app.tr(ar: 'عليمي', en: 'Beginner'),
         app.tr(ar: 'زين', en: 'Good'),
@@ -70,7 +74,6 @@ class _ProfilePageState extends State<ProfilePage> {
   final ImagePicker _picker = ImagePicker();
   int _wins = 0;
   int _losses = 0;
-  bool _showPearlProgress = false;
   bool _showChallenges = false;
   late final TextEditingController _nameCtrl;
   late final TextEditingController _emailCtrl;
@@ -79,28 +82,18 @@ class _ProfilePageState extends State<ProfilePage> {
   void initState() {
     super.initState();
     _selectedThemeId = widget.app.themeId;
-    _cardThemeIndex = _cardIndexFromId(widget.app.cardId);
     _nameCtrl = TextEditingController(text: _meName());
     _emailCtrl = TextEditingController(text: widget.app.email ?? '');
     _phoneCtrl = TextEditingController(text: widget.app.phone ?? '');
-    _wins = widget.app.winsOf(_meName(), _currentGame());
-    _losses = widget.app.lossesOf(_meName(), _currentGame());
+    // The dashboard totals cover all games, not only the favorite game.
+    for (final game in _playedGameIds(_meName())) {
+      _wins += widget.app.winsOf(_meName(), game);
+      _losses += widget.app.lossesOf(_meName(), game);
+    }
     _loadStats();
   }
 
   String _meName() => widget.app.displayName ?? widget.app.name ?? 'لاعب';
-  String _currentGame() {
-    String game = widget.app.selectedGame ?? '—';
-    final progress = widget.app.gameBadgeProgress.isNotEmpty
-        ? widget.app.gameBadgeProgress
-        : widget.app.gamePearls;
-    if (progress.isNotEmpty) {
-      final top = progress.entries.reduce((a, b) => a.value >= b.value ? a : b);
-      game = top.key;
-    }
-    return game;
-  }
-
   Set<String> _playedGameIds(String player) {
     final played = <String>{...widget.app.playedGameIds};
     for (final cat in widget.app.games.values) {
@@ -336,7 +329,7 @@ class _ProfilePageState extends State<ProfilePage> {
     return entries;
   }
 
-  List<_AchievementEntry> _recentWins(String player) {
+  List<_AchievementEntry> _recentMatches(String player) {
     final playedGames = _playedGameIds(player);
     final matches = widget.app.timeline
         .where((t) => _isAchievementMatch(t, player))
@@ -347,32 +340,34 @@ class _ProfilePageState extends State<ProfilePage> {
     final seen = <String>{};
     for (final t in matches) {
       final isWin = t.winner == player || t.winners.contains(player);
-      if (!isWin) continue;
       final gameId = t.game.trim();
       if (gameId.isEmpty || !playedGames.contains(gameId)) continue;
       final roomKey = t.roomCode.trim().isNotEmpty
           ? t.roomCode.trim()
-          : '$gameId|${t.ts.toIso8601String()}|win';
-      final key = '$gameId|$roomKey|win';
+          : '$gameId|${t.ts.toIso8601String()}';
+      final key = '$gameId|$roomKey';
       if (!seen.add(key)) continue;
 
       final badgeChange = _badgeChangeForMatch(t, player);
       final badgeLabel = badgeChange ?? _badgeLabelForGame(gameId);
       deduped.add(_AchievementEntry(
+        gameId: gameId,
         game: widget.app.gameLabel(gameId),
         typeLabel: widget.app.tr(ar: 'قيم', en: 'Match'),
         badgeLabel: badgeLabel ?? '',
-        outcomeLabel: 'فزت',
+        outcomeLabel: widget.app
+            .tr(ar: isWin ? 'فوز' : 'خسارة', en: isWin ? 'Win' : 'Loss'),
         detailLabel: badgeChange == null
             ? (badgeLabel == null
-                ? 'قيم فزت فيه'
+                ? widget.app.tr(
+                    ar: isWin ? 'فوز مسجل' : 'خسارة مسجلة',
+                    en: isWin ? 'Recorded win' : 'Recorded loss')
                 : 'مستواك الحالي: $badgeLabel')
             : 'تغير مستواك إلى $badgeChange',
-        isWin: true,
+        isWin: isWin,
         isSeasonAward: false,
         date: t.ts,
       ));
-      if (deduped.length >= 10) break;
     }
     return deduped;
   }
@@ -386,40 +381,13 @@ class _ProfilePageState extends State<ProfilePage> {
     return '#$short';
   }
 
-  int _currentRankThreshold() {
-    final favoriteGame = _favoriteGame(widget.app, _meName());
-    return _currentBadgeThresholdForGame(favoriteGame.gameId);
-  }
-
-  int _cardIndexFromId(String? id) {
-    switch (id) {
-      case 'navy':
-        return 1;
-      case 'violet':
-        return 2;
-      case 'blue':
-      default:
-        return 0;
-    }
-  }
-
-  String _cardId(int idx) {
-    switch (idx) {
-      case 1:
-        return 'navy';
-      case 2:
-        return 'violet';
-      default:
-        return 'blue';
-    }
-  }
-
   Future<void> _loadStats() async {
     final uid = widget.app.userId;
     if (uid == null || uid.isEmpty) return;
     try {
       final stats = await getUserStats(uid, token: widget.app.token);
-      if (stats == null) return;
+      if (stats == null || widget.app.userId != uid) return;
+      if (!mounted) return;
       setState(() {
         _wins = (stats['wins'] as num?)?.toInt() ?? _wins;
         _losses = (stats['losses'] as num?)?.toInt() ?? _losses;
@@ -432,6 +400,8 @@ class _ProfilePageState extends State<ProfilePage> {
       await widget.app.applyAchievementSnapshot(stats, notify: false);
       if (mounted) setState(() {});
       await _syncChallengeUnlocks();
+      await widget.app.refreshChallengeRewards();
+      if (mounted) setState(() {});
     } catch (_) {}
   }
 
@@ -677,7 +647,7 @@ class _ProfilePageState extends State<ProfilePage> {
       context,
       MaterialPageRoute(builder: (_) => MyItemsPage(app: app)),
     );
-    setState(() {});
+    if (mounted) setState(() => _selectedThemeId = app.themeId);
   }
 
   Future<void> _openPlayerSearch() async {
@@ -1158,731 +1128,390 @@ class _ProfilePageState extends State<ProfilePage> {
     );
   }
 
-  void _openAvatarThemePicker() {
-    showModalBottomSheet(
-      context: context,
-      showDragHandle: true,
-      backgroundColor: const Color(0xFF22324B),
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
-      ),
-      builder: (ctx) {
-        final currentRankThreshold = _currentRankThreshold();
-        final ownedThemeIds = <String>{
-          ...widget.app.freeThemesOwned,
-          if (_selectedThemeId != null && _selectedThemeId!.isNotEmpty)
-            _selectedThemeId!,
-        };
-        final availableThemes = kThemeVisualOptions.where((option) {
-          if (option.vipOnly && widget.app.hasActiveVip) return true;
-          if (option.unlockThreshold != null) {
-            return currentRankThreshold >= option.unlockThreshold!;
-          }
-          return ownedThemeIds.contains(option.id);
-        }).toList();
-        final effects = <(String?, String)>[
-          (null, 'بدون ثيم'),
-          ...availableThemes.map((e) => (e.id, e.label)),
-        ];
-        final cardThemes = [
-          ('أزرق', 0),
-          ('كحلي', 1),
-          ('بنفسجي', 2),
-        ];
-        return SafeArea(
-          child: Directionality(
-            textDirection: TextDirection.rtl,
-            child: LayoutBuilder(
-              builder: (context, constraints) => SingleChildScrollView(
-                padding: const EdgeInsets.all(16),
-                child: ConstrainedBox(
-                  constraints: BoxConstraints(minHeight: constraints.maxHeight),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Text(
-                        'تعديل الصورة والثيم',
-                        style: TextStyle(
-                          fontWeight: FontWeight.w900,
-                          fontSize: 16,
-                          color: Color(0xFFDBE7F6),
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                      Text(
-                        'كل ثيم ينعرض يمينك لليسار، والمستوى يبقى ثابت فوق بشكل مستقل.',
-                        style: const TextStyle(
-                          color: Color(0xFFA8BCD8),
-                          fontSize: 12,
-                        ),
-                      ),
-                      const SizedBox(height: 12),
-                      Wrap(
-                        spacing: 10,
-                        runSpacing: 10,
-                        children: [
-                          FilledButton.icon(
-                            onPressed: _pickAvatar,
-                            style: FilledButton.styleFrom(
-                              backgroundColor: const Color(0xFFDCE8F8),
-                              foregroundColor: const Color(0xFF22324B),
-                            ),
-                            icon: const Icon(Icons.image_outlined),
-                            label: const Text(
-                              'تغيير الصورة',
-                              style: TextStyle(fontWeight: FontWeight.w800),
-                            ),
-                          ),
-                          if ((widget.app.avatarBase64?.isNotEmpty ?? false) ||
-                              (widget.app.avatarPath?.isNotEmpty ?? false))
-                            OutlinedButton.icon(
-                              onPressed: () async {
-                                await _removeAvatar();
-                                if (ctx.mounted) Navigator.pop(ctx);
-                              },
-                              style: OutlinedButton.styleFrom(
-                                foregroundColor: const Color(0xFFDCE8F8),
-                                side:
-                                    const BorderSide(color: Color(0xFF8AA7C8)),
-                              ),
-                              icon: const Icon(Icons.delete_outline),
-                              label: const Text(
-                                'إزالة الصورة',
-                                style: TextStyle(fontWeight: FontWeight.w700),
-                              ),
-                            ),
-                        ],
-                      ),
-                      const SizedBox(height: 12),
-                      const Text(
-                        'ثيم الهالة حول الصورة',
-                        style: TextStyle(
-                          fontWeight: FontWeight.w800,
-                          color: Color(0xFFDBE7F6),
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                      SizedBox(
-                        height: 140,
-                        child: ListView.separated(
-                          scrollDirection: Axis.horizontal,
-                          reverse: true,
-                          itemCount: effects.length,
-                          separatorBuilder: (_, __) =>
-                              const SizedBox(width: 10),
-                          itemBuilder: (_, index) {
-                            final e = effects[index];
-                            final selected = _selectedThemeId == e.$1;
-                            final preview = CircleAvatar(
-                              radius: 26,
-                              backgroundColor: const Color(0xFF2A3953),
-                              child: Text(
-                                e.$2.characters.first,
-                                style: const TextStyle(color: Colors.white),
-                              ),
-                            );
-                            return GestureDetector(
-                              onTap: () =>
-                                  setState(() => _selectedThemeId = e.$1),
-                              child: AnimatedContainer(
-                                duration: const Duration(milliseconds: 160),
-                                width: 104,
-                                padding: const EdgeInsets.fromLTRB(8, 10, 8, 8),
-                                decoration: BoxDecoration(
-                                  color: selected
-                                      ? const Color(0xFFDCE8F8)
-                                      : const Color(0xFFCCDCEE),
-                                  borderRadius: BorderRadius.circular(22),
-                                  border: Border.all(
-                                    color: selected
-                                        ? const Color(0xFF8CB3DA)
-                                        : const Color(0xFF8AA7C8),
-                                    width: selected ? 2 : 1,
-                                  ),
-                                ),
-                                child: Column(
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  children: [
-                                    buildAvatarThemeWidget(
-                                      themeId: e.$1,
-                                      size: 74,
-                                      animate: e.$1 != null,
-                                      child: preview,
-                                    ),
-                                    const SizedBox(height: 8),
-                                    Text(
-                                      e.$2,
-                                      textAlign: TextAlign.center,
-                                      maxLines: 2,
-                                      overflow: TextOverflow.ellipsis,
-                                      style: TextStyle(
-                                        fontSize: 11,
-                                        color: const Color(0xFF22324B),
-                                        fontWeight: selected
-                                            ? FontWeight.w800
-                                            : FontWeight.w700,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            );
-                          },
-                        ),
-                      ),
-                      const SizedBox(height: 16),
-                      const Text(
-                        'ثيم كرت الملف',
-                        style: TextStyle(
-                          fontWeight: FontWeight.w800,
-                          color: Color(0xFFDBE7F6),
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                      Wrap(
-                        spacing: 8,
-                        runSpacing: 8,
-                        children: cardThemes.map((c) {
-                          final selected = _cardThemeIndex == c.$2;
-                          return ChoiceChip(
-                            label: Text(
-                              c.$1,
-                              style: const TextStyle(color: Color(0xFF22324B)),
-                            ),
-                            selected: selected,
-                            selectedColor: const Color(0xFFDCE8F8),
-                            backgroundColor: const Color(0xFFCCDCEE),
-                            side: BorderSide(
-                              color: selected
-                                  ? const Color(0xFF8CB3DA)
-                                  : const Color(0xFF8AA7C8),
-                            ),
-                            onSelected: (_) =>
-                                setState(() => _cardThemeIndex = c.$2),
-                          );
-                        }).toList(),
-                      ),
-                      const SizedBox(height: 16),
-                      Align(
-                        alignment: Alignment.centerRight,
-                        child: FilledButton.icon(
-                          onPressed: () async {
-                            widget.app.themeId = _selectedThemeId;
-                            widget.app.cardId = _cardId(_cardThemeIndex);
-                            await widget.app.saveState();
-                            await widget.app.syncProfileToServer(
-                              includeAvatarData: false,
-                            );
-                            if (!ctx.mounted) return;
-                            Navigator.pop(ctx);
-                            setState(() {});
-                          },
-                          style: FilledButton.styleFrom(
-                            backgroundColor: const Color(0xFFDCE8F8),
-                            foregroundColor: const Color(0xFF22324B),
-                          ),
-                          icon: const Icon(Icons.save),
-                          label: const Text(
-                            'حفظ',
-                            style: TextStyle(fontWeight: FontWeight.w800),
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ),
-          ),
-        );
-      },
-    );
+  Future<void> _openAvatarThemePicker() async {
+    await showModalBottomSheet<void>(
+        context: context,
+        showDragHandle: true,
+        isScrollControlled: true,
+        backgroundColor: const Color(0xFF172C41),
+        builder: (_) => ProfileAppearanceEditor(
+            app: widget.app,
+            onPickPhoto: _pickAvatar,
+            onRemovePhoto: _removeAvatar));
+    if (mounted) setState(() => _selectedThemeId = widget.app.themeId);
   }
 
   void _openRankSheet(int currentRankThreshold) {
-    final currentRank = playerRankForThreshold(currentRankThreshold);
-    final ranks = PlayerRank.values;
-    showModalBottomSheet(
+    showModalBottomSheet<void>(
+        context: context,
+        showDragHandle: true,
+        isScrollControlled: true,
+        backgroundColor: const Color(0xFF172C41),
+        builder: (_) => RankLevelsSheet(
+            app: widget.app, currentThreshold: currentRankThreshold));
+  }
+
+  // Progress stays in a separate sheet: the overview remains quick to scan.
+  void _openAchievements() {
+    final app = widget.app;
+    showModalBottomSheet<void>(
       context: context,
-      showDragHandle: true,
       isScrollControlled: true,
-      builder: (ctx) => SafeArea(
-        child: DraggableScrollableSheet(
-          expand: false,
-          initialChildSize: 0.62,
-          minChildSize: 0.35,
-          maxChildSize: 0.86,
-          builder: (context, scrollController) => ListView(
-            controller: scrollController,
-            padding: const EdgeInsets.fromLTRB(16, 0, 16, 18),
-            children: [
-              const Text(
-                'المستوى',
-                style: TextStyle(fontWeight: FontWeight.w900, fontSize: 18),
-              ),
-              const SizedBox(height: 14),
-              ...ranks.map((rank) {
-                final data = getRankData(rank);
-                final active = rank == currentRank;
-                return Container(
-                  margin: const EdgeInsets.only(bottom: 10),
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: Colors.white.withValues(alpha: active ? 0.08 : 0.04),
-                    borderRadius: BorderRadius.circular(18),
-                    border: Border.all(
-                      color: active
-                          ? data.colors.last.withValues(alpha: 0.8)
-                          : Colors.white12,
-                    ),
-                  ),
-                  child: Row(
-                    children: [
-                      RankBadge(rank: rank),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Text(
-                          '${data.arabic} • ${data.english}',
+      showDragHandle: true,
+      backgroundColor: const Color(0xFF13273D),
+      builder: (context) => Directionality(
+        textDirection: app.isEnglish ? TextDirection.ltr : TextDirection.rtl,
+        child: SafeArea(
+          child: DraggableScrollableSheet(
+            expand: false,
+            initialChildSize: .72,
+            minChildSize: .35,
+            maxChildSize: .92,
+            builder: (context, controller) => ListView(
+              controller: controller,
+              padding: const EdgeInsets.fromLTRB(20, 0, 20, 28),
+              children: [
+                Row(children: [
+                  Expanded(
+                      child: Text(app.tr(ar: 'إنجازاتي', en: 'My achievements'),
                           style: const TextStyle(
-                            fontWeight: FontWeight.w800,
-                            color: Colors.white,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                );
-              }),
-            ],
+                              fontSize: 22, fontWeight: FontWeight.w800))),
+                  IconButton(
+                      onPressed: () => Navigator.pop(context),
+                      tooltip: app.tr(ar: 'إغلاق', en: 'Close'),
+                      icon: const Icon(Icons.close)),
+                ]),
+                Text(
+                    app.tr(
+                        ar: 'تقدم مستواك في كل لعبة',
+                        en: 'Your progress in each game'),
+                    style: const TextStyle(color: Colors.white70)),
+                const SizedBox(height: 24),
+                _PearlCircleGrid(
+                  key: const ValueKey('achievement-progress'),
+                  entries: _gamePearlEntries(app, _meName()),
+                  maxValue: _milestones.last,
+                  milestones: _milestones,
+                  rankLabel: _labelFor,
+                  rankName: _rankName,
+                ),
+              ],
+            ),
           ),
         ),
       ),
+    );
+  }
+
+  Future<void> _openChallengeRewards() async {
+    await Navigator.push<void>(
+        context,
+        MaterialPageRoute(
+            builder: (_) => ChallengeRewardsPage(app: widget.app)));
+    if (mounted) setState(() => _selectedThemeId = widget.app.themeId);
+  }
+
+  void _openStatistics() {
+    final app = widget.app;
+    final games = _playedGameIds(_meName()).toList();
+    showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      isScrollControlled: true,
+      builder: (context) => Directionality(
+        textDirection: app.isEnglish ? TextDirection.ltr : TextDirection.rtl,
+        child: SafeArea(
+            child: ConstrainedBox(
+          constraints:
+              BoxConstraints(maxHeight: MediaQuery.sizeOf(context).height * .8),
+          child: ListView(
+              shrinkWrap: true,
+              padding: const EdgeInsets.all(20),
+              children: [
+                Text(app.tr(ar: 'إحصائياتي', en: 'My statistics'),
+                    style: const TextStyle(
+                        fontSize: 22, fontWeight: FontWeight.w800)),
+                const SizedBox(height: 16),
+                _ProfileStats(app: app, wins: _wins, losses: _losses),
+                const SizedBox(height: 16),
+                ...games.map((game) => ListTile(
+                      title: Text(app.gameLabel(game)),
+                      subtitle: Text(app.tr(
+                          ar: 'فوز: ${app.winsOf(_meName(), game)} • خسارة: ${app.lossesOf(_meName(), game)}',
+                          en: 'Wins: ${app.winsOf(_meName(), game)} • Losses: ${app.lossesOf(_meName(), game)}')),
+                    )),
+              ]),
+        )),
+      ),
+    );
+  }
+
+  void _openHelp() {
+    final app = widget.app;
+    showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      builder: (context) => SafeArea(
+          child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          Text(app.tr(ar: 'مركز المساعدة', en: 'Help center'),
+              style:
+                  const TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
+          const SizedBox(height: 12),
+          Text(app.tr(
+              ar: 'للمساعدة أو الإبلاغ عن مشكلة، تواصل مع فريق إنزلي.',
+              en: 'Contact the Enzily team for help or to report a problem.')),
+          const SizedBox(height: 16),
+          OutlinedButton.icon(
+              onPressed: () async {
+                final opened =
+                    await launchUrl(Uri.parse('mailto:support@enzily.app'));
+                if (!opened && mounted) {
+                  _msg(app.tr(
+                      ar: 'راسلنا على support@enzily.app',
+                      en: 'Email support@enzily.app'));
+                }
+              },
+              icon: const Icon(Icons.mail_outline),
+              label: const Text('support@enzily.app')),
+        ]),
+      )),
     );
   }
 
   @override
   Widget build(BuildContext context) {
     final app = widget.app;
-    final meName = app.displayName ?? app.name ?? 'لاعب';
-    final displayUserId = app.publicId ?? app.userId ?? '';
+    final meName = _meName();
     final favoriteGame = _favoriteGame(app, meName);
-    final currentRankThreshold =
-        _currentBadgeThresholdForGame(favoriteGame.gameId);
-    final currentRankVisual = playerRankForThreshold(currentRankThreshold);
-    final recentWins = _recentWins(meName);
-    final earnedBadges = _earnedBadgeEntries(meName);
-    final isAndroid = Theme.of(context).platform == TargetPlatform.android;
-    final screenWidth = MediaQuery.sizeOf(context).width;
-    final veryCompactHeader = isAndroid && screenWidth < 360;
-    final compactHeader = screenWidth < 390;
-    final headerHeight = isAndroid
-        ? (veryCompactHeader ? 172.0 : (compactHeader ? 184.0 : 192.0))
-        : (compactHeader ? 184.0 : 192.0);
-    final avatarRadius = isAndroid
-        ? (veryCompactHeader ? 34.0 : (compactHeader ? 38.0 : 42.0))
-        : (compactHeader ? 38.0 : 42.0);
-    final avatarFrameSize = isAndroid
-        ? (veryCompactHeader ? 88.0 : (compactHeader ? 96.0 : 108.0))
-        : (compactHeader ? 96.0 : 108.0);
-    final pearlBadgeSize = isAndroid
-        ? (veryCompactHeader ? 50.0 : (compactHeader ? 54.0 : 60.0))
-        : (compactHeader ? 54.0 : 60.0);
-    final trophySize = isAndroid
-        ? (veryCompactHeader ? 32.0 : (compactHeader ? 36.0 : 42.0))
-        : (compactHeader ? 36.0 : 42.0);
-    final badgeTopGap = compactHeader ? 0.0 : 2.0;
-    final badgeRowLift = isAndroid
-        ? (veryCompactHeader ? -20.0 : (compactHeader ? -24.0 : -22.0))
-        : (compactHeader ? -24.0 : -22.0);
-    final badgeRowSlotHeight = isAndroid
-        ? (veryCompactHeader ? 28.0 : (compactHeader ? 32.0 : 34.0))
-        : (compactHeader ? 32.0 : 34.0);
-    final badgeRowMaxHeight = isAndroid
-        ? (veryCompactHeader ? 74.0 : (compactHeader ? 88.0 : 96.0))
-        : (compactHeader ? 88.0 : 96.0);
-    final pagePadding = isAndroid && veryCompactHeader ? 12.0 : 16.0;
-    final headerBg = _cardThemeIndex == 0
-        ? const Color(0xFF1E2F4D)
-        : _cardThemeIndex == 1
-            ? const Color(0xFF0F1D32)
-            : const Color(0xFF2D1B46); // violet theme option
-
+    final rankThreshold = _currentBadgeThresholdForGame(favoriteGame.gameId);
+    final matches = _recentMatches(meName);
+    final badges = _earnedBadgeEntries(meName);
     ImageProvider? avatarImage;
-    if (app.avatarBase64 != null && app.avatarBase64!.isNotEmpty) {
+    if (app.avatarBase64?.isNotEmpty ?? false) {
       try {
-        final bytes = base64Decode(app.avatarBase64!);
-        avatarImage = MemoryImage(bytes);
+        avatarImage = MemoryImage(base64Decode(app.avatarBase64!));
       } catch (_) {}
     }
-
-    return ListView(
-      padding: EdgeInsets.all(pagePadding),
-      children: [
-        // Header (hero with avatar, top game pearls, and recent trophies)
-        Card(
-          elevation: 6,
-          clipBehavior: Clip.antiAlias,
-          shape:
-              RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-          child: SizedBox(
-            height: headerHeight,
-            child: Stack(
+    final nextThreshold =
+        _milestones.where((m) => m > favoriteGame.badgeProgress).firstOrNull;
+    return Directionality(
+      textDirection: app.isEnglish ? TextDirection.ltr : TextDirection.rtl,
+      child: DefaultTextStyle.merge(
+        style: const TextStyle(color: Colors.white),
+        child: Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 760),
+            child: ListView(
+              key: const ValueKey('profile-dashboard'),
+              padding: const EdgeInsets.fromLTRB(10, 12, 10, 28),
               children: [
-                Container(
-                  decoration: BoxDecoration(
-                    color: headerBg,
-                    borderRadius: BorderRadius.circular(24),
-                  ),
+                _ProfileHero(
+                  app: app,
+                  name: meName,
+                  handle: app.username != null
+                      ? '@${app.username}'
+                      : _shortId(app.publicId ?? app.userId ?? ''),
+                  avatar: avatarImage,
+                  themeId: _selectedThemeId,
+                  background: profileBaseColor(app.cardId),
+                  game: favoriteGame,
+                  threshold: rankThreshold,
+                  rankLabel: _rankName(
+                      getRankData(playerRankForThreshold(rankThreshold))
+                          .arabic),
+                  nextThreshold: nextThreshold,
+                  onSettings: () => _openSettings(app),
+                  onAvatar: _openAvatarThemePicker,
+                  onRank: () => _openRankSheet(rankThreshold),
                 ),
-                PositionedDirectional(
-                  top: 12,
-                  start: 12,
-                  child: GestureDetector(
-                    onTap: () => _openRankSheet(currentRankThreshold),
-                    child: _GameRankBadge(
-                      rank: currentRankVisual,
-                      gameId: favoriteGame.gameId,
-                      gameLabel: favoriteGame.label,
-                    ),
-                  ),
+                const SizedBox(height: 14),
+                _ProfilePanel(
+                  key: const ValueKey('my-statistics'),
+                  title: app.tr(ar: 'إحصائياتي', en: 'My statistics'),
+                  icon: Icons.bar_chart_rounded,
+                  actionLabel: app.tr(ar: 'عرض الكل', en: 'View all'),
+                  onAction: _openStatistics,
+                  child: _ProfileStats(app: app, wins: _wins, losses: _losses),
                 ),
-                PositionedDirectional(
-                  top: 12,
-                  end: 12,
-                  child: Material(
-                    color: const Color(0xFF121D30).withValues(alpha: 0.82),
-                    shape: const CircleBorder(),
-                    child: IconButton(
-                      tooltip: app.tr(ar: 'الإعدادات', en: 'Settings'),
-                      onPressed: () => _openSettings(app),
-                      icon: const Icon(Icons.settings_outlined,
-                          color: Colors.white, size: 20),
-                      visualDensity: VisualDensity.compact,
-                    ),
-                  ),
+                const SizedBox(height: 14),
+                _ProfilePanel(
+                  key: const ValueKey('my-achievements'),
+                  title: app.tr(ar: 'إنجازاتي', en: 'My achievements'),
+                  icon: Icons.workspace_premium_outlined,
+                  actionLabel: app.tr(ar: 'عرض الكل', en: 'View all'),
+                  onAction: _openAchievements,
+                  onTitleTap: _openAchievements,
+                  child: _ProfileMedals(
+                      app: app, badges: badges, onTap: _openAchievements),
                 ),
-                Align(
-                  alignment: Alignment.center,
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Stack(
-                        alignment: Alignment.bottomRight,
+                const SizedBox(height: 14),
+                _ProfilePanel(
+                  title: app.tr(ar: 'آخر الألعاب', en: 'Recent games'),
+                  icon: Icons.history_rounded,
+                  actionLabel: app.tr(ar: 'عرض الكل', en: 'View all'),
+                  onAction: () => _openAllAchievements(matches),
+                  child: _ProfileRecentGames(
+                      app: app,
+                      matches: matches.take(2).toList(),
+                      onTap: () => _openAllAchievements(matches)),
+                ),
+                const SizedBox(height: 14),
+                _ProfileMenuTile(
+                    icon: Icons.person_outline_rounded,
+                    title: app.tr(ar: 'الملف الشخصي', en: 'Personal profile'),
+                    subtitle: app.tr(
+                        ar: 'تعديل البيانات والصورة',
+                        en: 'Edit your details and photo'),
+                    onTap: () => _openSettings(app)),
+                const SizedBox(height: 10),
+                _ProfileMenuTile(
+                    icon: Icons.settings_outlined,
+                    title: app.tr(ar: 'الإعدادات', en: 'Settings'),
+                    subtitle: app.tr(
+                        ar: 'الصوت والخصوصية والحساب',
+                        en: 'Sound, privacy and account'),
+                    onTap: () => _openSettings(app)),
+                const SizedBox(height: 10),
+                _ProfileMenuTile(
+                    icon: Icons.help_outline_rounded,
+                    title: app.tr(ar: 'مركز المساعدة', en: 'Help center'),
+                    subtitle:
+                        app.tr(ar: 'المساعدة والدعم', en: 'Help and support'),
+                    onTap: _openHelp),
+                const SizedBox(height: 18),
+                Wrap(spacing: 8, runSpacing: 8, children: [
+                  _QuickActionChip(
+                      icon: Icons.shopping_bag_outlined,
+                      label: app.tr(ar: 'المتجر', en: 'Market'),
+                      onTap: () => _openStore(app)),
+                  _QuickActionChip(
+                      icon: Icons.search,
+                      label: app.tr(ar: 'بحث', en: 'Search'),
+                      onTap: _openPlayerSearch),
+                  _QuickActionChip(
+                      icon: Icons.style_outlined,
+                      label: app.tr(ar: 'ثيماتي', en: 'My themes'),
+                      onTap: () => _openItems(app)),
+                  _QuickActionChip(
+                      icon: Icons.flag_outlined,
+                      label: app.tr(ar: 'التحديات', en: 'Challenges'),
+                      onTap: _openChallengeRewards),
+                ]),
+                TextButton.icon(
+                    onPressed: () =>
+                        setState(() => _showChallenges = !_showChallenges),
+                    icon: const Icon(Icons.style_outlined),
+                    label: Text(app.tr(
+                        ar: 'تحديات الثيمات السابقة',
+                        en: 'Original theme challenges'))),
+                if (_showChallenges) ...[
+                  const SizedBox(height: 12),
+                  Card(
+                    child: Padding(
+                      padding: const EdgeInsets.all(12),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          buildAvatarThemeWidget(
-                            themeId: _selectedThemeId,
-                            size: avatarFrameSize,
-                            animate: true,
-                            child: CircleAvatar(
-                              radius: avatarRadius,
-                              backgroundImage: avatarImage,
-                              backgroundColor:
-                                  Colors.white.withValues(alpha: 0.12),
-                              child: avatarImage == null
-                                  ? Text(
-                                      meName.isNotEmpty
-                                          ? meName.characters.first
-                                          : '؟',
-                                      style: const TextStyle(
-                                          fontSize: 26,
-                                          fontWeight: FontWeight.bold,
-                                          color: Colors.white),
-                                    )
-                                  : null,
+                          const Text(
+                            'تحديات الثيمات',
+                            style: TextStyle(
+                                fontWeight: FontWeight.w900, fontSize: 16),
+                          ),
+                          const SizedBox(height: 6),
+                          Text(
+                            'كل ما تخلص تحدي، ينفتح لك الثيم تلقائيًا داخل ثيماتك.',
+                            style: TextStyle(
+                              color: Colors.white.withValues(alpha: 0.72),
                             ),
                           ),
-                          Positioned(
-                            bottom: 2,
-                            right: 4,
-                            child: InkWell(
-                              onTap: _openAvatarThemePicker,
-                              borderRadius: BorderRadius.circular(14),
-                              child: Container(
-                                padding: const EdgeInsets.all(6),
-                                decoration: BoxDecoration(
-                                  color: Colors.black.withValues(alpha: 0.35),
-                                  shape: BoxShape.circle,
-                                ),
-                                child: const Icon(Icons.edit,
-                                    size: 16, color: Colors.white),
+                          const SizedBox(height: 10),
+                          ..._themeChallenges().map((challenge) {
+                            final wins =
+                                widget.app.winsOf(meName, challenge.gameId);
+                            final unlocked = widget.app.freeThemesOwned
+                                .contains(challenge.id);
+                            final progress =
+                                (wins / challenge.targetWins).clamp(0.0, 1.0);
+                            return Container(
+                              margin: const EdgeInsets.only(bottom: 10),
+                              padding: const EdgeInsets.all(12),
+                              decoration: BoxDecoration(
+                                color: Colors.white.withValues(alpha: 0.05),
+                                borderRadius: BorderRadius.circular(16),
+                                border: Border.all(color: Colors.white12),
                               ),
-                            ),
-                          ),
+                              child: Row(
+                                children: [
+                                  AvatarEffect(
+                                    effect: challenge.effect,
+                                    size: 54,
+                                    animate: unlocked,
+                                    child: const CircleAvatar(
+                                      radius: 18,
+                                      backgroundColor: Colors.white24,
+                                      child: Icon(Icons.style,
+                                          color: Colors.white),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 12),
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        Text(
+                                          challenge.title,
+                                          style: const TextStyle(
+                                            fontWeight: FontWeight.w800,
+                                          ),
+                                        ),
+                                        const SizedBox(height: 4),
+                                        Text(
+                                          'الفوز في لعبة ${widget.app.gameLabel(challenge.gameId)} ${challenge.targetWins} مرات',
+                                          style: TextStyle(
+                                            color: Colors.white
+                                                .withValues(alpha: 0.72),
+                                            fontSize: 12,
+                                          ),
+                                        ),
+                                        const SizedBox(height: 6),
+                                        LinearProgressIndicator(
+                                          value: progress,
+                                          minHeight: 6,
+                                          borderRadius:
+                                              BorderRadius.circular(999),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                  const SizedBox(width: 10),
+                                  Text(
+                                    unlocked
+                                        ? 'مفتوح'
+                                        : '$wins/${challenge.targetWins}',
+                                    style: TextStyle(
+                                      color: unlocked
+                                          ? Colors.greenAccent
+                                          : Colors.white,
+                                      fontWeight: FontWeight.w800,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            );
+                          }),
                         ],
                       ),
-                      const SizedBox(height: 10),
-                      Text(
-                        meName,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                          fontWeight: FontWeight.w900,
-                          fontSize: 18,
-                          color: Colors.white,
-                        ),
-                      ),
-                      if (displayUserId.isNotEmpty) ...[
-                        const SizedBox(height: 4),
-                        Text(
-                          app.username != null
-                              ? '@${app.username}'
-                              : _shortId(displayUserId),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: TextStyle(
-                            color: Colors.white.withValues(alpha: .72),
-                            fontSize: 12,
-                            letterSpacing: 0.3,
-                          ),
-                        ),
-                      ],
-                    ],
+                    ),
                   ),
-                ),
+                ],
               ],
             ),
           ),
         ),
-        SizedBox(height: badgeTopGap),
-        SizedBox(
-          height: badgeRowSlotHeight,
-          child: OverflowBox(
-            minHeight: 0,
-            maxHeight: badgeRowMaxHeight,
-            alignment: Alignment.topCenter,
-            child: Transform.translate(
-              offset: Offset(0, badgeRowLift),
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 2),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    _PearlBadge(
-                      game: favoriteGame.label,
-                      pearls: favoriteGame.pearls,
-                      size: pearlBadgeSize,
-                    ),
-                    _EarnedBadgeStack(
-                      badges: earnedBadges,
-                      size: trophySize,
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ),
-        ),
-        SizedBox(height: compactHeader ? 0 : 2),
-
-        // Stats row (icons فقط)
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-          children: [
-            _IconStat(
-                icon: Icons.emoji_events_outlined,
-                value: _wins,
-                sparkleColor: Colors.greenAccent),
-            _IconStat(
-                icon: Icons.cancel_outlined,
-                value: _losses,
-                sparkleColor: Colors.redAccent),
-          ],
-        ),
-
-        const SizedBox(height: 10),
-        _AchievementsCard(
-          recentWins: recentWins,
-          onShowAll: recentWins.length > 5
-              ? () => _openAllAchievements(recentWins)
-              : null,
-        ),
-
-        const SizedBox(height: 10),
-
-        Row(
-          children: [
-            Expanded(
-              child: Divider(
-                color: Colors.white.withValues(alpha: 0.28),
-                thickness: 1.2,
-                endIndent: 10,
-              ),
-            ),
-            InkWell(
-              onTap: () =>
-                  setState(() => _showPearlProgress = !_showPearlProgress),
-              borderRadius: BorderRadius.circular(18),
-              child: Container(
-                width: 36,
-                height: 36,
-                decoration: BoxDecoration(
-                  color: Colors.white.withValues(alpha: 0.1),
-                  shape: BoxShape.circle,
-                  border: Border.all(color: Colors.white24),
-                ),
-                child: Icon(
-                  _showPearlProgress
-                      ? Icons.expand_less_rounded
-                      : Icons.more_horiz_rounded,
-                  color: Colors.white,
-                  size: 22,
-                ),
-              ),
-            ),
-            Expanded(
-              child: Divider(
-                color: Colors.white.withValues(alpha: 0.28),
-                thickness: 1.2,
-                indent: 10,
-              ),
-            ),
-          ],
-        ),
-
-        if (_showPearlProgress) ...[
-          const SizedBox(height: 8),
-          // Pearls per game (دائرة تعبئة لكل لعبة)
-          Card(
-            child: Padding(
-              padding: const EdgeInsets.all(12),
-              child: _PearlCircleGrid(
-                entries: _gamePearlEntries(app, meName),
-                maxValue: _milestones.last,
-                milestones: _milestones,
-                rankLabel: _labelFor,
-                rankName: _rankName,
-              ),
-            ),
-          ),
-        ],
-
-        const SizedBox(height: 12),
-
-        // Quick actions row moved to bottom
-        Wrap(
-          spacing: 10,
-          runSpacing: 10,
-          children: [
-            _QuickActionChip(
-              icon: Icons.shopping_bag_outlined,
-              label: app.tr(ar: 'المتجر', en: 'Market'),
-              onTap: () => _openStore(app),
-            ),
-            _QuickActionChip(
-              icon: Icons.search,
-              label: app.tr(ar: 'بحث', en: 'Search'),
-              onTap: _openPlayerSearch,
-            ),
-            _QuickActionChip(
-              icon: Icons.style_outlined,
-              label: app.tr(ar: 'ثيماتي', en: 'My Themes'),
-              onTap: () => _openItems(app),
-            ),
-            _QuickActionChip(
-              icon: Icons.flag_outlined,
-              label: app.tr(ar: 'التحديات', en: 'Challenges'),
-              onTap: () => setState(() => _showChallenges = !_showChallenges),
-            ),
-          ],
-        ),
-
-        if (_showChallenges) ...[
-          const SizedBox(height: 12),
-          Card(
-            child: Padding(
-              padding: const EdgeInsets.all(12),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text(
-                    'تحديات الثيمات',
-                    style: TextStyle(fontWeight: FontWeight.w900, fontSize: 16),
-                  ),
-                  const SizedBox(height: 6),
-                  Text(
-                    'كل ما تخلص تحدي، ينفتح لك الثيم تلقائيًا داخل ثيماتك.',
-                    style: TextStyle(
-                      color: Colors.white.withValues(alpha: 0.72),
-                    ),
-                  ),
-                  const SizedBox(height: 10),
-                  ..._themeChallenges().map((challenge) {
-                    final wins = widget.app.winsOf(meName, challenge.gameId);
-                    final unlocked =
-                        widget.app.freeThemesOwned.contains(challenge.id);
-                    final progress =
-                        (wins / challenge.targetWins).clamp(0.0, 1.0);
-                    return Container(
-                      margin: const EdgeInsets.only(bottom: 10),
-                      padding: const EdgeInsets.all(12),
-                      decoration: BoxDecoration(
-                        color: Colors.white.withValues(alpha: 0.05),
-                        borderRadius: BorderRadius.circular(16),
-                        border: Border.all(color: Colors.white12),
-                      ),
-                      child: Row(
-                        children: [
-                          AvatarEffect(
-                            effect: challenge.effect,
-                            size: 54,
-                            animate: unlocked,
-                            child: const CircleAvatar(
-                              radius: 18,
-                              backgroundColor: Colors.white24,
-                              child: Icon(Icons.style, color: Colors.white),
-                            ),
-                          ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  challenge.title,
-                                  style: const TextStyle(
-                                    fontWeight: FontWeight.w800,
-                                  ),
-                                ),
-                                const SizedBox(height: 4),
-                                Text(
-                                  'الفوز في لعبة ${widget.app.gameLabel(challenge.gameId)} ${challenge.targetWins} مرات',
-                                  style: TextStyle(
-                                    color: Colors.white.withValues(alpha: 0.72),
-                                    fontSize: 12,
-                                  ),
-                                ),
-                                const SizedBox(height: 6),
-                                LinearProgressIndicator(
-                                  value: progress,
-                                  minHeight: 6,
-                                  borderRadius: BorderRadius.circular(999),
-                                ),
-                              ],
-                            ),
-                          ),
-                          const SizedBox(width: 10),
-                          Text(
-                            unlocked
-                                ? 'مفتوح'
-                                : '$wins/${challenge.targetWins}',
-                            style: TextStyle(
-                              color:
-                                  unlocked ? Colors.greenAccent : Colors.white,
-                              fontWeight: FontWeight.w800,
-                            ),
-                          ),
-                        ],
-                      ),
-                    );
-                  }),
-                ],
-              ),
-            ),
-          ),
-        ],
-        const SizedBox(height: 12),
-      ],
+      ),
     );
   }
 
@@ -1933,6 +1562,7 @@ class _ProfilePageState extends State<ProfilePage> {
           gameId: g,
           label: app.gameLabel(g),
           pearls: pearls,
+          progress: badgeProgress,
           threshold: threshold,
           active: played > 0 || hasEarnedBadge,
         ));
@@ -1947,6 +1577,7 @@ class _ProfilePageState extends State<ProfilePage> {
         gameId: g,
         label: app.gameLabel(g),
         pearls: pearls,
+        progress: badgeProgress,
         threshold: threshold,
         active: true,
       ));
@@ -1969,6 +1600,7 @@ class _ProfilePageState extends State<ProfilePage> {
 /* ---------------- painters / small widgets ---------------- */
 
 class _AchievementEntry {
+  final String gameId;
   final String game;
   final String typeLabel;
   final String badgeLabel;
@@ -1979,6 +1611,7 @@ class _AchievementEntry {
   final DateTime date;
 
   const _AchievementEntry({
+    required this.gameId,
     required this.game,
     required this.typeLabel,
     required this.badgeLabel,
@@ -2038,110 +1671,11 @@ class _ThemeChallenge {
   });
 }
 
-class _GameIconBadge extends StatelessWidget {
-  final String gameId;
-  final double size;
-  final Color? iconColor;
-  final Color backgroundColor;
-
-  const _GameIconBadge({
-    required this.gameId,
-    this.size = 22,
-    this.iconColor,
-    this.backgroundColor = Colors.white,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final asset = _profileGameSvgAssetById[gameId];
-    return Container(
-      width: size,
-      height: size,
-      padding: EdgeInsets.all(size * 0.16),
-      decoration: BoxDecoration(
-        color: backgroundColor,
-        shape: BoxShape.circle,
-      ),
-      child: asset == null
-          ? Icon(
-              Icons.sports_esports_rounded,
-              size: size * 0.62,
-              color: iconColor ?? const Color(0xFF1E2F4D),
-            )
-          : SvgPicture.asset(
-              asset,
-              fit: BoxFit.contain,
-              colorFilter: iconColor == null
-                  ? null
-                  : ColorFilter.mode(iconColor!, BlendMode.srcIn),
-            ),
-    );
-  }
-}
-
-class _GameRankBadge extends StatelessWidget {
-  final PlayerRank rank;
-  final String gameId;
-  final String gameLabel;
-
-  const _GameRankBadge({
-    required this.rank,
-    required this.gameId,
-    required this.gameLabel,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final data = getRankData(rank);
-    return Directionality(
-      textDirection: TextDirection.rtl,
-      child: Container(
-        constraints: const BoxConstraints(maxWidth: 170),
-        padding: const EdgeInsetsDirectional.fromSTEB(9, 6, 10, 6),
-        decoration: BoxDecoration(
-          color: Colors.white.withValues(alpha: 0.08),
-          borderRadius: BorderRadius.circular(18),
-          border: Border.all(color: Colors.white.withValues(alpha: 0.24)),
-          boxShadow: [
-            BoxShadow(
-              color: data.colors.last.withValues(alpha: 0.12),
-              blurRadius: 14,
-            ),
-          ],
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            _GameIconBadge(
-              gameId: gameId,
-              size: 24,
-              iconColor: const Color(0xFF1E2F4D),
-              backgroundColor: Colors.white.withValues(alpha: 0.92),
-            ),
-            const SizedBox(width: 7),
-            Flexible(
-              child: Text(
-                gameId.isEmpty ? data.arabic : '${data.arabic} • $gameLabel',
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontWeight: FontWeight.w900,
-                  fontSize: 13,
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
 class _GamePearlEntry {
   final String gameId;
   final String label;
   final int pearls;
+  final int progress;
   final int threshold;
   final bool active;
 
@@ -2149,461 +1683,10 @@ class _GamePearlEntry {
     required this.gameId,
     required this.label,
     required this.pearls,
+    required this.progress,
     required this.threshold,
     required this.active,
   });
-}
-
-class _PearlBadge extends StatelessWidget {
-  final String game;
-  final int pearls;
-  final double size;
-  const _PearlBadge({required this.game, required this.pearls, this.size = 72});
-
-  @override
-  Widget build(BuildContext context) {
-    final double topOffset = size * 0.2;
-    final double bottomOffset = size * 0.18;
-    return Stack(
-      alignment: Alignment.center,
-      children: [
-        _SparkleOnce(
-          color: const Color(0xFFF1A949),
-          size: size + 16,
-        ),
-        Container(
-          width: size,
-          height: size,
-          decoration: BoxDecoration(
-            color: Colors.white,
-            shape: BoxShape.circle,
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withValues(alpha: 0.12),
-                blurRadius: 10,
-                offset: const Offset(0, 6),
-              ),
-            ],
-          ),
-          child: Stack(
-            alignment: Alignment.center,
-            children: [
-              Positioned(
-                top: topOffset,
-                left: 0,
-                right: 0,
-                child: Text(
-                  '$pearls',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                    color: const Color(0xFF1E2F4D),
-                    fontWeight: FontWeight.w900,
-                    fontSize: size * 0.28,
-                  ),
-                ),
-              ),
-              Positioned(
-                bottom: bottomOffset,
-                left: 8,
-                right: 8,
-                child: Text(
-                  game,
-                  textAlign: TextAlign.center,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    color: Colors.black87,
-                    fontWeight: FontWeight.w700,
-                    fontSize: size * 0.17,
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-class _AchievementsCard extends StatelessWidget {
-  final List<_AchievementEntry> recentWins;
-  final VoidCallback? onShowAll;
-  const _AchievementsCard({required this.recentWins, this.onShowAll});
-
-  String _date(DateTime date) {
-    final day = date.day.toString().padLeft(2, '0');
-    final month = date.month.toString().padLeft(2, '0');
-    return '$day/$month/${date.year}';
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final wins = recentWins.take(5).toList();
-    return Directionality(
-      textDirection: TextDirection.rtl,
-      child: Card(
-        child: Padding(
-          padding: const EdgeInsets.all(12),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Row(
-                children: [
-                  Icon(Icons.emoji_events_rounded, color: Colors.amber),
-                  SizedBox(width: 8),
-                  Text(
-                    'مسيرتي',
-                    style: TextStyle(fontWeight: FontWeight.w900, fontSize: 16),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 8),
-              if (wins.isNotEmpty)
-                ...wins.map(
-                  (win) => Padding(
-                    padding: const EdgeInsets.only(bottom: 6),
-                    child: Row(
-                      children: [
-                        Container(
-                          width: 30,
-                          height: 30,
-                          decoration: BoxDecoration(
-                            color: (win.isWin ? Colors.amber : Colors.redAccent)
-                                .withValues(alpha: .18),
-                            shape: BoxShape.circle,
-                          ),
-                          child: Icon(
-                            win.isSeasonAward
-                                ? Icons.auto_awesome_rounded
-                                : win.isWin
-                                    ? Icons.workspace_premium
-                                    : Icons.close_rounded,
-                            color: win.isWin ? Colors.amber : Colors.redAccent,
-                            size: 18,
-                          ),
-                        ),
-                        const SizedBox(width: 10),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                '${win.outcomeLabel} • ${win.game}',
-                                textAlign: TextAlign.right,
-                                style: const TextStyle(
-                                    fontWeight: FontWeight.w800),
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                              Text(
-                                win.detailLabel,
-                                textAlign: TextAlign.right,
-                                style: TextStyle(
-                                  color: Colors.white.withValues(alpha: .68),
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.w700,
-                                ),
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                            ],
-                          ),
-                        ),
-                        Text(
-                          _date(win.date),
-                          textAlign: TextAlign.left,
-                          style: TextStyle(
-                            color: Colors.white.withValues(alpha: .65),
-                            fontSize: 12,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              if (wins.isEmpty) const _EmptyJourneyNote(),
-              if (onShowAll != null) ...[
-                const SizedBox(height: 2),
-                Center(
-                  child: IconButton(
-                    onPressed: onShowAll,
-                    tooltip: 'عرض كل المسيرة',
-                    icon: Icon(
-                      Icons.more_horiz_rounded,
-                      color: Colors.white.withValues(alpha: 0.9),
-                      size: 24,
-                    ),
-                  ),
-                ),
-              ],
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _EarnedBadgeStack extends StatelessWidget {
-  final List<_EarnedBadgeEntry> badges;
-  final double size;
-  const _EarnedBadgeStack({required this.badges, this.size = 46});
-
-  @override
-  Widget build(BuildContext context) {
-    final visible = badges.take(3).toList();
-    if (visible.isEmpty) return SizedBox(width: size, height: size);
-    final overlap = size * 0.52;
-    final width = size + (visible.length - 1) * overlap;
-    return Tooltip(
-      message: visible
-          .map((badge) => '${badge.badgeLabel} • ${badge.gameLabel}')
-          .join('\n'),
-      child: SizedBox(
-        width: width,
-        height: size + 8,
-        child: Stack(
-          clipBehavior: Clip.none,
-          children: [
-            for (var i = 0; i < visible.length; i++)
-              PositionedDirectional(
-                end: i * overlap,
-                top: 0,
-                child: _EarnedBadgeCircle(
-                  badge: visible[i],
-                  size: size,
-                ),
-              ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _EarnedBadgeCircle extends StatelessWidget {
-  final _EarnedBadgeEntry badge;
-  final double size;
-  const _EarnedBadgeCircle({required this.badge, this.size = 46});
-
-  @override
-  Widget build(BuildContext context) {
-    final rank = playerRankForThreshold(badge.threshold);
-    final rankData = getRankData(rank);
-    return Container(
-      width: size,
-      height: size,
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          colors: rankData.colors,
-          begin: Alignment.topRight,
-          end: Alignment.bottomLeft,
-        ),
-        shape: BoxShape.circle,
-        border: Border.all(color: Colors.white, width: 2),
-        boxShadow: [
-          BoxShadow(
-            color: rankData.colors.last.withValues(alpha: 0.34),
-            blurRadius: 12,
-            offset: const Offset(0, 6),
-          ),
-        ],
-      ),
-      child: Stack(
-        alignment: Alignment.center,
-        children: [
-          Icon(
-            rankData.icon,
-            size: size * 0.48,
-            color: Colors.white.withValues(alpha: 0.92),
-          ),
-          PositionedDirectional(
-            end: size * 0.05,
-            bottom: size * 0.05,
-            child: _GameIconBadge(
-              gameId: badge.gameId,
-              size: size * 0.42,
-              backgroundColor: Colors.white,
-              iconColor: const Color(0xFF1E2F4D),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _EmptyJourneyNote extends StatelessWidget {
-  const _EmptyJourneyNote();
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 12),
-      decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.05),
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: Text(
-        'لا توجد فوزات مسجلة للحين',
-        textAlign: TextAlign.center,
-        style: TextStyle(
-          color: Colors.white.withValues(alpha: 0.66),
-          fontWeight: FontWeight.w700,
-          fontSize: 12,
-        ),
-      ),
-    );
-  }
-}
-
-class _SparkleOnce extends StatefulWidget {
-  final Color color;
-  final double size;
-  const _SparkleOnce({
-    required this.color,
-    this.size = 60,
-  });
-
-  @override
-  State<_SparkleOnce> createState() => _SparkleOnceState();
-}
-
-class _SparkleOnceState extends State<_SparkleOnce>
-    with SingleTickerProviderStateMixin {
-  late final AnimationController _ctrl;
-
-  @override
-  void initState() {
-    super.initState();
-    _ctrl = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 1800),
-    )..forward();
-  }
-
-  @override
-  void dispose() {
-    _ctrl.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return SizedBox(
-      width: widget.size,
-      height: widget.size,
-      child: AnimatedBuilder(
-        animation: _ctrl,
-        builder: (_, __) => CustomPaint(
-          painter: _SparklePainter(
-            color: widget.color,
-            progress: Curves.easeOut.transform(_ctrl.value),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _SparklePainter extends CustomPainter {
-  final Color color;
-  final double progress; // 0..1
-  _SparklePainter({required this.color, required this.progress});
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final center = Offset(size.width / 2, size.height / 2);
-    final baseR = size.shortestSide / 2.8;
-    final sparkles = 16;
-    final maxBurst = size.shortestSide * 0.45;
-    final paint = Paint()..style = PaintingStyle.fill;
-
-    for (int i = 0; i < sparkles; i++) {
-      final angle = (2 * math.pi / sparkles) * i;
-      final burst = baseR + progress * maxBurst;
-      final pos = center + Offset(math.cos(angle), math.sin(angle)) * burst;
-      final fade = (1 - progress).clamp(0.0, 1.0);
-      final alpha = (fade * 0.7).clamp(0.0, 0.7);
-      paint.color = color.withValues(alpha: alpha);
-      final radius = (1.2 + (i % 3) * 0.4) * fade * 1.8;
-      canvas.drawCircle(pos, radius, paint);
-    }
-  }
-
-  @override
-  bool shouldRepaint(covariant _SparklePainter oldDelegate) {
-    return oldDelegate.progress != progress || oldDelegate.color != color;
-  }
-}
-
-class _IconStat extends StatefulWidget {
-  final IconData icon;
-  final int value;
-  final Color? sparkleColor;
-  const _IconStat({required this.icon, required this.value, this.sparkleColor});
-
-  @override
-  State<_IconStat> createState() => _IconStatState();
-}
-
-class _IconStatState extends State<_IconStat>
-    with SingleTickerProviderStateMixin {
-  late final AnimationController _ctrl;
-  late final Animation<double> _scale;
-
-  @override
-  void initState() {
-    super.initState();
-    _ctrl = AnimationController(
-        vsync: this, duration: const Duration(milliseconds: 250));
-    _scale = Tween<double>(begin: 1, end: 0.9)
-        .animate(CurvedAnimation(parent: _ctrl, curve: Curves.easeInOut));
-  }
-
-  @override
-  void dispose() {
-    _ctrl.dispose();
-    super.dispose();
-  }
-
-  void _onTapDown(TapDownDetails _) => _ctrl.forward();
-  void _onTapCancel() => _ctrl.reverse();
-  void _onTapUp(TapUpDetails _) => _ctrl.reverse();
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTapDown: _onTapDown,
-      onTapCancel: _onTapCancel,
-      onTapUp: _onTapUp,
-      child: ScaleTransition(
-        scale: _scale,
-        child: Column(
-          children: [
-            Stack(
-              alignment: Alignment.center,
-              children: [
-                if (widget.sparkleColor != null)
-                  _SparkleOnce(
-                    color: widget.sparkleColor!,
-                    size: 54,
-                  ),
-                CircleAvatar(
-                  radius: 22,
-                  backgroundColor: Colors.white.withValues(alpha: 0.1),
-                  child: Icon(widget.icon, color: Colors.white, size: 22),
-                ),
-              ],
-            ),
-            const SizedBox(height: 4),
-            Text('${widget.value}',
-                style: const TextStyle(fontWeight: FontWeight.w800)),
-          ],
-        ),
-      ),
-    );
-  }
 }
 
 class _QuickActionChip extends StatelessWidget {
@@ -2642,7 +1725,8 @@ class _PearlCircleGrid extends StatelessWidget {
   final String Function(int) rankLabel;
   final String Function(String) rankName;
   const _PearlCircleGrid(
-      {required this.entries,
+      {super.key,
+      required this.entries,
       required this.maxValue,
       required this.milestones,
       required this.rankLabel,
@@ -2650,7 +1734,9 @@ class _PearlCircleGrid extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    if (entries.isEmpty) return const Text('لا توجد بيانات');
+    if (entries.isEmpty) {
+      return const Text('لا توجد ألعاب مسجلة بعد', textAlign: TextAlign.center);
+    }
     return LayoutBuilder(
       builder: (context, constraints) {
         const columns = 3;
@@ -2667,7 +1753,7 @@ class _PearlCircleGrid extends StatelessWidget {
           runSpacing: vGap,
           children: entries.map((e) {
             final game = e.label;
-            final value = e.pearls.clamp(0, maxValue);
+            final value = e.progress.clamp(0, maxValue);
             final pct = value / maxValue;
             final ringColor = _colorForThreshold(e.threshold);
             final opacity = e.active ? 1.0 : 0.58;

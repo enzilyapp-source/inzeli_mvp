@@ -8,6 +8,8 @@ import 'api_dewanyah.dart';
 import 'api_notifications.dart';
 import 'api_timeline.dart';
 import 'api_user.dart';
+import 'api_store.dart';
+import 'challenge_rewards.dart';
 import 'api_username.dart';
 import 'api_users.dart';
 import 'local_game_notifications.dart';
@@ -62,6 +64,8 @@ class AppState extends ChangeNotifier {
   String? frameId;
   String? cardId;
   Set<String> freeThemesOwned = {};
+  Set<String> earnedRewardIds = {};
+  List<ChallengeReward> challengeRewards = [];
   // إعدادات محلية
   String? language; // e.g. 'ar' / 'en'
   bool? soundMuted;
@@ -285,6 +289,7 @@ class AppState extends ChangeNotifier {
       if (rawFreeThemes is List) {
         freeThemesOwned = rawFreeThemes.map((e) => e.toString()).toSet();
       }
+      _readRewardSnapshot(m);
       final rawGamePearls = m['gamePearls'];
       if (rawGamePearls is Map) {
         gamePearls = rawGamePearls
@@ -422,6 +427,8 @@ class AppState extends ChangeNotifier {
       'biometricEnabled': biometricEnabled,
       'tutorialSeen': tutorialSeen ?? false,
       'freeThemesOwned': freeThemesOwned.toList(),
+      'ownedRewardIds': earnedRewardIds.toList(),
+      'rewards': challengeRewards.map((reward) => reward.toJson()).toList(),
       'gamePearls': gamePearls,
       'gameBadgeProgress': gameBadgeProgress,
       'rulesPromptSeen': rulesPromptSeen ?? false,
@@ -604,6 +611,105 @@ class AppState extends ChangeNotifier {
     }
   }
 
+  void _readRewardSnapshot(Map<String, dynamic> data) {
+    if (data['ownedRewardIds'] case final List ids) {
+      earnedRewardIds = ids.map((id) => id.toString()).toSet();
+    }
+    if (data['rewards'] case final List rewards) {
+      challengeRewards = rewards
+          .whereType<Map>()
+          .map((reward) =>
+              ChallengeReward.fromJson(Map<String, dynamic>.from(reward)))
+          .toList();
+    }
+  }
+
+  Future<void> applyRewardSnapshot(Map<String, dynamic> data,
+      {bool notify = true}) async {
+    _readRewardSnapshot(data);
+    await _save();
+    if (notify) notifyListeners();
+  }
+
+  Future<bool> refreshChallengeRewards() async {
+    final auth = token;
+    final account = userId;
+    if (auth == null || auth.isEmpty || account == null) return false;
+    try {
+      final data = await ApiStore.challenges(token: auth);
+      // A delayed response must never carry rewards into another account.
+      if (token != auth || userId != account) return false;
+      await applyRewardSnapshot(data);
+      return true;
+    } catch (_) {
+      // Offline/older-server responses do not erase permanent cached ownership.
+      return false;
+    }
+  }
+
+  Future<bool> equipChallengeReward(String id) async {
+    final auth = token;
+    final account = userId;
+    if (auth == null || account == null || !earnedRewardIds.contains(id)) {
+      return false;
+    }
+    try {
+      final banner = id.startsWith('reward_banner_');
+      final field = banner ? 'cardId' : 'themeId';
+      final result = await ApiStore.applySelection(
+          token: auth, themeId: banner ? null : id, cardId: banner ? id : null);
+      if (token != auth || userId != account || result[field] != id) {
+        return false;
+      }
+      if (banner) {
+        cardId = id;
+      } else {
+        themeId = id;
+      }
+      await _save();
+      notifyListeners();
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  /// Save frame and banner together only after the server accepts both IDs.
+  Future<bool> applyProfileAppearance(
+      {required String? selectedThemeId,
+      required String? selectedCardId}) async {
+    final auth = token;
+    final account = userId;
+    if (auth == null || account == null) return false;
+    for (final id in [selectedThemeId, selectedCardId]) {
+      if (id != null &&
+          id.startsWith('reward_') &&
+          !earnedRewardIds.contains(id)) {
+        return false;
+      }
+    }
+    try {
+      final updated = await updateMyProfile(
+          token: auth,
+          themeId: selectedThemeId,
+          cardId: selectedCardId,
+          includeThemeId: true,
+          includeCardId: true);
+      if (updated == null || token != auth || userId != account) return false;
+      if (updated['themeId'] != selectedThemeId ||
+          updated['cardId'] != selectedCardId) {
+        return false;
+      }
+      themeId = selectedThemeId;
+      cardId = selectedCardId;
+      await _save();
+      notifyListeners();
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
   Future<void> applyAchievementSnapshot(Map<String, dynamic> data,
       {bool notify = true}) async {
     final rawGamePearls = data['gamePearls'];
@@ -782,6 +888,14 @@ class AppState extends ChangeNotifier {
     }
 
     final previousUserId = userId;
+    final nextUserId = (user['id'] ?? user['userId'] ?? '').toString();
+    if (previousUserId != nextUserId) {
+      earnedRewardIds = {};
+      challengeRewards = [];
+      if (themeId?.startsWith('reward_') ?? false) themeId = null;
+      if (frameId?.startsWith('reward_') ?? false) frameId = null;
+      if (cardId?.startsWith('reward_') ?? false) cardId = null;
+    }
     this.token = token;
 
     // support both `id` and `userId` keys
@@ -831,6 +945,7 @@ class AppState extends ChangeNotifier {
     syncTimelineFromServer();
     unawaited(refreshServerNotifications());
     unawaited(OneSignalBridge.syncSignedInUser(userId));
+    unawaited(refreshChallengeRewards());
 
     final profileSnapshot = <String, dynamic>{
       if (userId != null && userId!.isNotEmpty) 'id': userId,
@@ -1111,6 +1226,11 @@ class AppState extends ChangeNotifier {
     vipUntil = null;
     permanentScore = null;
 
+    earnedRewardIds = {};
+    challengeRewards = [];
+    if (themeId?.startsWith('reward_') ?? false) themeId = null;
+    if (frameId?.startsWith('reward_') ?? false) frameId = null;
+    if (cardId?.startsWith('reward_') ?? false) cardId = null;
     roomCode = null;
     selectedCategory = null;
     selectedGame = null;
